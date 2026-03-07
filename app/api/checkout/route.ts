@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
     const { error: lockError } = await supabaseAdmin
       .from("checkout_locks")
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
         amount_cents: String(listing.price_cents),
         relay_fee_cents: String(relayFee),
       },
-      expires_at: Math.floor(Date.now() / 1000) + 15 * 60,
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });
 
     await supabaseAdmin
