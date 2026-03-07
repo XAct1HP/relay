@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import EnablePayoutsButton from "@/app/components/enable-payouts-button";
+import SellerPayoutsButton from "@/app/components/enable-payouts-button";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -15,7 +15,9 @@ export default async function DashboardPage() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, username, bio, average_rating, total_reviews, total_sales")
+    .select(
+      "id, username, bio, average_rating, total_reviews, total_sales, stripe_account_id"
+    )
     .eq("id", user.id)
     .single();
 
@@ -80,6 +82,8 @@ export default async function DashboardPage() {
   const recentSellerOrders = sellerOrders.slice(0, 3);
   const recentBuyerOrders = buyerOrders.slice(0, 3);
 
+  const hasStripeAccount = Boolean(profile.stripe_account_id);
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
       <div className="mx-auto max-w-6xl">
@@ -87,9 +91,7 @@ export default async function DashboardPage() {
           Relay
         </p>
 
-        <h1 className="mt-2 text-4xl font-bold tracking-tight">
-          Dashboard
-        </h1>
+        <h1 className="mt-2 text-4xl font-bold tracking-tight">Dashboard</h1>
 
         <p className="mt-3 text-slate-600">
           Welcome back, <span className="font-medium">@{profile.username}</span>
@@ -135,18 +137,33 @@ export default async function DashboardPage() {
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm text-slate-500">Rating</p>
-                <p className="mt-2 text-2xl font-semibold">{profile.average_rating}</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {profile.average_rating}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm text-slate-500">Reviews</p>
-                <p className="mt-2 text-2xl font-semibold">{profile.total_reviews}</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {profile.total_reviews}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm text-slate-500">Sold Listings</p>
-                <p className="mt-2 text-2xl font-semibold">{soldListingsCount}</p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {soldListingsCount}
+                </p>
               </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm text-slate-500">
+                Payouts:{" "}
+                <span className="font-medium text-slate-900">
+                  {hasStripeAccount ? "Enabled" : "Not enabled"}
+                </span>
+              </p>
             </div>
           </div>
 
@@ -196,7 +213,7 @@ export default async function DashboardPage() {
                 Edit Profile
               </a>
 
-              <EnablePayoutsButton />
+              <SellerPayoutsButton hasStripeAccount={hasStripeAccount} />
             </div>
           </div>
         </div>

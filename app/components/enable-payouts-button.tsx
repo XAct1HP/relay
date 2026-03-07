@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 
-export default function EnablePayoutsButton() {
+type SellerPayoutsButtonProps = {
+  hasStripeAccount: boolean;
+};
+
+export default function SellerPayoutsButton({
+  hasStripeAccount,
+}: SellerPayoutsButtonProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -18,7 +24,7 @@ export default function EnablePayoutsButton() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.error || "Failed to start Stripe onboarding.");
+        setMessage(data.error || "Failed to open Stripe payouts.");
         setLoading(false);
         return;
       }
@@ -28,7 +34,7 @@ export default function EnablePayoutsButton() {
         return;
       }
 
-      setMessage("No onboarding URL was returned.");
+      setMessage("No Stripe URL was returned.");
       setLoading(false);
     } catch {
       setMessage("Something went wrong.");
@@ -37,14 +43,18 @@ export default function EnablePayoutsButton() {
   }
 
   return (
-    <div>
+    <div className="w-full">
       <button
         type="button"
         onClick={handleClick}
         disabled={loading}
-        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+        className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
       >
-        {loading ? "Redirecting..." : "Enable Seller Payouts"}
+        {loading
+          ? "Redirecting..."
+          : hasStripeAccount
+            ? "Manage Seller Payouts"
+            : "Enable Seller Payouts"}
       </button>
 
       {message && <p className="mt-2 text-sm text-slate-600">{message}</p>}
