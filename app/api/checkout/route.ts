@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing listingId" }, { status: 400 });
     }
 
-    const { data: listing, error: listingError } = await supabase
+    const { data: listing, error: listingError } = await supabaseAdmin
       .from("listings")
       .select("id, brand, model, nickname, price_cents, seller_id, status")
       .eq("id", listingId)
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: existingOrder } = await supabase
+    const { data: existingOrder } = await supabaseAdmin
       .from("orders")
       .select("id")
       .eq("listing_id", listing.id)
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: sellerProfile, error: sellerProfileError } = await supabase
+    const { data: sellerProfile, error: sellerProfileError } = await supabaseAdmin
       .from("profiles")
       .select("stripe_account_id, username")
       .eq("id", listing.seller_id)
@@ -78,8 +79,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    const { error: lockError } = await supabaseAdmin
+      .from("checkout_locks")
+      .insert({
+        listing_id: listing.id,
+        buyer_id: user.id,
+        expires_at: expiresAt,
+      });
+
+    if (lockError) {
+      return NextResponse.json(
+        { error: "This listing is currently being purchased by another buyer." },
+        { status: 409 }
+      );
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
-    const relayFee = Math.round(listing.price_cents * 0.01);
+    const relayFee = Math.round(listing.price_cents * 0.03);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -115,7 +133,14 @@ export async function POST(req: NextRequest) {
         amount_cents: String(listing.price_cents),
         relay_fee_cents: String(relayFee),
       },
+      expires_at: Math.floor(Date.now() / 1000) + 15 * 60,
     });
+
+    await supabaseAdmin
+      .from("checkout_locks")
+      .update({ stripe_session_id: session.id })
+      .eq("listing_id", listing.id)
+      .eq("buyer_id", user.id);
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

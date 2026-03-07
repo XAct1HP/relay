@@ -32,12 +32,15 @@ export async function POST(req: Request) {
     const buyerId = session.metadata?.buyer_id;
     const sellerId = session.metadata?.seller_id;
     const amountCents = Number(session.metadata?.amount_cents ?? "0");
+    const relayFeeCents = Number(session.metadata?.relay_fee_cents ?? "0");
 
     console.log("Webhook received checkout.session.completed", {
       listingId,
       buyerId,
       sellerId,
       amountCents,
+      relayFeeCents,
+      sessionId: session.id,
     });
 
     if (listingId && buyerId && sellerId && amountCents > 0) {
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
           buyer_id: buyerId,
           seller_id: sellerId,
           amount_cents: amountCents,
-          relay_fee_cents: 0,
+          relay_fee_cents: relayFeeCents,
           stripe_payment_intent_id:
             typeof session.payment_intent === "string"
               ? session.payment_intent
@@ -76,13 +79,45 @@ export async function POST(req: Request) {
       } else {
         console.log("Order already exists for listing:", listingId);
       }
+
+      const { error: deleteLockError } = await supabaseAdmin
+        .from("checkout_locks")
+        .delete()
+        .eq("listing_id", listingId);
+
+      if (deleteLockError) {
+        console.error("Failed to delete checkout lock after success:", deleteLockError);
+      }
     } else {
       console.error("Missing webhook metadata:", {
         listingId,
         buyerId,
         sellerId,
         amountCents,
+        relayFeeCents,
       });
+    }
+  }
+
+  if (event.type === "checkout.session.expired") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const listingId = session.metadata?.listing_id;
+
+    console.log("Webhook received checkout.session.expired", {
+      listingId,
+      sessionId: session.id,
+    });
+
+    if (listingId) {
+      const { error: deleteLockError } = await supabaseAdmin
+        .from("checkout_locks")
+        .delete()
+        .eq("listing_id", listingId);
+
+      if (deleteLockError) {
+        console.error("Failed to delete checkout lock after expiration:", deleteLockError);
+        return new NextResponse("Database error", { status: 500 });
+      }
     }
   }
 
