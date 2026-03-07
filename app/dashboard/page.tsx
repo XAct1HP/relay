@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import EnablePayoutsButton from "@/app/components/enable-payouts-button";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -195,22 +196,7 @@ export default async function DashboardPage() {
                 Edit Profile
               </a>
 
-              <button
-                onClick={async () => {
-                  const res = await fetch("/api/stripe/connect", {
-                    method: "POST",
-                  });
-
-                  const data = await res.json();
-
-                  if (data.url) {
-                    window.location.href = data.url;
-                  }
-                }}
-                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-              >
-                Enable Seller Payouts
-              </button>
+              <EnablePayoutsButton />
             </div>
           </div>
         </div>
