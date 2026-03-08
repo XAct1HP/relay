@@ -33,6 +33,7 @@ export async function POST(req: Request) {
     const sellerId = session.metadata?.seller_id;
     const amountCents = Number(session.metadata?.amount_cents ?? "0");
     const relayFeeCents = Number(session.metadata?.relay_fee_cents ?? "0");
+    const offerId = session.metadata?.offer_id || null;
 
     console.log("Webhook received checkout.session.completed", {
       listingId,
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
       sellerId,
       amountCents,
       relayFeeCents,
+      offerId,
       sessionId: session.id,
     });
 
@@ -80,6 +82,28 @@ export async function POST(req: Request) {
         console.log("Order already exists for listing:", listingId);
       }
 
+      if (offerId) {
+        const { error: acceptOfferError } = await supabaseAdmin
+          .from("offers")
+          .update({ status: "accepted" })
+          .eq("id", offerId);
+
+        if (acceptOfferError) {
+          console.error("Failed to mark offer accepted:", acceptOfferError);
+        }
+
+        const { error: cancelOtherOffersError } = await supabaseAdmin
+          .from("offers")
+          .update({ status: "cancelled" })
+          .eq("listing_id", listingId)
+          .eq("status", "pending")
+          .neq("id", offerId);
+
+        if (cancelOtherOffersError) {
+          console.error("Failed to cancel other offers:", cancelOtherOffersError);
+        }
+      }
+
       const { error: deleteLockError } = await supabaseAdmin
         .from("checkout_locks")
         .delete()
@@ -95,6 +119,7 @@ export async function POST(req: Request) {
         sellerId,
         amountCents,
         relayFeeCents,
+        offerId,
       });
     }
   }
@@ -102,9 +127,11 @@ export async function POST(req: Request) {
   if (event.type === "checkout.session.expired") {
     const session = event.data.object as Stripe.Checkout.Session;
     const listingId = session.metadata?.listing_id;
+    const offerId = session.metadata?.offer_id || null;
 
     console.log("Webhook received checkout.session.expired", {
       listingId,
+      offerId,
       sessionId: session.id,
     });
 
@@ -117,6 +144,18 @@ export async function POST(req: Request) {
       if (deleteLockError) {
         console.error("Failed to delete checkout lock after expiration:", deleteLockError);
         return new NextResponse("Database error", { status: 500 });
+      }
+    }
+
+    if (offerId) {
+      const { error: expireOfferError } = await supabaseAdmin
+        .from("offers")
+        .update({ status: "expired" })
+        .eq("id", offerId)
+        .eq("status", "pending");
+
+      if (expireOfferError) {
+        console.error("Failed to expire offer after session expiration:", expireOfferError);
       }
     }
   }
