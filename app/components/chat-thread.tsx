@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Message = {
+type MessageItem = {
+  type: "message";
   id: string;
   conversation_id: string;
   sender_id: string;
@@ -11,30 +12,53 @@ type Message = {
   created_at: string;
 };
 
+type OfferItem = {
+  type: "offer";
+  id: string;
+  conversation_id: string;
+  listing_id: string;
+  seller_id: string;
+  buyer_id: string;
+  amount_cents: number;
+  status: string;
+  expires_at: string | null;
+  created_at: string;
+};
+
+type ThreadItem = MessageItem | OfferItem;
+
 type ChatThreadProps = {
   conversationId: string;
   currentUserId: string;
-  initialMessages: Message[];
+  initialItems: ThreadItem[];
 };
 
 export default function ChatThread({
   conversationId,
   currentUserId,
-  initialMessages,
+  initialItems,
 }: ChatThreadProps) {
   const supabase = useMemo(() => createClient(), []);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [items, setItems] = useState<ThreadItem[]>(initialItems);
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
+  const [loadingOfferId, setLoadingOfferId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setMessages(initialMessages);
-  }, [initialMessages]);
+  function sortItems(nextItems: ThreadItem[]) {
+    return [...nextItems].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  }
 
   useEffect(() => {
-    const channel = supabase
+    setItems(sortItems(initialItems));
+  }, [initialItems]);
+
+  useEffect(() => {
+    const messageChannel = supabase
       .channel(`messages:${conversationId}`)
       .on(
         "postgres_changes",
@@ -45,26 +69,86 @@ export default function ChatThread({
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          const newMessage = payload.new as Message;
+          const newMessage = payload.new as Omit<MessageItem, "type">;
 
-          setMessages((current) => {
-            if (current.some((msg) => msg.id === newMessage.id)) {
+          setItems((current) => {
+            if (current.some((item) => item.type === "message" && item.id === newMessage.id)) {
               return current;
             }
-            return [...current, newMessage];
+
+            return sortItems([
+              ...current,
+              {
+                type: "message",
+                ...newMessage,
+              },
+            ]);
           });
         }
       )
       .subscribe();
 
+    const offerChannel = supabase
+      .channel(`offers:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "offers",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const newOffer = payload.new as Omit<OfferItem, "type">;
+
+          setItems((current) => {
+            if (current.some((item) => item.type === "offer" && item.id === newOffer.id)) {
+              return current;
+            }
+
+            return sortItems([
+              ...current,
+              {
+                type: "offer",
+                ...newOffer,
+              },
+            ]);
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "offers",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const updatedOffer = payload.new as Omit<OfferItem, "type">;
+
+          setItems((current) =>
+            sortItems(
+              current.map((item) =>
+                item.type === "offer" && item.id === updatedOffer.id
+                  ? { type: "offer", ...updatedOffer }
+                  : item
+              )
+            )
+          );
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messageChannel);
+      supabase.removeChannel(offerChannel);
     };
   }, [conversationId, supabase]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [items]);
 
   async function handleSend(e: FormEvent) {
     e.preventDefault();
@@ -102,34 +186,131 @@ export default function ChatThread({
     setSending(false);
   }
 
+  async function updateOfferStatus(offerId: string, newStatus: "accepted" | "rejected") {
+    setLoadingOfferId(offerId);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("offers")
+      .update({ status: newStatus })
+      .eq("id", offerId);
+
+    if (error) {
+      setMessage(error.message);
+      setLoadingOfferId(null);
+      return;
+    }
+
+    setLoadingOfferId(null);
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="max-h-[500px] space-y-4 overflow-y-auto p-6">
-        {messages.length === 0 ? (
+      <div className="max-h-[600px] space-y-4 overflow-y-auto p-6">
+        {items.length === 0 ? (
           <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
         ) : (
-          messages.map((msg) => {
-            const isOwn = msg.sender_id === currentUserId;
+          items.map((item) => {
+            if (item.type === "message") {
+              const isOwn = item.sender_id === currentUserId;
+
+              return (
+                <div
+                  key={`message-${item.id}`}
+                  className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm ${
+                      isOwn
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-900"
+                    }`}
+                  >
+                    <p>{item.content}</p>
+                    <p
+                      className={`mt-2 text-[11px] ${
+                        isOwn ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      {new Date(item.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            const isBuyer = currentUserId === item.buyer_id;
+            const isSeller = currentUserId === item.seller_id;
+            const isPending = item.status === "pending";
+            const isExpired =
+              item.expires_at && new Date(item.expires_at).getTime() < Date.now();
 
             return (
               <div
-                key={msg.id}
-                className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                key={`offer-${item.id}`}
+                className={`flex ${isSeller ? "justify-end" : "justify-start"}`}
               >
-                <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm ${
-                    isOwn
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-900"
-                  }`}
-                >
-                  <p>{msg.content}</p>
-                  <p
-                    className={`mt-2 text-[11px] ${
-                      isOwn ? "text-slate-300" : "text-slate-500"
-                    }`}
-                  >
-                    {new Date(msg.created_at).toLocaleString()}
+                <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
+                    Seller Offer
+                  </p>
+
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                    ${(item.amount_cents / 100).toFixed(2)}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                      Status: {item.status}
+                    </span>
+
+                    {item.expires_at && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                        Expires: {new Date(item.expires_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {isExpired && isPending && (
+                    <p className="mt-3 text-sm font-medium text-amber-600">
+                      This offer has expired.
+                    </p>
+                  )}
+
+                  {isBuyer && isPending && !isExpired && (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        disabled={loadingOfferId === item.id}
+                        onClick={() => updateOfferStatus(item.id, "accepted")}
+                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        {loadingOfferId === item.id ? "Updating..." : "Accept Offer"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={loadingOfferId === item.id}
+                        onClick={() => updateOfferStatus(item.id, "rejected")}
+                        className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+
+                  {isSeller && (
+                    <p className="mt-4 text-sm text-slate-500">
+                      {item.status === "pending" && "Waiting for buyer response"}
+                      {item.status === "accepted" && "Buyer accepted this offer"}
+                      {item.status === "rejected" && "Buyer declined this offer"}
+                      {item.status === "expired" && "Offer expired"}
+                      {item.status === "cancelled" && "Offer cancelled"}
+                    </p>
+                  )}
+
+                  <p className="mt-3 text-[11px] text-slate-500">
+                    {new Date(item.created_at).toLocaleString()}
                   </p>
                 </div>
               </div>

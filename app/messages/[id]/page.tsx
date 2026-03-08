@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ChatThread from "@/app/components/chat-thread";
 import SendOfferForm from "@/app/components/send-offer-form";
-import ConversationOffers from "@/app/components/conversation-offers";
 
 type MessagePageProps = {
   params: Promise<{
@@ -11,11 +10,25 @@ type MessagePageProps = {
   }>;
 };
 
-type Message = {
+type MessageItem = {
+  type: "message";
   id: string;
   conversation_id: string;
   sender_id: string;
   content: string;
+  created_at: string;
+};
+
+type OfferItem = {
+  type: "offer";
+  id: string;
+  conversation_id: string;
+  listing_id: string;
+  seller_id: string;
+  buyer_id: string;
+  amount_cents: number;
+  status: string;
+  expires_at: string | null;
   created_at: string;
 };
 
@@ -80,8 +93,22 @@ export default async function MessagePage({ params }: MessagePageProps) {
           "id, conversation_id, listing_id, seller_id, buyer_id, amount_cents, status, expires_at, created_at"
         )
         .eq("conversation_id", id)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: true }),
     ]);
+
+  const threadItems = [
+    ...((messages ?? []).map((message) => ({
+      type: "message" as const,
+      ...message,
+    })) as MessageItem[]),
+    ...((offers ?? []).map((offer) => ({
+      type: "offer" as const,
+      ...offer,
+    })) as OfferItem[]),
+  ].sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
@@ -132,25 +159,10 @@ export default async function MessagePage({ params }: MessagePageProps) {
             />
           )}
 
-          <ConversationOffers
-            offers={(offers ?? []) as {
-              id: string;
-              conversation_id: string;
-              listing_id: string;
-              seller_id: string;
-              buyer_id: string;
-              amount_cents: number;
-              status: string;
-              expires_at: string | null;
-              created_at: string;
-            }[]}
-            currentUserId={user.id}
-          />
-
           <ChatThread
             conversationId={id}
             currentUserId={user.id}
-            initialMessages={(messages ?? []) as Message[]}
+            initialItems={threadItems}
           />
         </div>
       </div>
