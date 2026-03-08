@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ChatThread from "@/app/components/chat-thread";
+import SendOfferForm from "@/app/components/send-offer-form";
 
 type MessagePageProps = {
   params: Promise<{
@@ -50,6 +51,8 @@ export default async function MessagePage({ params }: MessagePageProps) {
     conversation.buyer_id === user.id
       ? conversation.seller_id
       : conversation.buyer_id;
+
+  const isSeller = user.id === conversation.seller_id;
 
   const [{ data: otherProfile }, { data: listing }, { data: messages }] =
     await Promise.all([
@@ -111,11 +114,22 @@ export default async function MessagePage({ params }: MessagePageProps) {
           </div>
         </div>
 
-        <ChatThread
-          conversationId={id}
-          currentUserId={user.id}
-          initialMessages={(messages ?? []) as Message[]}
-        />
+        <div className="space-y-6">
+          {isSeller && conversation.listing_id && (
+            <SendOfferForm
+              conversationId={conversation.id}
+              listingId={conversation.listing_id}
+              sellerId={conversation.seller_id}
+              buyerId={conversation.buyer_id}
+            />
+          )}
+
+          <ChatThread
+            conversationId={id}
+            currentUserId={user.id}
+            initialMessages={(messages ?? []) as Message[]}
+          />
+        </div>
       </div>
     </main>
   );
