@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ChatThread from "@/app/components/chat-thread";
 import SendOfferForm from "@/app/components/send-offer-form";
+import ConversationOffers from "@/app/components/conversation-offers";
 
 type MessagePageProps = {
   params: Promise<{
@@ -54,7 +55,7 @@ export default async function MessagePage({ params }: MessagePageProps) {
 
   const isSeller = user.id === conversation.seller_id;
 
-  const [{ data: otherProfile }, { data: listing }, { data: messages }] =
+  const [{ data: otherProfile }, { data: listing }, { data: messages }, { data: offers }] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -73,6 +74,13 @@ export default async function MessagePage({ params }: MessagePageProps) {
         .select("id, conversation_id, sender_id, content, created_at")
         .eq("conversation_id", id)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("offers")
+        .select(
+          "id, conversation_id, listing_id, seller_id, buyer_id, amount_cents, status, expires_at, created_at"
+        )
+        .eq("conversation_id", id)
+        .order("created_at", { ascending: false }),
     ]);
 
   return (
@@ -123,6 +131,21 @@ export default async function MessagePage({ params }: MessagePageProps) {
               buyerId={conversation.buyer_id}
             />
           )}
+
+          <ConversationOffers
+            offers={(offers ?? []) as {
+              id: string;
+              conversation_id: string;
+              listing_id: string;
+              seller_id: string;
+              buyer_id: string;
+              amount_cents: number;
+              status: string;
+              expires_at: string | null;
+              created_at: string;
+            }[]}
+            currentUserId={user.id}
+          />
 
           <ChatThread
             conversationId={id}
