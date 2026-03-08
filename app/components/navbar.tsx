@@ -13,23 +13,33 @@ export default async function Navbar() {
 
   let username: string | null = null;
   let unreadNotifications = 0;
+  let unreadConversationCount = 0;
 
   if (user) {
-    const [{ data: profile }, { count }] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("profile_id", user.id)
-        .eq("is_read", false),
-    ]);
+    const [{ data: profile }, { count }, { data: unreadMessages }] =
+      await Promise.all([
+        supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("profile_id", user.id)
+          .eq("is_read", false),
+        supabase
+          .from("messages")
+          .select("conversation_id")
+          .is("read_at", null)
+          .neq("sender_id", user.id),
+      ]);
 
     username = profile?.username ?? null;
     unreadNotifications = count ?? 0;
+    unreadConversationCount = new Set(
+      (unreadMessages ?? []).map((row) => row.conversation_id)
+    ).size;
   }
 
   return (
@@ -97,7 +107,8 @@ export default async function Navbar() {
 
               <NotificationsNavButton
                 userId={user.id}
-                initialUnreadCount={unreadNotifications}
+                initialUnreadNotificationCount={unreadNotifications}
+                initialUnreadConversationCount={unreadConversationCount}
               />
 
               {username && !username.startsWith("user_") && (

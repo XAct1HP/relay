@@ -61,6 +61,13 @@ export default async function MessagePage({ params }: MessagePageProps) {
     redirect("/messages");
   }
 
+  await supabase
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("conversation_id", id)
+    .is("read_at", null)
+    .neq("sender_id", user.id);
+
   const otherUserId =
     conversation.buyer_id === user.id
       ? conversation.seller_id
