@@ -12,16 +12,12 @@ export default async function NotificationsPage() {
   if (!user) {
     redirect("/auth/login");
   }
-  
-  await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("profile_id", user.id)
-    .eq("is_read", false);
 
   const { data: notifications, error } = await supabase
     .from("notifications")
-    .select("id, type, title, body, is_read, related_order_id, related_listing_id, created_at")
+    .select(
+      "id, type, title, body, is_read, related_order_id, related_listing_id, related_conversation_id, created_at"
+    )
     .eq("profile_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -89,12 +85,12 @@ export default async function NotificationsPage() {
                         </Link>
                       )}
 
-                      {notification.type === "message" && (
+                      {notification.related_conversation_id && (
                         <Link
-                          href="/messages"
+                          href={`/messages/${notification.related_conversation_id}`}
                           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
                         >
-                          Open Inbox
+                          Open Conversation
                         </Link>
                       )}
                     </div>

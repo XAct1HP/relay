@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/app/components/logout-button";
+import NotificationsNavButton from "@/app/components/notifications-nav-button";
 
 export default async function Navbar() {
   const supabase = await createClient();
@@ -14,20 +15,20 @@ export default async function Navbar() {
   let unreadNotifications = 0;
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .maybeSingle();
+    const [{ data: profile }, { count }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("profile_id", user.id)
+        .eq("is_read", false),
+    ]);
 
     username = profile?.username ?? null;
-
-    const { count } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("profile_id", user.id)
-      .eq("is_read", false);
-
     unreadNotifications = count ?? 0;
   }
 
@@ -94,18 +95,10 @@ export default async function Navbar() {
                 Dashboard
               </Link>
 
-              <Link
-                href="/notifications"
-                className="relative rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
-              >
-                Notifications
-
-                {unreadNotifications > 0 && (
-                  <span className="ml-2 inline-flex min-w-[22px] items-center justify-center rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">
-                    {unreadNotifications}
-                  </span>
-                )}
-              </Link>
+              <NotificationsNavButton
+                userId={user.id}
+                initialUnreadCount={unreadNotifications}
+              />
 
               {username && !username.startsWith("user_") && (
                 <Link
