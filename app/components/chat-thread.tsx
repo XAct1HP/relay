@@ -147,6 +147,36 @@ export default function ChatThread({
   }, [conversationId, supabase]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function upsertPresence() {
+      if (cancelled) return;
+
+      await supabase.from("conversation_views").upsert(
+        {
+          conversation_id: conversationId,
+          profile_id: currentUserId,
+          last_seen_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "conversation_id,profile_id",
+        }
+      );
+    }
+
+    upsertPresence();
+
+    const interval = setInterval(() => {
+      upsertPresence();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [conversationId, currentUserId, supabase]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [items]);
 
