@@ -635,7 +635,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2 h-[420px] flex flex-col">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-xl font-semibold">Order Status Breakdown</h2>
               <p className="text-sm text-slate-500">
@@ -643,61 +643,63 @@ export default async function DashboardPage() {
               </p>
             </div>
 
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {[
-                "paid",
-                "label_created",
-                "shipped",
-                "out_for_delivery",
-                "delivered",
-                "completed",
-                "cancelled",
-                "refunded",
-              ].map((status) => (
-                <div
-                  key={status}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <p className="text-sm text-slate-500 capitalize">
-                    {humanizeStatus(status)}
-                  </p>
+            <div className="mt-5 flex-1 overflow-y-auto pr-1">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  "paid",
+                  "label_created",
+                  "shipped",
+                  "out_for_delivery",
+                  "delivered",
+                  "completed",
+                  "cancelled",
+                  "refunded",
+                ].map((status) => (
+                  <div
+                    key={status}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <p className="text-sm text-slate-500 capitalize">
+                      {humanizeStatus(status)}
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold">
+                      {statusCounts[status] ?? 0}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Reviews</p>
                   <p className="mt-2 text-2xl font-semibold">
-                    {statusCounts[status] ?? 0}
+                    {reviewsCountResult.count ?? 0}
                   </p>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm text-slate-500">Reviews</p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {reviewsCountResult.count ?? 0}
-                </p>
-              </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Conversations</p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {conversationsCountResult.count ?? 0}
+                  </p>
+                </div>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm text-slate-500">Conversations</p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {conversationsCountResult.count ?? 0}
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm text-slate-500">Average Revenue / Order</p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {formatCurrency(
-                    totalOrders > 0 ? Math.round(relayRevenueCents / totalOrders) : 0
-                  )}
-                </p>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Average Revenue / Order</p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {formatCurrency(
+                      totalOrders > 0 ? Math.round(relayRevenueCents / totalOrders) : 0
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-[420px] flex flex-col">
             <h2 className="text-xl font-semibold">Top Sellers</h2>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-3">
               {topSellers.length === 0 ? (
                 <p className="text-sm text-slate-500">No seller activity yet.</p>
               ) : (
