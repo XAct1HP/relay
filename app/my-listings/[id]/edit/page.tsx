@@ -20,9 +20,26 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
     redirect("/auth/login");
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("banned_until, banned_permanently")
+    .eq("id", user.id)
+    .single();
+
+  const currentlyBanned =
+    profile?.banned_permanently ||
+    (profile?.banned_until &&
+      new Date(profile.banned_until).getTime() > Date.now());
+
+  if (currentlyBanned) {
+    redirect("/dashboard");
+  }
+
   const { data: listing, error } = await supabase
     .from("listings")
-    .select("id, seller_id, brand, model, nickname, size, condition, price_cents, description, status")
+    .select(
+      "id, seller_id, brand, model, nickname, size, condition, price_cents, description, status, admin_removed, admin_removed_reason"
+    )
     .eq("id", id)
     .single();
 
@@ -34,6 +51,10 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
     redirect("/my-listings");
   }
 
+  if (listing.admin_removed) {
+    redirect("/my-listings");
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
       <div className="mx-auto max-w-2xl">
@@ -41,9 +62,7 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
           Relay
         </p>
         <h1 className="mt-2 text-4xl font-bold tracking-tight">Edit Listing</h1>
-        <p className="mt-3 text-slate-600">
-          Update your sneaker listing.
-        </p>
+        <p className="mt-3 text-slate-600">Update your sneaker listing.</p>
 
         <EditListingForm listing={listing} />
       </div>

@@ -14,6 +14,8 @@ type Listing = {
   price_cents: number;
   description: string | null;
   status: string;
+  admin_removed?: boolean | null;
+  admin_removed_reason?: string | null;
 };
 
 export default function EditListingForm({ listing }: { listing: Listing }) {
@@ -24,7 +26,9 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   const [condition, setCondition] = useState(listing.condition);
   const [price, setPrice] = useState((listing.price_cents / 100).toFixed(2));
   const [description, setDescription] = useState(listing.description ?? "");
-  const [status, setStatus] = useState(listing.status);
+  const [status, setStatus] = useState(
+    listing.status === "sold" ? "sold" : listing.status === "removed" ? "removed" : "active"
+  );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -41,6 +45,31 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
       return;
     }
 
+    const { data: currentListing, error: currentListingError } = await supabase
+      .from("listings")
+      .select("admin_removed")
+      .eq("id", listing.id)
+      .single();
+
+    if (currentListingError) {
+      setMessage(currentListingError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (currentListing?.admin_removed) {
+      setMessage("This listing was removed by Relay and cannot be edited.");
+      setLoading(false);
+      return;
+    }
+
+    const safeStatus =
+      listing.status === "sold"
+        ? "sold"
+        : status === "removed"
+        ? "removed"
+        : "active";
+
     const { error } = await supabase
       .from("listings")
       .update({
@@ -48,9 +77,10 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         condition,
         price_cents: parsedPrice,
         description: description.trim() || null,
-        status,
+        status: safeStatus,
       })
-      .eq("id", listing.id);
+      .eq("id", listing.id)
+      .eq("admin_removed", false);
 
     if (error) {
       setMessage(error.message);
@@ -73,10 +103,29 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
     setLoading(true);
     setMessage("");
 
+    const { data: currentListing, error: currentListingError } = await supabase
+      .from("listings")
+      .select("admin_removed")
+      .eq("id", listing.id)
+      .single();
+
+    if (currentListingError) {
+      setMessage(currentListingError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (currentListing?.admin_removed) {
+      setMessage("This listing was removed by Relay and cannot be changed.");
+      setLoading(false);
+      return;
+    }
+
     const { error } = await supabase
       .from("listings")
       .update({ status: "removed" })
-      .eq("id", listing.id);
+      .eq("id", listing.id)
+      .eq("admin_removed", false);
 
     if (error) {
       setMessage(error.message);
@@ -87,6 +136,22 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
     setLoading(false);
     router.push("/my-listings");
     router.refresh();
+  }
+
+  if (listing.admin_removed) {
+    return (
+      <div className="mt-8 rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+        <p className="text-lg font-semibold text-red-700">Removed by Relay</p>
+        <p className="mt-3 text-slate-700">
+          This listing has been permanently removed from the marketplace and cannot be edited.
+        </p>
+        {listing.admin_removed_reason && (
+          <p className="mt-3 text-sm text-slate-600">
+            Reason: {listing.admin_removed_reason}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -146,9 +211,8 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
             className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
           >
             <option value="active">active</option>
-            <option value="pending">pending</option>
-            <option value="sold">sold</option>
             <option value="removed">removed</option>
+            {listing.status === "sold" && <option value="sold">sold</option>}
           </select>
         </div>
       </div>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import SellerPayoutsButton from "@/app/components/enable-payouts-button";
+import AdminModerationPanel from "@/app/components/admin-moderation-panel";
 
 function formatCurrency(cents: number | null | undefined) {
   return `$${(((cents ?? 0) as number) / 100).toFixed(2)}`;
@@ -32,6 +33,15 @@ function getAdminEmails() {
   );
 }
 
+function isCurrentlyBanned(profile: {
+  banned_permanently?: boolean | null;
+  banned_until?: string | null;
+}) {
+  if (profile.banned_permanently) return true;
+  if (!profile.banned_until) return false;
+  return new Date(profile.banned_until).getTime() > Date.now();
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -46,7 +56,7 @@ export default async function DashboardPage() {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
-      "id, username, bio, average_rating, total_reviews, total_sales, stripe_account_id"
+      "id, username, bio, average_rating, total_reviews, total_sales, stripe_account_id, banned_until, banned_permanently, ban_reason"
     )
     .eq("id", user.id)
     .single();
@@ -64,6 +74,34 @@ export default async function DashboardPage() {
   const isAdmin = Boolean(user.email && adminEmails.has(user.email.toLowerCase()));
 
   if (!isAdmin) {
+    const currentlyBanned = isCurrentlyBanned(profile);
+
+    if (currentlyBanned) {
+      return (
+        <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
+          <div className="mx-auto max-w-2xl rounded-3xl border border-red-200 bg-white p-8 shadow-sm">
+            <p className="text-sm font-medium uppercase tracking-[0.2em] text-red-600">
+              Relay
+            </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Account Restricted</h1>
+            <p className="mt-4 text-slate-700">
+              Your account is currently restricted from using Relay.
+            </p>
+            <p className="mt-3 text-sm text-slate-600">
+              {profile.banned_permanently
+                ? "This ban is permanent."
+                : `Restricted until ${formatDate(profile.banned_until)}.`}
+            </p>
+            {profile.ban_reason && (
+              <p className="mt-3 text-sm text-slate-600">
+                Reason: {profile.ban_reason}
+              </p>
+            )}
+          </div>
+        </main>
+      );
+    }
+
     const [
       listingsResult,
       ordersResult,
@@ -72,7 +110,7 @@ export default async function DashboardPage() {
     ] = await Promise.all([
       supabase
         .from("listings")
-        .select("id, brand, model, nickname, price_cents, status, created_at")
+        .select("id, brand, model, nickname, price_cents, status, created_at, admin_removed")
         .eq("seller_id", user.id)
         .order("created_at", { ascending: false }),
 
@@ -94,7 +132,7 @@ export default async function DashboardPage() {
         .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`),
     ]);
 
-    const listings = listingsResult.data ?? [];
+    const listings = (listingsResult.data ?? []).filter((listing) => !listing.admin_removed);
     const sellerOrders = ordersResult.data ?? [];
     const buyerOrders = buyerOrdersResult.data ?? [];
     const conversations = conversationsResult.data ?? [];
@@ -196,7 +234,7 @@ export default async function DashboardPage() {
                 <p className="text-sm text-slate-500">
                   Payouts:{" "}
                   <span className="font-medium text-slate-900">
-                    {hasStripeAccount ? "Enabled" : "Not enabled"}
+                    {profile.stripe_account_id ? "Enabled" : "Not enabled"}
                   </span>
                 </p>
               </div>
@@ -344,24 +382,33 @@ export default async function DashboardPage() {
     );
   }
 
-  const [profilesResult, listingsResult, ordersResult, reviewsCountResult, conversationsCountResult] =
-    await Promise.all([
-      supabaseAdmin
-        .from("profiles")
-        .select("id, username, total_sales, average_rating, created_at, stripe_account_id"),
-      supabaseAdmin
-        .from("listings")
-        .select("id, seller_id, brand, model, nickname, price_cents, status, created_at")
-        .order("created_at", { ascending: false }),
-      supabaseAdmin
-        .from("orders")
-        .select(
-          "id, listing_id, buyer_id, seller_id, amount_cents, shipping_amount_cents, total_amount_cents, relay_fee_cents, status, created_at, tracking_code"
-        )
-        .order("created_at", { ascending: false }),
-      supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
-      supabaseAdmin.from("conversations").select("*", { count: "exact", head: true }),
-    ]);
+  const [
+    profilesResult,
+    listingsResult,
+    ordersResult,
+    reviewsCountResult,
+    conversationsCountResult,
+  ] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, username, total_sales, average_rating, created_at, stripe_account_id, banned_until, banned_permanently, ban_reason"
+      ),
+    supabaseAdmin
+      .from("listings")
+      .select(
+        "id, seller_id, brand, model, nickname, price_cents, status, created_at, admin_removed, admin_removed_at, admin_removed_reason"
+      )
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("orders")
+      .select(
+        "id, listing_id, buyer_id, seller_id, amount_cents, shipping_amount_cents, total_amount_cents, relay_fee_cents, status, created_at, tracking_code"
+      )
+      .order("created_at", { ascending: false }),
+    supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
+    supabaseAdmin.from("conversations").select("*", { count: "exact", head: true }),
+  ]);
 
   const profiles = profilesResult.data ?? [];
   const listings = listingsResult.data ?? [];
@@ -376,14 +423,20 @@ export default async function DashboardPage() {
         average_rating: entry.average_rating ?? 0,
         created_at: entry.created_at,
         stripe_account_id: entry.stripe_account_id,
+        banned_until: entry.banned_until,
+        banned_permanently: entry.banned_permanently,
+        ban_reason: entry.ban_reason,
       },
     ])
   );
 
+  const visibleListings = listings.filter((listing) => !listing.admin_removed);
+  const removedListings = listings.filter((listing) => listing.admin_removed);
+
   const totalUsers = profiles.length;
-  const totalListings = listings.length;
-  const activeListings = listings.filter((listing) => listing.status === "active").length;
-  const soldListings = listings.filter((listing) => listing.status === "sold").length;
+  const totalListings = visibleListings.length;
+  const activeListings = visibleListings.filter((listing) => listing.status === "active").length;
+  const soldListings = visibleListings.filter((listing) => listing.status === "sold").length;
   const totalOrders = orders.length;
 
   const gmvCents = orders.reduce((sum, order) => sum + (order.amount_cents ?? 0), 0);
@@ -397,11 +450,11 @@ export default async function DashboardPage() {
   );
 
   const newUsers30d = profiles.filter((entry) => daysSince(entry.created_at) <= 30).length;
-  const newListings30d = listings.filter((entry) => daysSince(entry.created_at) <= 30).length;
+  const newListings30d = visibleListings.filter((entry) => daysSince(entry.created_at) <= 30).length;
   const newOrders30d = orders.filter((entry) => daysSince(entry.created_at) <= 30).length;
 
   const activeSellerIds = new Set(
-    listings
+    visibleListings
       .filter((listing) => listing.status === "active")
       .map((listing) => listing.seller_id)
   );
@@ -409,10 +462,13 @@ export default async function DashboardPage() {
   const sellerMetrics = new Map<
     string,
     {
+      userId: string;
       username: string;
       salesCount: number;
       grossItemRevenueCents: number;
       relayFeesCents: number;
+      banned: boolean;
+      banReason: string | null;
     }
   >();
 
@@ -422,10 +478,19 @@ export default async function DashboardPage() {
 
     if (!sellerMetrics.has(order.seller_id)) {
       sellerMetrics.set(order.seller_id, {
+        userId: order.seller_id,
         username: sellerName,
         salesCount: 0,
         grossItemRevenueCents: 0,
         relayFeesCents: 0,
+        banned: Boolean(
+          sellerProfile &&
+            isCurrentlyBanned({
+              banned_permanently: sellerProfile.banned_permanently,
+              banned_until: sellerProfile.banned_until,
+            })
+        ),
+        banReason: sellerProfile?.ban_reason ?? null,
       });
     }
 
@@ -433,6 +498,20 @@ export default async function DashboardPage() {
     entry.salesCount += 1;
     entry.grossItemRevenueCents += order.amount_cents ?? 0;
     entry.relayFeesCents += order.relay_fee_cents ?? 0;
+  }
+
+  for (const entry of profiles) {
+    if (!sellerMetrics.has(entry.id)) {
+      sellerMetrics.set(entry.id, {
+        userId: entry.id,
+        username: entry.username,
+        salesCount: 0,
+        grossItemRevenueCents: 0,
+        relayFeesCents: 0,
+        banned: isCurrentlyBanned(entry),
+        banReason: entry.ban_reason ?? null,
+      });
+    }
   }
 
   const topSellers = [...sellerMetrics.values()]
@@ -460,8 +539,8 @@ export default async function DashboardPage() {
     (order) => order.status === "delivered"
   ).length;
 
-  const recentOrders = orders.slice(0, 8);
-  const recentListings = listings.slice(0, 8);
+  const recentOrders = orders.slice(0, 4);
+  const recentListings = visibleListings.slice(0, 6);
 
   const sellersWithPayoutsEnabled = profiles.filter(
     (entry) => Boolean(entry.stripe_account_id)
@@ -485,9 +564,7 @@ export default async function DashboardPage() {
 
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <p className="text-sm text-slate-500">Signed in as</p>
-            <p className="mt-1 font-medium text-slate-900">
-              @{profile.username}
-            </p>
+            <p className="mt-1 font-medium text-slate-900">@{profile.username}</p>
           </div>
         </div>
 
@@ -497,9 +574,7 @@ export default async function DashboardPage() {
             <p className="mt-3 text-3xl font-bold tracking-tight">
               {formatCurrency(gmvCents)}
             </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Item value only
-            </p>
+            <p className="mt-2 text-sm text-slate-500">Item value only</p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -507,9 +582,7 @@ export default async function DashboardPage() {
             <p className="mt-3 text-3xl font-bold tracking-tight">
               {formatCurrency(relayRevenueCents)}
             </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Platform fees collected
-            </p>
+            <p className="mt-2 text-sm text-slate-500">Platform fees collected</p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -517,9 +590,7 @@ export default async function DashboardPage() {
             <p className="mt-3 text-3xl font-bold tracking-tight">
               {formatCurrency(shippingCollectedCents)}
             </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Buyer-paid shipping
-            </p>
+            <p className="mt-2 text-sm text-slate-500">Buyer-paid shipping</p>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -527,9 +598,7 @@ export default async function DashboardPage() {
             <p className="mt-3 text-3xl font-bold tracking-tight">
               {shippingExceptions.length}
             </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Orders needing attention
-            </p>
+            <p className="mt-2 text-sm text-slate-500">Orders needing attention</p>
           </div>
         </div>
 
@@ -634,7 +703,7 @@ export default async function DashboardPage() {
               ) : (
                 topSellers.map((seller, index) => (
                   <div
-                    key={`${seller.username}-${index}`}
+                    key={`${seller.userId}-${index}`}
                     className="rounded-2xl border border-slate-200 p-4"
                   >
                     <div className="flex items-center justify-between gap-4">
@@ -653,12 +722,24 @@ export default async function DashboardPage() {
                       <span>Relay fees</span>
                       <span>{formatCurrency(seller.relayFeesCents)}</span>
                     </div>
+
+                    {seller.banned && (
+                      <p className="mt-2 text-sm font-medium text-red-600">
+                        Banned{seller.banReason ? ` · ${seller.banReason}` : ""}
+                      </p>
+                    )}
                   </div>
                 ))
               )}
             </div>
           </div>
         </div>
+
+        <AdminModerationPanel
+          sellers={topSellers}
+          visibleListings={recentListings}
+          removedListings={removedListings.slice(0, 8)}
+        />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -757,43 +838,6 @@ export default async function DashboardPage() {
                 })
               )}
             </div>
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">Recent Listings</h2>
-            <p className="text-sm text-slate-500">Newest inventory on Relay</p>
-          </div>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {recentListings.length === 0 ? (
-              <p className="text-sm text-slate-500">No listings yet.</p>
-            ) : (
-              recentListings.map((listing) => {
-                const sellerName = profilesById.get(listing.seller_id)?.username ?? "unknown";
-
-                return (
-                  <Link
-                    key={listing.id}
-                    href={`/listings/${listing.id}`}
-                    className="rounded-2xl border border-slate-200 p-4 hover:bg-slate-50"
-                  >
-                    <p className="font-medium text-slate-900">
-                      {listing.brand} {listing.model}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {listing.nickname || "Standard release"}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500">@{sellerName}</p>
-                    <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
-                      <span>{listing.status}</span>
-                      <span>{formatCurrency(listing.price_cents)}</span>
-                    </div>
-                  </Link>
-                );
-              })
-            )}
           </div>
         </div>
       </div>
