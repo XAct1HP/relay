@@ -32,18 +32,9 @@ export async function POST(req: Request) {
     const buyerId = session.metadata?.buyer_id;
     const sellerId = session.metadata?.seller_id;
     const amountCents = Number(session.metadata?.amount_cents ?? "0");
+    const shippingAmountCents = Number(session.metadata?.shipping_amount_cents ?? "0");
     const relayFeeCents = Number(session.metadata?.relay_fee_cents ?? "0");
     const offerId = session.metadata?.offer_id || null;
-
-    console.log("Webhook received checkout.session.completed", {
-      listingId,
-      buyerId,
-      sellerId,
-      amountCents,
-      relayFeeCents,
-      offerId,
-      sessionId: session.id,
-    });
 
     if (listingId && buyerId && sellerId && amountCents > 0) {
       const { data: existingOrder, error: existingOrderError } =
@@ -58,17 +49,37 @@ export async function POST(req: Request) {
         return new NextResponse("Database error", { status: 500 });
       }
 
+      const { data: lock, error: lockError } = await supabaseAdmin
+        .from("checkout_locks")
+        .select(
+          "shipping_address_json, shipping_amount_cents, shippo_shipment_id, shippo_rate_id"
+        )
+        .eq("stripe_session_id", session.id)
+        .maybeSingle();
+
+      if (lockError) {
+        console.error("Failed loading checkout lock:", lockError);
+        return new NextResponse("Database error", { status: 500 });
+      }
+
       if (!existingOrder) {
         const { error: insertError } = await supabaseAdmin.from("orders").insert({
           listing_id: listingId,
           buyer_id: buyerId,
           seller_id: sellerId,
           amount_cents: amountCents,
+          shipping_amount_cents: lock?.shipping_amount_cents ?? shippingAmountCents,
+          total_amount_cents:
+            amountCents + (lock?.shipping_amount_cents ?? shippingAmountCents),
           relay_fee_cents: relayFeeCents,
+          stripe_checkout_session_id: session.id,
           stripe_payment_intent_id:
             typeof session.payment_intent === "string"
               ? session.payment_intent
               : null,
+          shipping_address_json: lock?.shipping_address_json ?? null,
+          shippo_shipment_id: lock?.shippo_shipment_id ?? null,
+          shippo_rate_id: lock?.shippo_rate_id ?? null,
           status: "paid",
         });
 
@@ -76,51 +87,31 @@ export async function POST(req: Request) {
           console.error("Failed to insert order after checkout:", insertError);
           return new NextResponse("Database error", { status: 500 });
         }
-
-        console.log("Order inserted successfully for listing:", listingId);
-      } else {
-        console.log("Order already exists for listing:", listingId);
       }
 
+      await supabaseAdmin
+        .from("listings")
+        .update({ status: "sold" })
+        .eq("id", listingId);
+
       if (offerId) {
-        const { error: acceptOfferError } = await supabaseAdmin
+        await supabaseAdmin
           .from("offers")
           .update({ status: "accepted" })
           .eq("id", offerId);
 
-        if (acceptOfferError) {
-          console.error("Failed to mark offer accepted:", acceptOfferError);
-        }
-
-        const { error: cancelOtherOffersError } = await supabaseAdmin
+        await supabaseAdmin
           .from("offers")
           .update({ status: "cancelled" })
           .eq("listing_id", listingId)
           .eq("status", "pending")
           .neq("id", offerId);
-
-        if (cancelOtherOffersError) {
-          console.error("Failed to cancel other offers:", cancelOtherOffersError);
-        }
       }
 
-      const { error: deleteLockError } = await supabaseAdmin
+      await supabaseAdmin
         .from("checkout_locks")
         .delete()
         .eq("listing_id", listingId);
-
-      if (deleteLockError) {
-        console.error("Failed to delete checkout lock after success:", deleteLockError);
-      }
-    } else {
-      console.error("Missing webhook metadata:", {
-        listingId,
-        buyerId,
-        sellerId,
-        amountCents,
-        relayFeeCents,
-        offerId,
-      });
     }
   }
 
@@ -129,34 +120,19 @@ export async function POST(req: Request) {
     const listingId = session.metadata?.listing_id;
     const offerId = session.metadata?.offer_id || null;
 
-    console.log("Webhook received checkout.session.expired", {
-      listingId,
-      offerId,
-      sessionId: session.id,
-    });
-
     if (listingId) {
-      const { error: deleteLockError } = await supabaseAdmin
+      await supabaseAdmin
         .from("checkout_locks")
         .delete()
         .eq("listing_id", listingId);
-
-      if (deleteLockError) {
-        console.error("Failed to delete checkout lock after expiration:", deleteLockError);
-        return new NextResponse("Database error", { status: 500 });
-      }
     }
 
     if (offerId) {
-      const { error: expireOfferError } = await supabaseAdmin
+      await supabaseAdmin
         .from("offers")
         .update({ status: "expired" })
         .eq("id", offerId)
         .eq("status", "pending");
-
-      if (expireOfferError) {
-        console.error("Failed to expire offer after session expiration:", expireOfferError);
-      }
     }
   }
 

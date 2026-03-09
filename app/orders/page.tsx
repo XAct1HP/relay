@@ -15,7 +15,9 @@ export default async function OrdersPage() {
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, listing_id, buyer_id, seller_id, amount_cents, status, created_at")
+    .select(
+      "id, listing_id, buyer_id, seller_id, amount_cents, shipping_amount_cents, total_amount_cents, status, created_at, tracking_code"
+    )
     .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
     .order("created_at", { ascending: false });
 
@@ -99,10 +101,16 @@ export default async function OrdersPage() {
                     <p className="mt-2 text-sm text-slate-500">
                       Status: <span className="font-medium">{order.status}</span>
                     </p>
+
+                    {order.tracking_code && (
+                      <p className="mt-1 text-sm text-slate-500">
+                        Tracking: {order.tracking_code}
+                      </p>
+                    )}
                   </div>
 
                   <p className="text-lg font-bold">
-                    ${(order.amount_cents / 100).toFixed(2)}
+                    ${((order.total_amount_cents ?? order.amount_cents) / 100).toFixed(2)}
                   </p>
                 </div>
               </Link>

@@ -11,15 +11,18 @@ type OrderActionsProps = {
   buyerId: string;
   sellerId: string;
   status: string;
+  shippingLabelUrl?: string | null;
+  trackingCode?: string | null;
 };
 
 export default function OrderActions({
   orderId,
-  listingId,
   currentUserId,
   buyerId,
   sellerId,
   status,
+  shippingLabelUrl,
+  trackingCode,
 }: OrderActionsProps) {
   const supabase = createClient();
   const router = useRouter();
@@ -29,17 +32,18 @@ export default function OrderActions({
   const isSeller = currentUserId === sellerId;
   const isBuyer = currentUserId === buyerId;
 
-  async function markShipped() {
+  async function buyLabel() {
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "shipped" })
-      .eq("id", orderId);
+    const res = await fetch(`/api/orders/${orderId}/purchase-label`, {
+      method: "POST",
+    });
 
-    if (error) {
-      setMessage(error.message);
+    const data = await res.json();
+
+    if (!res.ok) {
+      setMessage(data.error || "Failed to buy label.");
       setLoading(false);
       return;
     }
@@ -48,17 +52,17 @@ export default function OrderActions({
     router.refresh();
   }
 
-  async function markDelivered() {
+  async function markCompleted() {
     setLoading(true);
     setMessage("");
 
-    const { error: orderError } = await supabase
+    const { error } = await supabase
       .from("orders")
       .update({ status: "completed" })
       .eq("id", orderId);
 
-    if (orderError) {
-      setMessage(orderError.message);
+    if (error) {
+      setMessage(error.message);
       setLoading(false);
       return;
     }
@@ -72,24 +76,39 @@ export default function OrderActions({
       <div className="flex flex-wrap gap-4">
         {isSeller && status === "paid" && (
           <button
-            onClick={markShipped}
+            onClick={buyLabel}
             disabled={loading}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {loading ? "Updating..." : "Mark as Shipped"}
+            {loading ? "Purchasing..." : "Buy Shipping Label"}
           </button>
         )}
 
-        {isBuyer && status === "shipped" && (
+        {isSeller && shippingLabelUrl && (
+          <a
+            href={shippingLabelUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+          >
+            Download Label
+          </a>
+        )}
+
+        {isBuyer && status === "delivered" && (
           <button
-            onClick={markDelivered}
+            onClick={markCompleted}
             disabled={loading}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {loading ? "Updating..." : "Mark as Delivered"}
+            {loading ? "Updating..." : "Mark as Received"}
           </button>
         )}
       </div>
+
+      {trackingCode && (
+        <p className="mt-3 text-sm text-slate-600">Tracking: {trackingCode}</p>
+      )}
 
       {message && <p className="mt-3 text-sm text-slate-600">{message}</p>}
     </div>

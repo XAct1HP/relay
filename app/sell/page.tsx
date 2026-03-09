@@ -19,6 +19,7 @@ export default function SellPage() {
   const [condition, setCondition] = useState("New");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [shippingWeightOz, setShippingWeightOz] = useState("32");
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
@@ -77,6 +78,7 @@ export default function SellPage() {
 
     const parsedPrice = Math.round(Number(price) * 100);
     const parsedSize = Number(size);
+    const parsedShippingWeightOz = Number(shippingWeightOz);
 
     if (!brand.trim() || !model.trim()) {
       setMessage("Brand and model are required.");
@@ -92,6 +94,12 @@ export default function SellPage() {
 
     if (!parsedSize || parsedSize <= 0) {
       setMessage("Enter a valid shoe size.");
+      setLoading(false);
+      return;
+    }
+
+    if (!parsedShippingWeightOz || parsedShippingWeightOz <= 0) {
+      setMessage("Choose a valid shipping weight.");
       setLoading(false);
       return;
     }
@@ -142,6 +150,8 @@ export default function SellPage() {
         price_cents: parsedPrice,
         description: description.trim() || null,
         cover_image_url: coverImageUrl,
+        shipping_weight_oz: parsedShippingWeightOz,
+        status: "active",
       })
       .select("id")
       .single();
@@ -262,6 +272,22 @@ export default function SellPage() {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
               required
             />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">Shipping Weight</label>
+            <select
+              value={shippingWeightOz}
+              onChange={(e) => setShippingWeightOz(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            >
+              <option value="24">Light pair / no heavy extras</option>
+              <option value="32">Standard sneakers with box</option>
+              <option value="48">Heavy pair / boots / bulky box</option>
+            </select>
+            <p className="mt-2 text-xs text-slate-500">
+              This is used to estimate the prepaid shipping label the buyer will pay for.
+            </p>
           </div>
 
           <div>

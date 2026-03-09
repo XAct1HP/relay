@@ -47,29 +47,7 @@ export default function BuyNowButton({
       return;
     }
 
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ listingId }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setMessage(data.error || "Failed to start checkout.");
-      setLoading(false);
-      return;
-    }
-
-    if (data.url) {
-      window.location.href = data.url;
-      return;
-    }
-
-    setMessage("Checkout URL was not returned.");
-    setLoading(false);
+    router.push(`/checkout/start/${listingId}`);
   }
 
   return (

@@ -1,18 +1,47 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+function hasRequiredShippingProfile(profile: {
+  ship_from_name?: string | null;
+  ship_from_street1?: string | null;
+  ship_from_city?: string | null;
+  ship_from_state?: string | null;
+  ship_from_zip?: string | null;
+  ship_from_country?: string | null;
+}) {
+  return Boolean(
+    profile.ship_from_name?.trim() &&
+      profile.ship_from_street1?.trim() &&
+      profile.ship_from_city?.trim() &&
+      profile.ship_from_state?.trim() &&
+      profile.ship_from_zip?.trim() &&
+      profile.ship_from_country?.trim()
+  );
+}
+
 export default function OnboardingPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
+
+  const [shipFromName, setShipFromName] = useState("");
+  const [shipFromPhone, setShipFromPhone] = useState("");
+  const [shipFromStreet1, setShipFromStreet1] = useState("");
+  const [shipFromStreet2, setShipFromStreet2] = useState("");
+  const [shipFromCity, setShipFromCity] = useState("");
+  const [shipFromState, setShipFromState] = useState("");
+  const [shipFromZip, setShipFromZip] = useState("");
+  const [shipFromCountry, setShipFromCountry] = useState("US");
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState("");
+  const [isEditingExistingProfile, setIsEditingExistingProfile] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
@@ -27,7 +56,18 @@ export default function OnboardingPage() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("username, bio")
+        .select(`
+          username,
+          bio,
+          ship_from_name,
+          ship_from_phone,
+          ship_from_street1,
+          ship_from_street2,
+          ship_from_city,
+          ship_from_state,
+          ship_from_zip,
+          ship_from_country
+        `)
         .eq("id", user.id)
         .single();
 
@@ -40,6 +80,17 @@ export default function OnboardingPage() {
       if (data) {
         setUsername(data.username ?? "");
         setBio(data.bio ?? "");
+        setShipFromName(data.ship_from_name ?? "");
+        setShipFromPhone(data.ship_from_phone ?? "");
+        setShipFromStreet1(data.ship_from_street1 ?? "");
+        setShipFromStreet2(data.ship_from_street2 ?? "");
+        setShipFromCity(data.ship_from_city ?? "");
+        setShipFromState(data.ship_from_state ?? "");
+        setShipFromZip(data.ship_from_zip ?? "");
+        setShipFromCountry(data.ship_from_country ?? "US");
+
+        const hasStartedProfile = Boolean((data.username ?? "").trim() || (data.bio ?? "").trim());
+        setIsEditingExistingProfile(hasStartedProfile);
       }
 
       setChecking(false);
@@ -64,9 +115,54 @@ export default function OnboardingPage() {
     }
 
     const cleanedUsername = username.trim().toLowerCase();
+    const cleanedBio = bio.trim();
+    const cleanedShipFromName = shipFromName.trim();
+    const cleanedShipFromPhone = shipFromPhone.trim();
+    const cleanedShipFromStreet1 = shipFromStreet1.trim();
+    const cleanedShipFromStreet2 = shipFromStreet2.trim();
+    const cleanedShipFromCity = shipFromCity.trim();
+    const cleanedShipFromState = shipFromState.trim().toUpperCase();
+    const cleanedShipFromZip = shipFromZip.trim();
+    const cleanedShipFromCountry = shipFromCountry.trim().toUpperCase() || "US";
 
     if (cleanedUsername.length < 3) {
       setMessage("Username must be at least 3 characters.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromName) {
+      setMessage("Ship-from name is required.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromStreet1) {
+      setMessage("Ship-from street address is required.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromCity) {
+      setMessage("Ship-from city is required.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromState) {
+      setMessage("Ship-from state is required.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromZip) {
+      setMessage("Ship-from ZIP code is required.");
+      setLoading(false);
+      return;
+    }
+
+    if (!cleanedShipFromCountry) {
+      setMessage("Ship-from country is required.");
       setLoading(false);
       return;
     }
@@ -75,7 +171,15 @@ export default function OnboardingPage() {
       .from("profiles")
       .update({
         username: cleanedUsername,
-        bio: bio.trim(),
+        bio: cleanedBio,
+        ship_from_name: cleanedShipFromName,
+        ship_from_phone: cleanedShipFromPhone || null,
+        ship_from_street1: cleanedShipFromStreet1,
+        ship_from_street2: cleanedShipFromStreet2 || null,
+        ship_from_city: cleanedShipFromCity,
+        ship_from_state: cleanedShipFromState,
+        ship_from_zip: cleanedShipFromZip,
+        ship_from_country: cleanedShipFromCountry,
       })
       .eq("id", user.id);
 
@@ -100,39 +204,177 @@ export default function OnboardingPage() {
     );
   }
 
+  const shippingComplete = hasRequiredShippingProfile({
+    ship_from_name: shipFromName,
+    ship_from_street1: shipFromStreet1,
+    ship_from_city: shipFromCity,
+    ship_from_state: shipFromState,
+    ship_from_zip: shipFromZip,
+    ship_from_country: shipFromCountry,
+  });
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6">
+      <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
             Relay
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">Set up your profile</h1>
+
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isEditingExistingProfile ? "Edit your profile" : "Set up your profile"}
+          </h1>
+
           <p className="mt-2 text-sm text-slate-600">
-            Create your reseller identity.
+            Add your public seller identity and your private ship-from address.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {!shippingComplete && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              Your ship-from address is required before you can finish onboarding.
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             <div>
-              <label className="mb-2 block text-sm font-medium">Username</label>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="midwestkicks"
-                required
-              />
+              <h2 className="text-lg font-semibold">Public Profile</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                This information is visible on your Relay profile.
+              </p>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Username</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="midwestkicks"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Bio</label>
+                  <textarea
+                    className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Specializing in Jordan 1s, SB Dunks, and clean VNDS pairs."
+                  />
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">Bio</label>
-              <textarea
-                className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="Specializing in Jordan 1s, SB Dunks, and clean VNDS pairs."
-              />
+            <div className="border-t border-slate-200 pt-6">
+              <h2 className="text-lg font-semibold">Private Shipping Profile</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                This is private and only used for shipping quotes and prepaid labels.
+                It is never shown on your public profile.
+              </p>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Ship-From Name
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={shipFromName}
+                    onChange={(e) => setShipFromName(e.target.value)}
+                    placeholder="Xavier Aviles"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Phone</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={shipFromPhone}
+                    onChange={(e) => setShipFromPhone(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Street Address
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={shipFromStreet1}
+                    onChange={(e) => setShipFromStreet1(e.target.value)}
+                    placeholder="123 Main St"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Apt / Unit</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={shipFromStreet2}
+                    onChange={(e) => setShipFromStreet2(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">City</label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={shipFromCity}
+                      onChange={(e) => setShipFromCity(e.target.value)}
+                      placeholder="Detroit"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">State</label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={shipFromState}
+                      onChange={(e) => setShipFromState(e.target.value)}
+                      placeholder="MI"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">ZIP</label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={shipFromZip}
+                      onChange={(e) => setShipFromZip(e.target.value)}
+                      placeholder="48197"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Country</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={shipFromCountry}
+                    onChange={(e) => setShipFromCountry(e.target.value)}
+                    placeholder="US"
+                    required
+                  />
+                </div>
+              </div>
             </div>
 
             <button

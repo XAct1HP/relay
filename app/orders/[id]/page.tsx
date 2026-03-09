@@ -24,7 +24,22 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
   const { data: order, error } = await supabase
     .from("orders")
-    .select("id, listing_id, buyer_id, seller_id, amount_cents, status, created_at")
+    .select(`
+      id,
+      listing_id,
+      buyer_id,
+      seller_id,
+      amount_cents,
+      shipping_amount_cents,
+      total_amount_cents,
+      status,
+      created_at,
+      tracking_code,
+      shipping_carrier,
+      shipping_service,
+      shipping_label_url,
+      last_tracking_status
+    `)
     .eq("id", id)
     .single();
 
@@ -60,7 +75,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
   const listing = listingResult.data;
   const buyer = buyerResult.data;
   const seller = sellerResult.data;
-  
+
   const { data: existingReview } = await supabase
     .from("reviews")
     .select("id, rating, comment, created_at")
@@ -113,9 +128,38 @@ export default async function OrderPage({ params }: OrderPageProps) {
             </div>
 
             <div className="rounded-xl border border-slate-200 p-4">
-              <p className="text-sm text-slate-500">Amount</p>
+              <p className="text-sm text-slate-500">Item Amount</p>
               <p className="mt-2 text-lg font-semibold">
                 ${(order.amount_cents / 100).toFixed(2)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">Shipping</p>
+              <p className="mt-2 text-lg font-semibold">
+                ${(order.shipping_amount_cents / 100).toFixed(2)}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                {order.shipping_carrier && order.shipping_service
+                  ? `${order.shipping_carrier} · ${order.shipping_service}`
+                  : "Label not purchased yet"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-sm text-slate-500">Tracking Status</p>
+              <p className="mt-2 text-lg font-semibold">
+                {order.last_tracking_status ?? "Not available yet"}
+              </p>
+              {order.tracking_code && (
+                <p className="mt-1 text-sm text-slate-500">{order.tracking_code}</p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-4 sm:col-span-2">
+              <p className="text-sm text-slate-500">Total Paid</p>
+              <p className="mt-2 text-lg font-semibold">
+                ${((order.total_amount_cents ?? order.amount_cents) / 100).toFixed(2)}
               </p>
             </div>
           </div>
@@ -127,9 +171,11 @@ export default async function OrderPage({ params }: OrderPageProps) {
             buyerId={order.buyer_id}
             sellerId={order.seller_id}
             status={order.status}
+            shippingLabelUrl={order.shipping_label_url}
+            trackingCode={order.tracking_code}
           />
 
-        {order.status === "completed" && user.id === order.buyer_id && !existingReview && (
+          {order.status === "completed" && user.id === order.buyer_id && !existingReview && (
             <ReviewForm
               orderId={order.id}
               reviewerId={order.buyer_id}
