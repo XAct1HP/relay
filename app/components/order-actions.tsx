@@ -43,7 +43,7 @@ export default function OrderActions({
     const data = await res.json();
 
     if (!res.ok) {
-      setMessage(data.error || "Failed to buy label.");
+      setMessage(data.error || "Failed to generate label.");
       setLoading(false);
       return;
     }
@@ -80,7 +80,7 @@ export default function OrderActions({
             disabled={loading}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {loading ? "Purchasing..." : "Buy Shipping Label"}
+            {loading ? "Generating..." : "Generate Shipping Label"}
           </button>
         )}
 

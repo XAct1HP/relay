@@ -4,6 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/app/components/logout-button";
 import NotificationsNavButton from "@/app/components/notifications-nav-button";
 
+function getAdminEmails() {
+  return new Set(
+    (process.env.RELAY_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
 export default async function Navbar() {
   const supabase = await createClient();
 
@@ -14,8 +23,12 @@ export default async function Navbar() {
   let username: string | null = null;
   let unreadNotifications = 0;
   let unreadConversationCount = 0;
+  let isAdmin = false;
 
   if (user) {
+    const adminEmails = getAdminEmails();
+    isAdmin = Boolean(user.email && adminEmails.has(user.email.toLowerCase()));
+
     const [{ data: profile }, { count }, { data: unreadMessages }] =
       await Promise.all([
         supabase
@@ -102,7 +115,7 @@ export default async function Navbar() {
                 href="/dashboard"
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
               >
-                Dashboard
+                {isAdmin ? "Admin" : "Dashboard"}
               </Link>
 
               <NotificationsNavButton
