@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type MessageItem = {
@@ -40,6 +41,7 @@ export default function ChatThread({
   initialItems,
 }: ChatThreadProps) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [items, setItems] = useState<ThreadItem[]>(initialItems);
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
@@ -235,33 +237,13 @@ export default function ChatThread({
     setSending(false);
   }
 
-  async function acceptOffer(offerId: string) {
+  function acceptOffer(offerId: string, listingId: string) {
     setLoadingOfferId(offerId);
     setMessage("");
 
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ offerId }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setMessage(data.error || "Failed to start checkout for this offer.");
-      setLoadingOfferId(null);
-      return;
-    }
-
-    if (data.url) {
-      window.location.href = data.url;
-      return;
-    }
-
-    setMessage("Checkout URL was not returned.");
-    setLoadingOfferId(null);
+    router.push(
+      `/checkout/start/${listingId}?offerId=${encodeURIComponent(offerId)}`
+    );
   }
 
   async function updateOfferStatus(offerId: string, newStatus: "rejected") {
@@ -362,7 +344,7 @@ export default function ChatThread({
                       <button
                         type="button"
                         disabled={loadingOfferId === item.id}
-                        onClick={() => acceptOffer(item.id)}
+                        onClick={() => acceptOffer(item.id, item.listing_id)}
                         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                       >
                         {loadingOfferId === item.id

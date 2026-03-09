@@ -49,6 +49,14 @@ export default function ConversationOffers({
     router.refresh();
   }
 
+  function acceptOffer(offerId: string, listingId: string) {
+    setLoadingOfferId(offerId);
+    setMessage("");
+    router.push(
+      `/checkout/start/${listingId}?offerId=${encodeURIComponent(offerId)}`
+    );
+  }
+
   if (offers.length === 0) {
     return null;
   }
@@ -101,10 +109,10 @@ export default function ConversationOffers({
                   <button
                     type="button"
                     disabled={loadingOfferId === offer.id}
-                    onClick={() => updateOfferStatus(offer.id, "accepted")}
+                    onClick={() => acceptOffer(offer.id, offer.listing_id)}
                     className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {loadingOfferId === offer.id ? "Updating..." : "Accept Offer"}
+                    {loadingOfferId === offer.id ? "Redirecting..." : "Accept Offer"}
                   </button>
 
                   <button

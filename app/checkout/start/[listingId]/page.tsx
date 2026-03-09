@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useParams } from "next/navigation";
+import { FormEvent, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 
 type QuoteResponse = {
   shippingAmountCents: number;
@@ -11,7 +11,10 @@ type QuoteResponse = {
 
 export default function CheckoutStartPage() {
   const params = useParams<{ listingId: string }>();
+  const searchParams = useSearchParams();
+
   const listingId = params.listingId;
+  const offerId = searchParams.get("offerId");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -25,16 +28,19 @@ export default function CheckoutStartPage() {
   const [message, setMessage] = useState("");
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
 
-  const address = {
-    name,
-    phone,
-    street1,
-    street2,
-    city,
-    state,
-    zip,
-    country: "US",
-  };
+  const address = useMemo(
+    () => ({
+      name,
+      phone,
+      street1,
+      street2,
+      city,
+      state,
+      zip,
+      country: "US",
+    }),
+    [name, phone, street1, street2, city, state, zip]
+  );
 
   async function getQuote(e?: FormEvent) {
     e?.preventDefault();
@@ -66,12 +72,22 @@ export default function CheckoutStartPage() {
     setLoadingCheckout(true);
     setMessage("");
 
+    const body: Record<string, unknown> = {
+      shippingAddress: address,
+    };
+
+    if (offerId) {
+      body.offerId = offerId;
+    } else {
+      body.listingId = listingId;
+    }
+
     const res = await fetch("/api/checkout", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ listingId, shippingAddress: address }),
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
@@ -101,6 +117,14 @@ export default function CheckoutStartPage() {
         <p className="mt-3 text-slate-600">
           Enter your shipping address to get your prepaid label cost.
         </p>
+
+        {offerId && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-medium text-slate-900">
+              You are checking out with an accepted offer.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={getQuote} className="mt-8 space-y-4">
           <input
