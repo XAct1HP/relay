@@ -742,7 +742,7 @@ export default async function DashboardPage() {
         />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-[520px] flex flex-col">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-xl font-semibold">Recent Orders</h2>
               <Link
@@ -753,7 +753,7 @@ export default async function DashboardPage() {
               </Link>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-3">
               {recentOrders.length === 0 ? (
                 <p className="text-sm text-slate-500">No orders yet.</p>
               ) : (
@@ -797,13 +797,13 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-[520px] flex flex-col">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-xl font-semibold">Shipping Exceptions</h2>
               <p className="text-sm text-slate-500">Operational watchlist</p>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-3">
               {shippingExceptions.length === 0 ? (
                 <p className="text-sm text-slate-500">No exceptions right now.</p>
               ) : (
