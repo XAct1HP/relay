@@ -10,6 +10,7 @@ type MessageItem = {
   sender_id: string;
   content: string;
   created_at: string;
+  read_at?: string | null;
 };
 
 type OfferItem = {
@@ -68,11 +69,15 @@ export default function ChatThread({
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        async (payload) => {
           const newMessage = payload.new as Omit<MessageItem, "type">;
 
           setItems((current) => {
-            if (current.some((item) => item.type === "message" && item.id === newMessage.id)) {
+            if (
+              current.some(
+                (item) => item.type === "message" && item.id === newMessage.id
+              )
+            ) {
               return current;
             }
 
@@ -84,6 +89,16 @@ export default function ChatThread({
               },
             ]);
           });
+
+          const isIncomingMessage = newMessage.sender_id !== currentUserId;
+
+          if (isIncomingMessage && !newMessage.read_at) {
+            await supabase
+              .from("messages")
+              .update({ read_at: new Date().toISOString() })
+              .eq("id", newMessage.id)
+              .is("read_at", null);
+          }
         }
       )
       .subscribe();
@@ -102,7 +117,11 @@ export default function ChatThread({
           const newOffer = payload.new as Omit<OfferItem, "type">;
 
           setItems((current) => {
-            if (current.some((item) => item.type === "offer" && item.id === newOffer.id)) {
+            if (
+              current.some(
+                (item) => item.type === "offer" && item.id === newOffer.id
+              )
+            ) {
               return current;
             }
 
@@ -144,7 +163,7 @@ export default function ChatThread({
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(offerChannel);
     };
-  }, [conversationId, supabase]);
+  }, [conversationId, currentUserId, supabase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,7 +286,9 @@ export default function ChatThread({
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="max-h-[600px] space-y-4 overflow-y-auto p-6">
         {items.length === 0 ? (
-          <p className="text-sm text-slate-500">No messages yet. Start the conversation.</p>
+          <p className="text-sm text-slate-500">
+            No messages yet. Start the conversation.
+          </p>
         ) : (
           items.map((item) => {
             if (item.type === "message") {
@@ -344,7 +365,9 @@ export default function ChatThread({
                         onClick={() => acceptOffer(item.id)}
                         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                       >
-                        {loadingOfferId === item.id ? "Redirecting..." : "Accept Offer"}
+                        {loadingOfferId === item.id
+                          ? "Redirecting..."
+                          : "Accept Offer"}
                       </button>
 
                       <button
