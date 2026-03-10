@@ -10,15 +10,13 @@ export default function Home() {
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-transparent text-white">
       <div className="relay-site-bg" />
-      <div className="relative z-10">
-        <HeroSection />
-        <ValueProps />
-        <MarketplacePreview />
-        <NetworkSection />
-        <FeeComparison />
-        <HowItWorks />
-        <FinalCta />
-      </div>
+      <HeroSection />
+      <ValueProps />
+      <MarketplacePreview />
+      <NetworkSection />
+      <FeeComparison />
+      <HowItWorks />
+      <FinalCta />
     </main>
   );
 }

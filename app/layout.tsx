@@ -23,8 +23,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
-        <Navbar />
-        {children}
+        <div className="relative isolate min-h-screen">
+          <div className="relative z-[60]">
+            <Navbar />
+          </div>
+          <div className="relative z-10">{children}</div>
+        </div>
       </body>
     </html>
   );

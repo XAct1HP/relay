@@ -65,8 +65,9 @@ export default function MarketplacePreview() {
                     src={listing.image}
                     alt={listing.title}
                     fill
-                    className="object-contain p-4"
+                    className="object-cover"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
                 </div>
 
                 <div className="p-5">

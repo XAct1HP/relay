@@ -102,8 +102,9 @@ export default function HeroSection() {
                         alt="Air Jordan 1 Retro High Chicago"
                         fill
                         priority
-                        className="object-contain p-4"
+                        className="object-cover"
                       />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
                     </div>
                   </div>
 
