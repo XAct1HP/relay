@@ -144,6 +144,8 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
 
   const inputClassName =
     "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const selectClassName =
+    "w-full appearance-none rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-[#151922]";
   const disabledClassName =
     "w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-white/55";
   const labelClassName = "mb-2 block text-sm font-medium text-white/72";
@@ -214,11 +216,11 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className={inputClassName}
+            className={selectClassName}
           >
-            <option value="New">New</option>
-            <option value="VNDS">VNDS</option>
-            <option value="Used">Used</option>
+            <option value="New" className="bg-[#0f1117] text-white">New</option>
+            <option value="VNDS" className="bg-[#0f1117] text-white">VNDS</option>
+            <option value="Used" className="bg-[#0f1117] text-white">Used</option>
           </select>
         </div>
 
@@ -227,11 +229,13 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className={inputClassName}
+            className={selectClassName}
           >
-            <option value="active">active</option>
-            <option value="removed">removed</option>
-            {listing.status === "sold" && <option value="sold">sold</option>}
+            <option value="active" className="bg-[#0f1117] text-white">active</option>
+            <option value="removed" className="bg-[#0f1117] text-white">removed</option>
+            {listing.status === "sold" && (
+              <option value="sold" className="bg-[#0f1117] text-white">sold</option>
+            )}
           </select>
         </div>
       </div>

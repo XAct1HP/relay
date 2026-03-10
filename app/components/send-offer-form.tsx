@@ -71,6 +71,8 @@ export default function SendOfferForm({
 
   const inputClassName =
     "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const selectClassName =
+    "w-full appearance-none rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/72";
 
   return (
@@ -106,13 +108,13 @@ export default function SendOfferForm({
           <select
             value={expiresInHours}
             onChange={(e) => setExpiresInHours(e.target.value)}
-            className={inputClassName}
+            className={selectClassName}
           >
-            <option value="1">1 hour</option>
-            <option value="6">6 hours</option>
-            <option value="12">12 hours</option>
-            <option value="24">24 hours</option>
-            <option value="48">48 hours</option>
+            <option value="1" className="bg-[#0f1117] text-white">1 hour</option>
+            <option value="6" className="bg-[#0f1117] text-white">6 hours</option>
+            <option value="12" className="bg-[#0f1117] text-white">12 hours</option>
+            <option value="24" className="bg-[#0f1117] text-white">24 hours</option>
+            <option value="48" className="bg-[#0f1117] text-white">48 hours</option>
           </select>
         </div>
       </div>

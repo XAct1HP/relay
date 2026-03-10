@@ -58,6 +58,8 @@ export default function MarketplaceFilters() {
 
   const inputClassName =
     "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const selectClassName =
+    "w-full appearance-none rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/72";
 
   return (
@@ -104,12 +106,12 @@ export default function MarketplaceFilters() {
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className={inputClassName}
+            className={selectClassName}
           >
-            <option value="">Any</option>
-            <option value="New">New</option>
-            <option value="VNDS">VNDS</option>
-            <option value="Used">Used</option>
+            <option value="" className="bg-[#0f1117] text-white">Any</option>
+            <option value="New" className="bg-[#0f1117] text-white">New</option>
+            <option value="VNDS" className="bg-[#0f1117] text-white">VNDS</option>
+            <option value="Used" className="bg-[#0f1117] text-white">Used</option>
           </select>
         </div>
 
@@ -156,11 +158,11 @@ export default function MarketplaceFilters() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className={inputClassName}
+            className={selectClassName}
           >
-            <option value="newest">Newest</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
+            <option value="newest" className="bg-[#0f1117] text-white">Newest</option>
+            <option value="price_asc" className="bg-[#0f1117] text-white">Price: Low to High</option>
+            <option value="price_desc" className="bg-[#0f1117] text-white">Price: High to Low</option>
           </select>
         </div>
 

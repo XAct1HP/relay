@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const BUCKET_NAME = "listing-images";
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_FILES = 5;
 
 export default function SellPage() {
@@ -185,6 +185,8 @@ export default function SellPage() {
 
   const inputClassName =
     "w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20";
+  const selectClassName =
+    "w-full appearance-none rounded-[1rem] border border-white/10 bg-[#0f1117] px-3 py-2 text-white outline-none focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/75";
 
   return (
@@ -256,11 +258,11 @@ export default function SellPage() {
                 <select
                   value={condition}
                   onChange={(e) => setCondition(e.target.value)}
-                  className={inputClassName}
+                  className={selectClassName}
                 >
-                  <option>New</option>
-                  <option>VNDS</option>
-                  <option>Used</option>
+                  <option className="bg-[#0f1117] text-white">New</option>
+                  <option className="bg-[#0f1117] text-white">VNDS</option>
+                  <option className="bg-[#0f1117] text-white">Used</option>
                 </select>
               </div>
             </div>
@@ -283,11 +285,17 @@ export default function SellPage() {
               <select
                 value={shippingWeightOz}
                 onChange={(e) => setShippingWeightOz(e.target.value)}
-                className={inputClassName}
+                className={selectClassName}
               >
-                <option value="24">Light pair / no heavy extras</option>
-                <option value="32">Standard sneakers with box</option>
-                <option value="48">Heavy pair / boots / bulky box</option>
+                <option value="24" className="bg-[#0f1117] text-white">
+                  Light pair / no heavy extras
+                </option>
+                <option value="32" className="bg-[#0f1117] text-white">
+                  Standard sneakers with box
+                </option>
+                <option value="48" className="bg-[#0f1117] text-white">
+                  Heavy pair / boots / bulky box
+                </option>
               </select>
               <p className="mt-2 text-xs text-white/45">
                 This is used to estimate the prepaid shipping label the buyer will pay for.

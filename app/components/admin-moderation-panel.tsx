@@ -109,8 +109,8 @@ export default function AdminModerationPanel({
           mode === "temporary"
             ? "Admin temporary ban"
             : mode === "permanent"
-            ? "Admin permanent ban"
-            : null,
+              ? "Admin permanent ban"
+              : null,
       }),
     });
 
@@ -159,39 +159,66 @@ export default function AdminModerationPanel({
     router.refresh();
   }
 
+  const searchInputClassName =
+    "w-full rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-white/20 focus:bg-[#151922]";
+
+  const secondaryButtonClassName =
+    "rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08] disabled:opacity-50";
+
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-2">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-[540px] flex flex-col">
-        <h2 className="text-xl font-semibold">User Moderation</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Temporarily or permanently ban sellers from Relay.
-        </p>
+      <div className="flex h-[540px] flex-col rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+              Admin moderation
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">User Moderation</h2>
+            <p className="mt-2 text-sm leading-7 text-white/58">
+              Temporarily or permanently restrict sellers from Relay.
+            </p>
+          </div>
 
-        <div className="mt-4">
+          <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/58">
+            Sellers
+          </div>
+        </div>
+
+        <div className="mt-5">
           <input
             type="text"
             value={sellerQuery}
             onChange={(e) => setSellerQuery(e.target.value)}
             placeholder="Search users by username or ID"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className={searchInputClassName}
           />
         </div>
 
-        <div className="mt-4 flex-1 overflow-y-auto pr-1 space-y-4">
+        <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
           {filteredSellers.length === 0 ? (
-            <p className="text-sm text-slate-500">No sellers found.</p>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+              No sellers found.
+            </div>
           ) : (
             filteredSellers.map((seller) => (
-              <div key={seller.userId} className="rounded-2xl border border-slate-200 p-4">
+              <div
+                key={seller.userId}
+                className="rounded-[1.5rem] border border-white/10 bg-black/20 p-4"
+              >
                 <div>
-                  <p className="font-medium text-slate-900">@{seller.username}</p>
-                  <p className="mt-1 text-sm text-slate-500 break-all">
+                  <p className="font-semibold text-white">@{seller.username}</p>
+                  <p className="mt-2 text-sm text-white/56 break-all">
                     {seller.salesCount} sales · {formatCurrency(seller.grossItemRevenueCents)} GMV
                   </p>
+                  <p className="mt-1 text-sm text-white/45">
+                    Relay fees: {formatCurrency(seller.relayFeesCents)}
+                  </p>
+
                   {seller.banned && (
-                    <p className="mt-2 text-sm font-medium text-red-600">
-                      Currently banned{seller.banReason ? ` · ${seller.banReason}` : ""}
-                    </p>
+                    <div className="mt-3 rounded-2xl border border-red-400/20 bg-red-400/[0.08] px-3 py-2 text-sm font-medium text-red-200">
+                      Currently banned
+                      {seller.banReason ? ` · ${seller.banReason}` : ""}
+                    </div>
                   )}
                 </div>
 
@@ -199,7 +226,7 @@ export default function AdminModerationPanel({
                   <button
                     onClick={() => banUser(seller.userId, "temporary", 7)}
                     disabled={loadingKey === `${seller.userId}-temporary`}
-                    className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                    className="rounded-full border border-amber-300/20 bg-amber-300/[0.10] px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-300/[0.16] disabled:opacity-50"
                   >
                     {loadingKey === `${seller.userId}-temporary` ? "Saving..." : "Temp Ban 7d"}
                   </button>
@@ -207,7 +234,7 @@ export default function AdminModerationPanel({
                   <button
                     onClick={() => banUser(seller.userId, "permanent")}
                     disabled={loadingKey === `${seller.userId}-permanent`}
-                    className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    className="rounded-full border border-red-300/20 bg-red-300/[0.10] px-4 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-300/[0.16] disabled:opacity-50"
                   >
                     {loadingKey === `${seller.userId}-permanent` ? "Saving..." : "Permanent Ban"}
                   </button>
@@ -215,7 +242,7 @@ export default function AdminModerationPanel({
                   <button
                     onClick={() => banUser(seller.userId, "clear")}
                     disabled={loadingKey === `${seller.userId}-clear`}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                    className={secondaryButtonClassName}
                   >
                     {loadingKey === `${seller.userId}-clear` ? "Saving..." : "Clear Ban"}
                   </button>
@@ -226,43 +253,59 @@ export default function AdminModerationPanel({
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-[540px] flex flex-col">
-        <h2 className="text-xl font-semibold">Listing Moderation</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Permanently remove listings from the marketplace.
-        </p>
+      <div className="flex h-[540px] flex-col rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+              Admin moderation
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Listing Moderation</h2>
+            <p className="mt-2 text-sm leading-7 text-white/58">
+              Permanently remove listings from the marketplace when needed.
+            </p>
+          </div>
 
-        <div className="mt-4">
+          <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/58">
+            Listings
+          </div>
+        </div>
+
+        <div className="mt-5">
           <input
             type="text"
             value={listingQuery}
             onChange={(e) => setListingQuery(e.target.value)}
             placeholder="Search listings by name, ID, or status"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className={searchInputClassName}
           />
         </div>
 
-        <div className="mt-4 flex-1 overflow-y-auto pr-1">
+        <div className="mt-5 flex-1 overflow-y-auto pr-1">
           <div className="space-y-4">
             {filteredVisibleListings.length === 0 ? (
-              <p className="text-sm text-slate-500">No active listings found.</p>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/55">
+                No active listings found.
+              </div>
             ) : (
               filteredVisibleListings.map((listing) => (
-                <div key={listing.id} className="rounded-2xl border border-slate-200 p-4">
-                  <p className="font-medium text-slate-900">
+                <div
+                  key={listing.id}
+                  className="rounded-[1.5rem] border border-white/10 bg-black/20 p-4"
+                >
+                  <p className="font-semibold text-white">
                     {listing.brand} {listing.model}
                   </p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-white/55">
                     {listing.nickname || "Standard release"}
                   </p>
-                  <p className="mt-2 text-sm text-slate-500 break-all">
+                  <p className="mt-2 text-sm text-white/45 break-all">
                     {listing.status} · {formatCurrency(listing.price_cents)}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <a
                       href={`/listings/${listing.id}`}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+                      className={secondaryButtonClassName}
                     >
                       View
                     </a>
@@ -270,7 +313,7 @@ export default function AdminModerationPanel({
                     <button
                       onClick={() => removeListing(listing.id)}
                       disabled={loadingKey === `listing-${listing.id}`}
-                      className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      className="rounded-full border border-red-300/20 bg-red-300/[0.10] px-4 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-300/[0.16] disabled:opacity-50"
                     >
                       {loadingKey === `listing-${listing.id}` ? "Removing..." : "Remove Permanently"}
                     </button>
@@ -280,42 +323,53 @@ export default function AdminModerationPanel({
             )}
           </div>
 
-          <details className="mt-6 rounded-2xl border border-slate-200 p-4">
-            <summary className="cursor-pointer text-sm font-medium text-slate-900">
-              See removed listings
+          <details className="mt-6 overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03]">
+            <summary className="cursor-pointer list-none px-4 py-4 text-sm font-semibold text-white">
+              <span className="inline-flex items-center gap-2">
+                <span className="text-white/75">Removed listings</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/55">
+                  {filteredRemovedListings.length}
+                </span>
+              </span>
             </summary>
 
-            <div className="mt-4 space-y-3">
-              {filteredRemovedListings.length === 0 ? (
-                <p className="text-sm text-slate-500">No removed listings.</p>
-              ) : (
-                filteredRemovedListings.map((listing) => (
-                  <div
-                    key={listing.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <p className="font-medium text-slate-900">
-                      {listing.brand} {listing.model}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {listing.nickname || "Standard release"}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500">
-                      Removed from marketplace
-                    </p>
-                    {listing.admin_removed_reason && (
-                      <p className="mt-1 text-sm text-slate-500">
-                        Reason: {listing.admin_removed_reason}
+            <div className="border-t border-white/10 px-4 py-4">
+              <div className="space-y-3">
+                {filteredRemovedListings.length === 0 ? (
+                  <p className="text-sm text-white/55">No removed listings.</p>
+                ) : (
+                  filteredRemovedListings.map((listing) => (
+                    <div
+                      key={listing.id}
+                      className="rounded-2xl border border-white/10 bg-black/20 p-4"
+                    >
+                      <p className="font-semibold text-white">
+                        {listing.brand} {listing.model}
                       </p>
-                    )}
-                  </div>
-                ))
-              )}
+                      <p className="mt-1 text-sm text-white/55">
+                        {listing.nickname || "Standard release"}
+                      </p>
+                      <p className="mt-2 text-sm text-white/45">
+                        Removed from marketplace
+                      </p>
+                      {listing.admin_removed_reason && (
+                        <p className="mt-1 text-sm text-white/55">
+                          Reason: {listing.admin_removed_reason}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </details>
         </div>
 
-        {message && <p className="mt-4 text-sm text-slate-600">{message}</p>}
+        {message && (
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/70">
+            {message}
+          </div>
+        )}
       </div>
     </div>
   );
