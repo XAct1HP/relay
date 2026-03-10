@@ -3,8 +3,12 @@ import "./globals.css";
 import Navbar from "@/app/components/navbar";
 
 export const metadata: Metadata = {
-  title: "Relay",
-  description: "The sneaker reseller network.",
+  title: {
+    default: "Relay",
+    template: "%s | Relay",
+  },
+  description:
+    "Relay is the professional platform for sneaker resellers — profiles, listings, messaging, offers, and low fees in one place.",
   icons: {
     icon: "/favicon.ico",
     apple: "/branding/apple-touch-icon.png",
@@ -18,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-screen bg-[#06070a] text-white antialiased">
         <Navbar />
         {children}
       </body>

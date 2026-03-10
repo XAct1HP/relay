@@ -242,7 +242,9 @@ export async function POST(req: NextRequest) {
     });
 
     const bestRate = getLowestShippoRate(shipment);
-    const shippingAmountCents = Math.round(Number(bestRate.amount) * 100);
+    const baseShippingCents = Math.round(Number(bestRate.amount) * 100);
+    const shippingBufferCents = 150; // $1.50
+    const shippingAmountCents = baseShippingCents + shippingBufferCents;
 
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
@@ -264,7 +266,7 @@ export async function POST(req: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
-    const relayFee = Math.round(finalAmountCents * 0.03);
+    const relayFee = Math.round(finalAmountCents * 0.01);
     const totalAppFee = relayFee + shippingAmountCents;
 
     const session = await stripe.checkout.sessions.create({
