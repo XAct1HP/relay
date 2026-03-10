@@ -36,11 +36,13 @@ export default async function Navbar() {
           .select("username")
           .eq("id", user.id)
           .maybeSingle(),
+
         supabase
           .from("notifications")
           .select("*", { count: "exact", head: true })
           .eq("profile_id", user.id)
           .eq("is_read", false),
+
         supabase
           .from("messages")
           .select("conversation_id")
@@ -50,6 +52,7 @@ export default async function Navbar() {
 
     username = profile?.username ?? null;
     unreadNotifications = count ?? 0;
+
     unreadConversationCount = new Set(
       (unreadMessages ?? []).map((row) => row.conversation_id)
     ).size;
@@ -61,14 +64,15 @@ export default async function Navbar() {
 
         {/* LEFT SIDE */}
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center">
+
+          <Link href="/" className="flex items-center pt-[2px]">
             <Image
               src="/branding/darkmode-logo.png"
               alt="Relay"
               width={180}
               height={44}
               priority
-              className="h-auto w-[150px] object-contain md:w-[170px]"
+              className="h-auto w-[75px] object-contain md:w-[85px]"
             />
           </Link>
 
