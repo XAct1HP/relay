@@ -56,12 +56,14 @@ export default async function Navbar() {
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#06070a]/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+
+        {/* LEFT SIDE */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center">
             <Image
-              src="/branding/relay-logo.png"
+              src="/branding/darkmode-logo.png"
               alt="Relay"
               width={180}
               height={44}
@@ -70,50 +72,54 @@ export default async function Navbar() {
             />
           </Link>
 
-          <nav className="hidden items-center gap-5 md:flex">
+          <nav className="hidden items-center gap-6 md:flex">
+
             <Link
               href="/marketplace"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+              className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               Marketplace
             </Link>
 
             <Link
               href="/sell"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+              className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               Sell
             </Link>
 
             <Link
               href="/messages"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+              className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               Messages
             </Link>
 
             <Link
               href="/orders"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+              className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               Orders
             </Link>
 
             <Link
               href="/my-listings"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+              className="text-sm font-medium text-white/70 transition hover:text-white"
             >
               My Listings
             </Link>
+
           </nav>
         </div>
 
+        {/* RIGHT SIDE */}
         <div className="flex items-center gap-3">
+
           {user ? (
             <>
               <Link
                 href="/dashboard"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
               >
                 {isAdmin ? "Admin" : "Dashboard"}
               </Link>
@@ -127,7 +133,7 @@ export default async function Navbar() {
               {username && !username.startsWith("user_") && (
                 <Link
                   href={`/profile/${username}`}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
                 >
                   @{username}
                 </Link>
@@ -139,19 +145,20 @@ export default async function Navbar() {
             <>
               <Link
                 href="/auth/login"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
               >
                 Log In
               </Link>
 
               <Link
                 href="/auth/signup"
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-white/90"
               >
                 Sign Up
               </Link>
             </>
           )}
+
         </div>
       </div>
     </header>
