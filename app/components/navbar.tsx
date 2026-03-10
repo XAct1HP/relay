@@ -31,18 +31,12 @@ export default async function Navbar() {
 
     const [{ data: profile }, { count }, { data: unreadMessages }] =
       await Promise.all([
-        supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", user.id)
-          .maybeSingle(),
-
+        supabase.from("profiles").select("username").eq("id", user.id).maybeSingle(),
         supabase
           .from("notifications")
           .select("*", { count: "exact", head: true })
           .eq("profile_id", user.id)
           .eq("is_read", false),
-
         supabase
           .from("messages")
           .select("conversation_id")
@@ -61,10 +55,7 @@ export default async function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#06070a]/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-
-        {/* LEFT SIDE */}
         <div className="flex items-center gap-8">
-
           <Link href="/" className="flex items-center pt-[2px]">
             <Image
               src="/branding/darkmode-logo.png"
@@ -77,7 +68,6 @@ export default async function Navbar() {
           </Link>
 
           <nav className="hidden items-center gap-6 md:flex">
-
             <Link
               href="/marketplace"
               className="text-sm font-medium text-white/70 transition hover:text-white"
@@ -112,13 +102,10 @@ export default async function Navbar() {
             >
               My Listings
             </Link>
-
           </nav>
         </div>
 
-        {/* RIGHT SIDE */}
         <div className="flex items-center gap-3">
-
           {user ? (
             <>
               <Link
@@ -162,7 +149,6 @@ export default async function Navbar() {
               </Link>
             </>
           )}
-
         </div>
       </div>
     </header>

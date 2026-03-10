@@ -22,7 +22,6 @@ export default function NotificationsNavButton({
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(
     initialUnreadNotificationCount
   );
-
   const [unreadConversationCount, setUnreadConversationCount] = useState(
     initialUnreadConversationCount
   );
@@ -38,7 +37,6 @@ export default function NotificationsNavButton({
       const uniqueConversationIds = new Set(
         (data ?? []).map((row) => row.conversation_id)
       );
-
       setUnreadConversationCount(uniqueConversationIds.size);
     }
   }
@@ -84,7 +82,6 @@ export default function NotificationsNavButton({
         },
         (payload) => {
           const notification = payload.new as { is_read: boolean };
-
           if (!notification.is_read) {
             setUnreadNotificationCount((count) => count + 1);
           }
@@ -136,8 +133,7 @@ export default function NotificationsNavButton({
     };
   }, [supabase, userId]);
 
-  const totalBadgeCount =
-    unreadNotificationCount + unreadConversationCount;
+  const totalBadgeCount = unreadNotificationCount + unreadConversationCount;
 
   return (
     <Link

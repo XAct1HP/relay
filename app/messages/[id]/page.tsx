@@ -69,19 +69,13 @@ export default async function MessagePage({ params }: MessagePageProps) {
     .neq("sender_id", user.id);
 
   const otherUserId =
-    conversation.buyer_id === user.id
-      ? conversation.seller_id
-      : conversation.buyer_id;
+    conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
 
   const isSeller = user.id === conversation.seller_id;
 
   const [{ data: otherProfile }, { data: listing }, { data: messages }, { data: offers }] =
     await Promise.all([
-      supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", otherUserId)
-        .single(),
+      supabase.from("profiles").select("username").eq("id", otherUserId).single(),
       conversation.listing_id
         ? supabase
             .from("listings")
@@ -118,59 +112,54 @@ export default async function MessagePage({ params }: MessagePageProps) {
   );
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-              Relay
-            </p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">
-              Conversation with @{otherProfile?.username ?? "unknown-user"}
-            </h1>
+    <main className="relay-page">
+      <div className="relay-site-bg" />
+      <div className="relay-page-shell">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="relay-eyebrow">Relay</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+                Conversation with @{otherProfile?.username ?? "unknown-user"}
+              </h1>
 
-            {listing && (
-              <p className="mt-2 text-slate-600">
-                About: {listing.brand} {listing.model}
-                {listing.nickname ? ` · ${listing.nickname}` : ""}
-              </p>
-            )}
-          </div>
+              {listing && (
+                <p className="mt-2 text-white/60">
+                  About: {listing.brand} {listing.model}
+                  {listing.nickname ? ` · ${listing.nickname}` : ""}
+                </p>
+              )}
+            </div>
 
-          <div className="flex gap-3">
-            <Link
-              href="/messages"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
-            >
-              Back to Inbox
-            </Link>
-
-            {listing && (
-              <Link
-                href={`/listings/${listing.id}`}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-              >
-                View Listing
+            <div className="flex gap-3">
+              <Link href="/messages" className="relay-button-secondary">
+                Back to Inbox
               </Link>
-            )}
+
+              {listing && (
+                <Link href={`/listings/${listing.id}`} className="relay-button-primary">
+                  View Listing
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-6">
-          {isSeller && conversation.listing_id && (
-            <SendOfferForm
-              conversationId={conversation.id}
-              listingId={conversation.listing_id}
-              sellerId={conversation.seller_id}
-              buyerId={conversation.buyer_id}
+          <div className="space-y-6">
+            {isSeller && conversation.listing_id && (
+              <SendOfferForm
+                conversationId={conversation.id}
+                listingId={conversation.listing_id}
+                sellerId={conversation.seller_id}
+                buyerId={conversation.buyer_id}
+              />
+            )}
+
+            <ChatThread
+              conversationId={id}
+              currentUserId={user.id}
+              initialItems={threadItems}
             />
-          )}
-
-          <ChatThread
-            conversationId={id}
-            currentUserId={user.id}
-            initialItems={threadItems}
-          />
+          </div>
         </div>
       </div>
     </main>
