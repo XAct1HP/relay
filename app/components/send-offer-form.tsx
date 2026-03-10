@@ -69,37 +69,44 @@ export default function SendOfferForm({
     setLoading(false);
   }
 
+  const inputClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const labelClassName = "mb-2 block text-sm font-medium text-white/72";
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="rounded-[1.75rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)] backdrop-blur-xl"
     >
-      <h3 className="text-lg font-semibold text-slate-900">Send Offer</h3>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">
-            Offer Amount (USD)
-          </label>
+          <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+            Seller tools
+          </p>
+          <h3 className="mt-2 text-xl font-semibold text-white">Send offer</h3>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClassName}>Offer Amount (USD)</label>
           <input
             type="number"
             step="0.01"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="285.00"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            className={inputClassName}
             required
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">
-            Expires In (hours)
-          </label>
+          <label className={labelClassName}>Expires In (hours)</label>
           <select
             value={expiresInHours}
             onChange={(e) => setExpiresInHours(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            className={inputClassName}
           >
             <option value="1">1 hour</option>
             <option value="6">6 hours</option>
@@ -113,12 +120,12 @@ export default function SendOfferForm({
       <button
         type="submit"
         disabled={loading}
-        className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
       >
         {loading ? "Sending..." : "Send Offer"}
       </button>
 
-      {message && <p className="mt-3 text-sm text-slate-600">{message}</p>}
+      {message && <p className="mt-3 text-sm text-white/65">{message}</p>}
     </form>
   );
 }

@@ -138,15 +138,21 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
     router.refresh();
   }
 
+  const inputClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const disabledClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white/38";
+  const labelClassName = "mb-2 block text-sm font-medium text-white/72";
+
   if (listing.admin_removed) {
     return (
-      <div className="mt-8 rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
-        <p className="text-lg font-semibold text-red-700">Removed by Relay</p>
-        <p className="mt-3 text-slate-700">
+      <div className="mt-8 rounded-[2rem] border border-red-400/20 bg-red-400/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <p className="text-lg font-semibold text-white">Removed by Relay</p>
+        <p className="mt-3 leading-7 text-white/70">
           This listing has been permanently removed from the marketplace and cannot be edited.
         </p>
         {listing.admin_removed_reason && (
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="mt-3 text-sm text-white/58">
             Reason: {listing.admin_removed_reason}
           </p>
         )}
@@ -157,45 +163,54 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   return (
     <form
       onSubmit={handleSave}
-      className="mt-8 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      className="mt-8 space-y-5 rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl"
     >
+      <div className="mb-2">
+        <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+          Listing editor
+        </p>
+        <p className="mt-2 text-xl font-semibold text-white">
+          Update your listing details
+        </p>
+      </div>
+
       <div>
-        <label className="mb-2 block text-sm font-medium">Brand</label>
+        <label className={labelClassName}>Brand</label>
         <input
           type="text"
           value={listing.brand}
           disabled
-          className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-slate-500"
+          className={disabledClassName}
         />
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Model</label>
+        <label className={labelClassName}>Model</label>
         <input
           type="text"
           value={listing.model}
           disabled
-          className="w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-slate-500"
+          className={disabledClassName}
         />
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Nickname</label>
+        <label className={labelClassName}>Nickname</label>
         <input
           type="text"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+          className={inputClassName}
         />
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
-          <label className="mb-2 block text-sm font-medium">Condition</label>
+          <label className={labelClassName}>Condition</label>
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            className={inputClassName}
           >
             <option>New</option>
             <option>VNDS</option>
@@ -204,11 +219,11 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium">Status</label>
+          <label className={labelClassName}>Status</label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            className={inputClassName}
           >
             <option value="active">active</option>
             <option value="removed">removed</option>
@@ -218,30 +233,30 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Price (USD)</label>
+        <label className={labelClassName}>Price (USD)</label>
         <input
           type="number"
           step="0.01"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+          className={inputClassName}
         />
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium">Description</label>
+        <label className={labelClassName}>Description</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+          className="min-h-32 w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]"
         />
       </div>
 
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-3 pt-2">
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
         >
           {loading ? "Saving..." : "Save Changes"}
         </button>
@@ -250,13 +265,13 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
           type="button"
           onClick={handleRemove}
           disabled={loading}
-          className="rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+          className="rounded-full border border-white/12 bg-white/[0.05] px-5 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08] disabled:opacity-50"
         >
           Remove Listing
         </button>
       </div>
 
-      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {message && <p className="text-sm text-white/65">{message}</p>}
     </form>
   );
 }

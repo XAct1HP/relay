@@ -56,40 +56,55 @@ export default function MarketplaceFilters() {
     router.push(pathname);
   }
 
+  const inputClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+  const labelClassName = "mb-2 block text-sm font-medium text-white/72";
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+      className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:p-6"
     >
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+            Filter marketplace
+          </p>
+          <p className="mt-2 text-lg font-semibold text-white">
+            Refine the listings you see
+          </p>
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         <div className="xl:col-span-2">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Search</label>
+          <label className={labelClassName}>Search</label>
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Jordan 4, Bred, Dunk..."
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Brand</label>
+          <label className={labelClassName}>Brand</label>
           <input
             type="text"
             value={brand}
             onChange={(e) => setBrand(e.target.value)}
             placeholder="Nike"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Condition</label>
+          <label className={labelClassName}>Condition</label>
           <select
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           >
             <option value="">Any</option>
             <option value="New">New</option>
@@ -99,49 +114,49 @@ export default function MarketplaceFilters() {
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Size</label>
+          <label className={labelClassName}>Size</label>
           <input
             type="number"
             step="0.5"
             value={size}
             onChange={(e) => setSize(e.target.value)}
             placeholder="10.5"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Min $</label>
+          <label className={labelClassName}>Min $</label>
           <input
             type="number"
             step="0.01"
             value={min}
             onChange={(e) => setMin(e.target.value)}
             placeholder="200"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           />
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Max $</label>
+          <label className={labelClassName}>Max $</label>
           <input
             type="number"
             step="0.01"
             value={max}
             onChange={(e) => setMax(e.target.value)}
             placeholder="400"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           />
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-        <div className="max-w-xs">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Sort</label>
+      <div className="mt-5 flex flex-col gap-4 border-t border-white/10 pt-5 md:flex-row md:items-end md:justify-between">
+        <div className="w-full max-w-xs">
+          <label className={labelClassName}>Sort</label>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 outline-none focus:border-slate-500"
+            className={inputClassName}
           >
             <option value="newest">Newest</option>
             <option value="price_asc">Price: Low to High</option>
@@ -152,15 +167,15 @@ export default function MarketplaceFilters() {
         <div className="flex flex-wrap gap-3">
           <button
             type="submit"
-            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+            className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
           >
-            Apply Filters
+            Apply filters
           </button>
 
           <button
             type="button"
             onClick={handleClear}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-100"
+            className="rounded-full border border-white/12 bg-white/[0.05] px-5 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08]"
           >
             Clear
           </button>

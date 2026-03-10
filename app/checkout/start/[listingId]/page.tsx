@@ -107,114 +107,181 @@ export default function CheckoutStartPage() {
     setLoadingCheckout(false);
   }
 
+  const inputClassName =
+    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-      <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-          Relay
-        </p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight">Shipping</h1>
-        <p className="mt-3 text-slate-600">
-          Enter your shipping address to get your prepaid label cost.
-        </p>
+    <main className="relative min-h-screen overflow-hidden bg-[#06070b] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.05),transparent_24%)]" />
+      <div className="absolute inset-0 bg-[#06070b]/80" />
 
-        {offerId && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-medium text-slate-900">
-              You are checking out with an accepted offer.
-            </p>
-          </div>
-        )}
-
-        <form onSubmit={getQuote} className="mt-8 space-y-4">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Full name"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            required
-          />
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="Phone (optional)"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-          <input
-            value={street1}
-            onChange={(e) => setStreet1(e.target.value)}
-            placeholder="Street address"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            required
-          />
-          <input
-            value={street2}
-            onChange={(e) => setStreet2(e.target.value)}
-            placeholder="Apt / unit (optional)"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <input
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="City"
-              className="rounded-lg border border-slate-300 px-3 py-2"
-              required
-            />
-            <input
-              value={state}
-              onChange={(e) => setState(e.target.value)}
-              placeholder="State"
-              className="rounded-lg border border-slate-300 px-3 py-2"
-              required
-            />
-            <input
-              value={zip}
-              onChange={(e) => setZip(e.target.value)}
-              placeholder="ZIP"
-              className="rounded-lg border border-slate-300 px-3 py-2"
-              required
-            />
+      <div className="relative mx-auto max-w-6xl px-6 py-12">
+        <div className="mb-10 max-w-3xl">
+          <div className="inline-flex items-center rounded-full border border-white/12 bg-white/[0.04] px-4 py-2 text-[11px] font-medium uppercase tracking-[0.24em] text-white/68 backdrop-blur">
+            Relay Checkout
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="submit"
-              disabled={loadingQuote}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {loadingQuote ? "Quoting..." : "Get Shipping Quote"}
-            </button>
+          <h1 className="mt-6 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">
+            Enter your shipping details.
+          </h1>
 
-            {quote && (
-              <button
-                type="button"
-                onClick={continueToPayment}
-                disabled={loadingCheckout}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-50"
-              >
-                {loadingCheckout ? "Redirecting..." : "Continue to Payment"}
-              </button>
-            )}
-          </div>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-white/60 sm:text-base">
+            We’ll estimate the prepaid label first, then send you to payment.
+          </p>
+        </div>
 
-          {quote && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-600">
-                Estimated shipping:{" "}
-                <span className="font-semibold">
-                  ${(quote.shippingAmountCents / 100).toFixed(2)}
-                </span>
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Cheapest rate: {quote.carrier} · {quote.service}
-              </p>
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+          <form
+            onSubmit={getQuote}
+            className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.42)] backdrop-blur-2xl sm:p-8"
+          >
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                  Delivery address
+                </p>
+                <p className="mt-2 text-xl font-semibold text-white">
+                  Buyer shipping info
+                </p>
+              </div>
+
+              {offerId && (
+                <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/60">
+                  Accepted offer
+                </div>
+              )}
             </div>
-          )}
 
-          {message && <p className="text-sm text-slate-600">{message}</p>}
-        </form>
+            <div className="space-y-4">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name"
+                className={inputClassName}
+                required
+              />
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Phone (optional)"
+                className={inputClassName}
+              />
+              <input
+                value={street1}
+                onChange={(e) => setStreet1(e.target.value)}
+                placeholder="Street address"
+                className={inputClassName}
+                required
+              />
+              <input
+                value={street2}
+                onChange={(e) => setStreet2(e.target.value)}
+                placeholder="Apt / unit (optional)"
+                className={inputClassName}
+              />
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  className={inputClassName}
+                  required
+                />
+                <input
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  placeholder="State"
+                  className={inputClassName}
+                  required
+                />
+                <input
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
+                  placeholder="ZIP"
+                  className={inputClassName}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={loadingQuote}
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loadingQuote ? "Getting quote..." : "Get shipping quote"}
+              </button>
+
+              {quote && (
+                <button
+                  type="button"
+                  onClick={continueToPayment}
+                  disabled={loadingCheckout}
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-5 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingCheckout ? "Redirecting..." : "Continue to payment"}
+                </button>
+              )}
+            </div>
+
+            {message && (
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/70">
+                {message}
+              </div>
+            )}
+          </form>
+
+          <div className="space-y-5">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl">
+              <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                Step flow
+              </p>
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold text-white">1. Enter address</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    Add the destination for the buyer-paid label.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold text-white">2. Quote shipping</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    Relay calculates the cheapest prepaid option.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold text-white">3. Complete payment</p>
+                  <p className="mt-1 text-sm text-white/55">
+                    You’ll be redirected to finish checkout.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl">
+              <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                Shipping estimate
+              </p>
+
+              {quote ? (
+                <div className="mt-4">
+                  <p className="text-4xl font-semibold tracking-tight text-white">
+                    ${(quote.shippingAmountCents / 100).toFixed(2)}
+                  </p>
+                  <p className="mt-3 text-sm text-white/58">
+                    Lowest available label found through {quote.carrier} · {quote.service}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-7 text-white/55">
+                  Your shipping estimate will appear here once you request a quote.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );

@@ -39,15 +39,18 @@ export default function ListingImageGallery({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-xl">
         {selectedImageUrl ? (
-          <img
-            src={selectedImageUrl}
-            alt={`${brand} ${model}`}
-            className="h-full min-h-[520px] w-full object-cover"
-          />
+          <div className="relative min-h-[540px]">
+            <img
+              src={selectedImageUrl}
+              alt={`${brand} ${model}`}
+              className="h-full min-h-[540px] w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/18 via-transparent to-transparent" />
+          </div>
         ) : (
-          <div className="flex min-h-[520px] items-center justify-center bg-slate-100 text-slate-400">
+          <div className="flex min-h-[540px] items-center justify-center bg-white/[0.03] text-white/35">
             No image
           </div>
         )}
@@ -63,16 +66,16 @@ export default function ListingImageGallery({
                 key={image.id}
                 type="button"
                 onClick={() => setSelectedImageUrl(image.image_url)}
-                className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition ${
+                className={`group overflow-hidden rounded-[1.35rem] border bg-white/[0.04] transition ${
                   isSelected
-                    ? "border-slate-900 ring-2 ring-slate-900"
-                    : "border-slate-200 hover:border-slate-400"
+                    ? "border-white/30 ring-1 ring-white/25"
+                    : "border-white/10 hover:border-white/20"
                 }`}
               >
                 <img
                   src={image.image_url}
                   alt={`${brand} ${model} thumbnail`}
-                  className="h-28 w-full object-cover"
+                  className="h-28 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                 />
               </button>
             );

@@ -72,13 +72,13 @@ export default function OrderActions({
   }
 
   return (
-    <div className="mt-6">
-      <div className="flex flex-wrap gap-4">
+    <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-5">
+      <div className="flex flex-wrap gap-3">
         {isSeller && status === "paid" && (
           <button
             onClick={buyLabel}
             disabled={loading}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
           >
             {loading ? "Generating..." : "Generate Shipping Label"}
           </button>
@@ -89,7 +89,7 @@ export default function OrderActions({
             href={shippingLabelUrl}
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+            className="rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08]"
           >
             Download Label
           </a>
@@ -99,7 +99,7 @@ export default function OrderActions({
           <button
             onClick={markCompleted}
             disabled={loading}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
           >
             {loading ? "Updating..." : "Mark as Received"}
           </button>
@@ -107,10 +107,10 @@ export default function OrderActions({
       </div>
 
       {trackingCode && (
-        <p className="mt-3 text-sm text-slate-600">Tracking: {trackingCode}</p>
+        <p className="mt-4 text-sm text-white/60">Tracking: {trackingCode}</p>
       )}
 
-      {message && <p className="mt-3 text-sm text-slate-600">{message}</p>}
+      {message && <p className="mt-3 text-sm text-white/65">{message}</p>}
     </div>
   );
 }
