@@ -196,9 +196,12 @@ export default function OnboardingPage() {
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-        <div className="mx-auto max-w-xl">
-          <p>Loading profile...</p>
+      <main className="relay-page">
+        <div className="relay-site-bg" />
+        <div className="relay-page-shell">
+          <div className="mx-auto max-w-xl">
+            <p className="text-white">Loading profile...</p>
+          </div>
         </div>
       </main>
     );
@@ -213,41 +216,45 @@ export default function OnboardingPage() {
     ship_from_country: shipFromCountry,
   });
 
-  return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-            Relay
-          </p>
+  const inputClassName =
+    "w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20";
+  const labelClassName = "mb-2 block text-sm font-medium text-white/75";
 
-          <h1 className="text-3xl font-bold tracking-tight">
+  return (
+    <main className="relay-page">
+      <div className="relay-site-bg" />
+      <div className="relay-page-shell">
+        <div className="mx-auto max-w-2xl">
+          <p className="relay-eyebrow">Relay</p>
+          <h1 className="relay-title">
             {isEditingExistingProfile ? "Edit your profile" : "Set up your profile"}
           </h1>
-
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="relay-subtitle">
             Add your public seller identity and your private ship-from address.
           </p>
 
           {!shippingComplete && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70 backdrop-blur-xl">
               Your ship-from address is required before you can finish onboarding.
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-8 space-y-6 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+          >
             <div>
-              <h2 className="text-lg font-semibold">Public Profile</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <h2 className="text-lg font-semibold text-white">Public Profile</h2>
+              <p className="mt-1 text-sm text-white/50">
                 This information is visible on your Relay profile.
               </p>
 
               <div className="mt-4 space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Username</label>
+                  <label className={labelClassName}>Username</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="midwestkicks"
@@ -256,9 +263,9 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Bio</label>
+                  <label className={labelClassName}>Bio</label>
                   <textarea
-                    className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className="min-h-28 w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20"
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     placeholder="Specializing in Jordan 1s, SB Dunks, and clean VNDS pairs."
@@ -267,21 +274,19 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="border-t border-slate-200 pt-6">
-              <h2 className="text-lg font-semibold">Private Shipping Profile</h2>
-              <p className="mt-1 text-sm text-slate-500">
+            <div className="border-t border-white/10 pt-6">
+              <h2 className="text-lg font-semibold text-white">Private Shipping Profile</h2>
+              <p className="mt-1 text-sm text-white/50">
                 This is private and only used for shipping quotes and prepaid labels.
                 It is never shown on your public profile.
               </p>
 
               <div className="mt-4 space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Ship-From Name
-                  </label>
+                  <label className={labelClassName}>Ship-From Name</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={shipFromName}
                     onChange={(e) => setShipFromName(e.target.value)}
                     placeholder="Xavier Aviles"
@@ -290,10 +295,10 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Phone</label>
+                  <label className={labelClassName}>Phone</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={shipFromPhone}
                     onChange={(e) => setShipFromPhone(e.target.value)}
                     placeholder="Optional"
@@ -301,12 +306,10 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Street Address
-                  </label>
+                  <label className={labelClassName}>Street Address</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={shipFromStreet1}
                     onChange={(e) => setShipFromStreet1(e.target.value)}
                     placeholder="123 Main St"
@@ -315,10 +318,10 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Apt / Unit</label>
+                  <label className={labelClassName}>Apt / Unit</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={shipFromStreet2}
                     onChange={(e) => setShipFromStreet2(e.target.value)}
                     placeholder="Optional"
@@ -327,10 +330,10 @@ export default function OnboardingPage() {
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="mb-2 block text-sm font-medium">City</label>
+                    <label className={labelClassName}>City</label>
                     <input
                       type="text"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      className={inputClassName}
                       value={shipFromCity}
                       onChange={(e) => setShipFromCity(e.target.value)}
                       placeholder="Detroit"
@@ -339,10 +342,10 @@ export default function OnboardingPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-medium">State</label>
+                    <label className={labelClassName}>State</label>
                     <input
                       type="text"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      className={inputClassName}
                       value={shipFromState}
                       onChange={(e) => setShipFromState(e.target.value)}
                       placeholder="MI"
@@ -351,10 +354,10 @@ export default function OnboardingPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-sm font-medium">ZIP</label>
+                    <label className={labelClassName}>ZIP</label>
                     <input
                       type="text"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      className={inputClassName}
                       value={shipFromZip}
                       onChange={(e) => setShipFromZip(e.target.value)}
                       placeholder="48197"
@@ -364,10 +367,10 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium">Country</label>
+                  <label className={labelClassName}>Country</label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    className={inputClassName}
                     value={shipFromCountry}
                     onChange={(e) => setShipFromCountry(e.target.value)}
                     placeholder="US"
@@ -380,13 +383,13 @@ export default function OnboardingPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-2 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              className="w-full rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 font-medium text-white transition hover:bg-white/[0.12] disabled:opacity-50"
             >
               {loading ? "Saving..." : "Save profile"}
             </button>
-          </form>
 
-          {message && <p className="mt-4 text-sm text-slate-600">{message}</p>}
+            {message && <p className="text-sm text-white/65">{message}</p>}
+          </form>
         </div>
       </div>
     </main>

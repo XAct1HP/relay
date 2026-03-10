@@ -40,94 +40,97 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
   ]);
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <ListingImageGallery
-            brand={listing.brand}
-            model={listing.model}
-            coverImageUrl={listing.cover_image_url}
-            images={listingImages ?? []}
-          />
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-              Relay Listing
-            </p>
-
-            <h1 className="mt-3 text-4xl font-bold tracking-tight">
-              {listing.brand} {listing.model}
-            </h1>
-
-            {listing.nickname && (
-              <p className="mt-2 text-lg text-slate-600">{listing.nickname}</p>
-            )}
-
-            <div className="mt-6 flex items-center gap-3">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                Size {listing.size}
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                {listing.condition}
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                {listing.status}
-              </span>
+    <main className="relay-page">
+      <div className="relay-site-bg" />
+      <div className="relay-page-shell">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+              <ListingImageGallery
+                brand={listing.brand}
+                model={listing.model}
+                coverImageUrl={listing.cover_image_url}
+                images={listingImages ?? []}
+              />
             </div>
 
-            {listing.status === "pending" && (
-              <p className="mt-4 text-sm font-medium text-amber-600">
-                This listing is currently being purchased by another buyer.
+            <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-8 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+              <p className="relay-eyebrow !mb-0">Relay Listing</p>
+
+              <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">
+                {listing.brand} {listing.model}
+              </h1>
+
+              {listing.nickname && (
+                <p className="mt-2 text-lg text-white/60">{listing.nickname}</p>
+              )}
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-medium text-white/75">
+                  Size {listing.size}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-medium text-white/75">
+                  {listing.condition}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-medium text-white/75">
+                  {listing.status}
+                </span>
+              </div>
+
+              {listing.status === "pending" && (
+                <p className="mt-4 text-sm font-medium text-white/65">
+                  This listing is currently being purchased by another buyer.
+                </p>
+              )}
+
+              <p className="mt-8 text-4xl font-bold tracking-tight text-white">
+                ${(listing.price_cents / 100).toFixed(2)}
               </p>
-            )}
 
-            <p className="mt-8 text-4xl font-bold tracking-tight">
-              ${(listing.price_cents / 100).toFixed(2)}
-            </p>
-
-            <div className="mt-8 border-t border-slate-200 pt-8">
-              <p className="text-sm font-medium text-slate-500">Description</p>
-              <p className="mt-3 leading-7 text-slate-700">
-                {listing.description || "No description added."}
-              </p>
-            </div>
-
-            {seller && (
-              <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-medium text-slate-500">Seller</p>
-                <Link
-                  href={`/profile/${seller.username}`}
-                  className="mt-2 block text-lg font-semibold hover:underline"
-                >
-                  @{seller.username}
-                </Link>
-                <p className="mt-2 text-sm text-slate-600">
-                  Rating: {seller.average_rating} · Sales: {seller.total_sales}
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-sm font-medium text-white/50">Description</p>
+                <p className="mt-3 leading-7 text-white/75">
+                  {listing.description || "No description added."}
                 </p>
               </div>
-            )}
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/marketplace"
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
-              >
-                Back to Marketplace
-              </Link>
+              {seller && (
+                <div className="mt-8 rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-5">
+                  <p className="text-sm font-medium text-white/50">Seller</p>
+                  <Link
+                    href={`/profile/${seller.username}`}
+                    className="mt-2 block text-lg font-semibold text-white hover:underline"
+                  >
+                    @{seller.username}
+                  </Link>
+                  <p className="mt-2 text-sm text-white/60">
+                    Rating: {seller.average_rating} · Sales: {seller.total_sales}
+                  </p>
+                </div>
+              )}
 
-              <Link
-                href={`/messages/start/${listing.id}`}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
-              >
-                Message Seller
-              </Link>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/marketplace"
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
+                >
+                  Back to Marketplace
+                </Link>
 
-              <BuyNowButton
-                listingId={listing.id}
-                sellerId={listing.seller_id}
-                priceCents={listing.price_cents}
-                status={listing.status}
-              />
+                <Link
+                  href={`/messages/start/${listing.id}`}
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
+                >
+                  Message Seller
+                </Link>
+
+                <BuyNowButton
+                  listingId={listing.id}
+                  sellerId={listing.seller_id}
+                  priceCents={listing.price_cents}
+                  status={listing.status}
+                />
+              </div>
             </div>
           </div>
         </div>

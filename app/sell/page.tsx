@@ -183,165 +183,172 @@ export default function SellPage() {
     router.refresh();
   }
 
+  const inputClassName =
+    "w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20";
+  const labelClassName = "mb-2 block text-sm font-medium text-white/75";
+
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-      <div className="mx-auto max-w-2xl">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-          Relay
-        </p>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight">Create Listing</h1>
-        <p className="mt-3 text-slate-600">
-          Post a sneaker listing to the Relay marketplace.
-        </p>
+    <main className="relay-page">
+      <div className="relay-site-bg" />
+      <div className="relay-page-shell">
+        <div className="mx-auto max-w-2xl">
+          <p className="relay-eyebrow">Relay</p>
+          <h1 className="relay-title">Create Listing</h1>
+          <p className="relay-subtitle">
+            Post a sneaker listing to the Relay marketplace.
+          </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
-          <div>
-            <label className="mb-2 block text-sm font-medium">Brand</label>
-            <input
-              type="text"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              placeholder="Nike"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">Model</label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="Jordan 4"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">Nickname</label>
-            <input
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Bred"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-            />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-8 space-y-5 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+          >
             <div>
-              <label className="mb-2 block text-sm font-medium">Size</label>
+              <label className={labelClassName}>Brand</label>
               <input
-                type="number"
-                step="0.5"
-                value={size}
-                onChange={(e) => setSize(e.target.value)}
-                placeholder="10.5"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                type="text"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="Nike"
+                className={inputClassName}
                 required
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium">Condition</label>
-              <select
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-              >
-                <option>New</option>
-                <option>VNDS</option>
-                <option>Used</option>
-              </select>
+              <label className={labelClassName}>Model</label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="Jordan 4"
+                className={inputClassName}
+                required
+              />
             </div>
-          </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium">Price (USD)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="315.00"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-              required
-            />
-          </div>
+            <div>
+              <label className={labelClassName}>Nickname</label>
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Bred"
+                className={inputClassName}
+              />
+            </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium">Shipping Weight</label>
-            <select
-              value={shippingWeightOz}
-              onChange={(e) => setShippingWeightOz(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-            >
-              <option value="24">Light pair / no heavy extras</option>
-              <option value="32">Standard sneakers with box</option>
-              <option value="48">Heavy pair / boots / bulky box</option>
-            </select>
-            <p className="mt-2 text-xs text-slate-500">
-              This is used to estimate the prepaid shipping label the buyer will pay for.
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">Listing Images</label>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFileChange}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              required
-            />
-            <p className="mt-2 text-xs text-slate-500">
-              Upload up to {MAX_FILES} images. The first image will be used as the cover photo.
-            </p>
-
-            {imagePreviewUrls.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {imagePreviewUrls.map((previewUrl, index) => (
-                  <div
-                    key={previewUrl}
-                    className="overflow-hidden rounded-xl border border-slate-200"
-                  >
-                    <img
-                      src={previewUrl}
-                      alt={`Preview ${index + 1}`}
-                      className="h-40 w-full object-cover"
-                    />
-                  </div>
-                ))}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <label className={labelClassName}>Size</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={size}
+                  onChange={(e) => setSize(e.target.value)}
+                  placeholder="10.5"
+                  className={inputClassName}
+                  required
+                />
               </div>
+
+              <div>
+                <label className={labelClassName}>Condition</label>
+                <select
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className={inputClassName}
+                >
+                  <option>New</option>
+                  <option>VNDS</option>
+                  <option>Used</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClassName}>Price (USD)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="315.00"
+                className={inputClassName}
+                required
+              />
+            </div>
+
+            <div>
+              <label className={labelClassName}>Shipping Weight</label>
+              <select
+                value={shippingWeightOz}
+                onChange={(e) => setShippingWeightOz(e.target.value)}
+                className={inputClassName}
+              >
+                <option value="24">Light pair / no heavy extras</option>
+                <option value="32">Standard sneakers with box</option>
+                <option value="48">Heavy pair / boots / bulky box</option>
+              </select>
+              <p className="mt-2 text-xs text-white/45">
+                This is used to estimate the prepaid shipping label the buyer will pay for.
+              </p>
+            </div>
+
+            <div>
+              <label className={labelClassName}>Listing Images</label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="block w-full rounded-[1rem] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-white"
+                required
+              />
+              <p className="mt-2 text-xs text-white/45">
+                Upload up to {MAX_FILES} images. The first image will be used as the cover photo.
+              </p>
+
+              {imagePreviewUrls.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {imagePreviewUrls.map((previewUrl, index) => (
+                    <div
+                      key={previewUrl}
+                      className="overflow-hidden rounded-[1rem] border border-white/10"
+                    >
+                      <img
+                        src={previewUrl}
+                        alt={`Preview ${index + 1}`}
+                        className="h-40 w-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className={labelClassName}>Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Clean pair, ships next day, OG all."
+                className="min-h-28 w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 font-medium text-white transition hover:bg-white/[0.12] disabled:opacity-50"
+            >
+              {loading ? "Creating listing..." : "Create Listing"}
+            </button>
+
+            {message && (
+              <p className="text-sm text-white/65">{message}</p>
             )}
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Clean pair, ships next day, OG all."
-              className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-slate-900 px-4 py-2 font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {loading ? "Creating listing..." : "Create Listing"}
-          </button>
-
-          {message && <p className="text-sm text-slate-600">{message}</p>}
-        </form>
+          </form>
+        </div>
       </div>
     </main>
   );
