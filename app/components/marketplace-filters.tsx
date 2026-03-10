@@ -63,7 +63,7 @@ export default function MarketplaceFilters() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:p-6"
+      className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:p-6"
     >
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
