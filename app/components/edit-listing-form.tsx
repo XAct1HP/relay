@@ -27,7 +27,11 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   const [price, setPrice] = useState((listing.price_cents / 100).toFixed(2));
   const [description, setDescription] = useState(listing.description ?? "");
   const [status, setStatus] = useState(
-    listing.status === "sold" ? "sold" : listing.status === "removed" ? "removed" : "active"
+    listing.status === "sold"
+      ? "sold"
+      : listing.status === "removed"
+        ? "removed"
+        : "active"
   );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -67,8 +71,8 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
       listing.status === "sold"
         ? "sold"
         : status === "removed"
-        ? "removed"
-        : "active";
+          ? "removed"
+          : "active";
 
     const { error } = await supabase
       .from("listings")
@@ -141,15 +145,16 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   const inputClassName =
     "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
   const disabledClassName =
-    "w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white/38";
+    "w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-white/55";
   const labelClassName = "mb-2 block text-sm font-medium text-white/72";
 
   if (listing.admin_removed) {
     return (
-      <div className="mt-8 rounded-[2rem] border border-red-400/20 bg-red-400/8 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+      <div className="rounded-[2rem] border border-red-400/20 bg-red-400/[0.08] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
         <p className="text-lg font-semibold text-white">Removed by Relay</p>
-        <p className="mt-3 leading-7 text-white/70">
-          This listing has been permanently removed from the marketplace and cannot be edited.
+        <p className="mt-3 leading-7 text-white/72">
+          This listing has been permanently removed from the marketplace and
+          cannot be edited.
         </p>
         {listing.admin_removed_reason && (
           <p className="mt-3 text-sm text-white/58">
@@ -163,48 +168,47 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
   return (
     <form
       onSubmit={handleSave}
-      className="mt-8 space-y-5 rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl"
+      className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:p-8"
     >
-      <div className="mb-2">
-        <p className="text-xs uppercase tracking-[0.22em] text-white/38">
-          Listing editor
-        </p>
-        <p className="mt-2 text-xl font-semibold text-white">
-          Update your listing details
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+            Listing editor
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            Update your listing
+          </p>
+        </div>
+
+        <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/58">
+          Size {listing.size}
+        </div>
       </div>
 
-      <div>
-        <label className={labelClassName}>Brand</label>
-        <input
-          type="text"
-          value={listing.brand}
-          disabled
-          className={disabledClassName}
-        />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label className={labelClassName}>Brand</label>
+          <input type="text" value={listing.brand} disabled className={disabledClassName} />
+        </div>
+
+        <div>
+          <label className={labelClassName}>Model</label>
+          <input type="text" value={listing.model} disabled className={disabledClassName} />
+        </div>
       </div>
 
-      <div>
-        <label className={labelClassName}>Model</label>
-        <input
-          type="text"
-          value={listing.model}
-          disabled
-          className={disabledClassName}
-        />
-      </div>
-
-      <div>
+      <div className="mt-5">
         <label className={labelClassName}>Nickname</label>
         <input
           type="text"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
+          placeholder="Optional release nickname"
           className={inputClassName}
         />
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div>
           <label className={labelClassName}>Condition</label>
           <select
@@ -212,9 +216,9 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
             onChange={(e) => setCondition(e.target.value)}
             className={inputClassName}
           >
-            <option>New</option>
-            <option>VNDS</option>
-            <option>Used</option>
+            <option value="New">New</option>
+            <option value="VNDS">VNDS</option>
+            <option value="Used">Used</option>
           </select>
         </div>
 
@@ -232,7 +236,7 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         </div>
       </div>
 
-      <div>
+      <div className="mt-5">
         <label className={labelClassName}>Price (USD)</label>
         <input
           type="number"
@@ -243,16 +247,17 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         />
       </div>
 
-      <div>
+      <div className="mt-5">
         <label className={labelClassName}>Description</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          placeholder="Add details buyers should know about the pair."
           className="min-h-32 w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]"
         />
       </div>
 
-      <div className="flex flex-wrap gap-3 pt-2">
+      <div className="mt-8 flex flex-wrap gap-3">
         <button
           type="submit"
           disabled={loading}
@@ -271,7 +276,11 @@ export default function EditListingForm({ listing }: { listing: Listing }) {
         </button>
       </div>
 
-      {message && <p className="text-sm text-white/65">{message}</p>}
+      {message && (
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-white/70">
+          {message}
+        </div>
+      )}
     </form>
   );
 }
