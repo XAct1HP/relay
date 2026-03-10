@@ -134,14 +134,12 @@
   }
 
   html {
-    @apply font-sans scroll-smooth;
+    @apply scroll-smooth font-sans;
   }
 
   body {
     @apply antialiased;
-    background:
-      radial-gradient(circle at top, rgba(95, 143, 255, 0.08), transparent 28%),
-      var(--relay-bg);
+    background: var(--relay-bg);
     color: var(--relay-text);
   }
 
@@ -154,6 +152,14 @@
 @layer utilities {
   .relay-container {
     @apply mx-auto w-full max-w-7xl px-6 md:px-10;
+  }
+
+  .relay-section {
+    @apply relative flex min-h-screen items-center;
+  }
+
+  .relay-section-tight {
+    @apply relative flex min-h-[92vh] items-center;
   }
 
   .relay-eyebrow {
@@ -174,8 +180,8 @@
 
   .relay-grid-bg {
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
     background-size: 72px 72px;
   }
 
@@ -189,5 +195,44 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  .relay-site-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 15% 18%, rgba(95, 143, 255, 0.1), transparent 20%),
+      radial-gradient(circle at 82% 24%, rgba(140, 82, 255, 0.08), transparent 18%),
+      radial-gradient(circle at 50% 82%, rgba(0, 194, 255, 0.06), transparent 20%),
+      linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(255,255,255,0) 18%),
+      var(--relay-bg);
+  }
+
+  .relay-reveal {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translateY(36px) scale(0.985);
+    transition:
+      opacity 800ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 800ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      filter 800ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: opacity, transform, filter;
+  }
+
+  .relay-reveal.is-visible {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relay-reveal {
+    opacity: 1 !important;
+    filter: blur(0) !important;
+    transform: none !important;
+    transition: none !important;
   }
 }
