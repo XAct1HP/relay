@@ -1,12 +1,31 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const BUCKET_NAME = "listing-images";
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_FILES = 5;
+
+function hasRequiredShippingProfile(profile: {
+  ship_from_name?: string | null;
+  ship_from_street1?: string | null;
+  ship_from_city?: string | null;
+  ship_from_state?: string | null;
+  ship_from_zip?: string | null;
+  ship_from_country?: string | null;
+}) {
+  return Boolean(
+    profile.ship_from_name?.trim() &&
+      profile.ship_from_street1?.trim() &&
+      profile.ship_from_city?.trim() &&
+      profile.ship_from_state?.trim() &&
+      profile.ship_from_zip?.trim() &&
+      profile.ship_from_country?.trim()
+  );
+}
 
 export default function SellPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -25,7 +44,51 @@ export default function SellPage() {
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
+  const [hasShippingProfile, setHasShippingProfile] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    async function loadShippingProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/auth/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "ship_from_name, ship_from_street1, ship_from_city, ship_from_state, ship_from_zip, ship_from_country"
+        )
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        setMessage(error.message);
+        setCheckingProfile(false);
+        return;
+      }
+
+      setHasShippingProfile(
+        hasRequiredShippingProfile({
+          ship_from_name: data?.ship_from_name,
+          ship_from_street1: data?.ship_from_street1,
+          ship_from_city: data?.ship_from_city,
+          ship_from_state: data?.ship_from_state,
+          ship_from_zip: data?.ship_from_zip,
+          ship_from_country: data?.ship_from_country,
+        })
+      );
+
+      setCheckingProfile(false);
+    }
+
+    loadShippingProfile();
+  }, [router, supabase]);
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -63,6 +126,12 @@ export default function SellPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+
+    if (!hasShippingProfile) {
+      setMessage("Complete your full ship-from profile before creating a listing.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
@@ -189,6 +258,19 @@ export default function SellPage() {
     "w-full appearance-none rounded-[1rem] border border-white/10 bg-[#0f1117] px-3 py-2 text-white outline-none focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/75";
 
+  if (checkingProfile) {
+    return (
+      <main className="relay-page">
+        <div className="relay-site-bg" />
+        <div className="relay-page-shell">
+          <div className="mx-auto max-w-2xl">
+            <p className="text-white">Loading seller profile...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="relay-page">
       <div className="relay-site-bg" />
@@ -199,6 +281,21 @@ export default function SellPage() {
           <p className="relay-subtitle">
             Post a sneaker listing to the Relay marketplace.
           </p>
+
+          {!hasShippingProfile && (
+            <div className="mt-6 rounded-[1.25rem] border border-amber-300/20 bg-amber-300/[0.08] p-4 text-sm text-amber-100 backdrop-blur-xl">
+              <p className="font-medium">Complete your shipping profile first.</p>
+              <p className="mt-1 text-amber-100/80">
+                You need your full ship-from details before you can create a listing.
+              </p>
+              <Link
+                href="/onboarding"
+                className="mt-3 inline-flex rounded-full border border-amber-200/20 bg-amber-200/[0.10] px-4 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-200/[0.16]"
+              >
+                Complete Ship-From Details
+              </Link>
+            </div>
+          )}
 
           <form
             onSubmit={handleSubmit}
@@ -346,8 +443,8 @@ export default function SellPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 font-medium text-white transition hover:bg-white/[0.12] disabled:opacity-50"
+              disabled={loading || !hasShippingProfile}
+              className="w-full rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 font-medium text-white transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Creating listing..." : "Create Listing"}
             </button>
