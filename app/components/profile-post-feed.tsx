@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 type SellerPost = {
   id: string;
   caption: string | null;
@@ -31,11 +29,10 @@ export default function ProfilePostFeed({
         >
           {post.image_url && (
             <div className={`relative ${index === 0 ? "h-80" : "h-64"}`}>
-              <Image
+              <img
                 src={post.image_url}
                 alt="Seller post"
-                fill
-                className="object-cover"
+                className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
             </div>
