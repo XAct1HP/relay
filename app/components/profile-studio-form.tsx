@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -487,7 +486,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
           >
             <div className="relative h-44">
               {bannerUrl ? (
-                <Image src={bannerUrl} alt="Banner preview" fill className="object-cover" />
+                <img
+                  src={bannerUrl}
+                  alt="Banner preview"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <div
                   className="absolute inset-0"
@@ -503,7 +506,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
               <div className="-mt-12 flex items-end gap-4">
                 <div className="relative h-24 w-24 overflow-hidden rounded-[1.5rem] border border-white/15 bg-black/25">
                   {avatarUrl ? (
-                    <Image src={avatarUrl} alt="Avatar preview" fill className="object-cover" />
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar preview"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div
                       className="flex h-full w-full items-center justify-center text-2xl font-semibold text-white"
@@ -564,7 +571,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 >
                   {post.image_url && (
                     <div className="relative h-44">
-                      <Image src={post.image_url} alt="Post image" fill className="object-cover" />
+                      <img
+                        src={post.image_url}
+                        alt="Post image"
+                        className="h-full w-full object-cover"
+                      />
                     </div>
                   )}
 

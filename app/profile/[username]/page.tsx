@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +22,12 @@ function getTheme(profile: {
     accent: profile.theme_accent || "#8b5cf6",
     glow: profile.theme_glow || "rgba(139,92,246,0.22)",
   };
+}
+
+function cardBackground(value: string | null | undefined) {
+  if (!value) return "rgba(255,255,255,0.05)";
+  if (value.startsWith("rgba(") || value.startsWith("rgb(")) return value;
+  return `${value}59`;
 }
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
@@ -123,16 +128,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
       <div className="relative mx-auto max-w-7xl px-6 py-10">
         <div
           className="overflow-hidden rounded-[2rem] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.35)]"
-          style={{ background: theme.card }}
+          style={{ background: cardBackground(theme.card) }}
         >
           <div className="relative h-[240px] sm:h-[300px]">
             {profile.banner_url ? (
-              <Image
+              <img
                 src={profile.banner_url}
                 alt={`${profile.username} banner`}
-                fill
-                className="object-cover"
-                priority
+                className="h-full w-full object-cover"
               />
             ) : (
               <div
@@ -170,11 +173,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
                 <div className="relative h-28 w-28 overflow-hidden rounded-[1.75rem] border border-white/15 bg-black/25 shadow-2xl sm:h-36 sm:w-36">
                   {profile.avatar_url ? (
-                    <Image
+                    <img
                       src={profile.avatar_url}
                       alt={`${profile.username} avatar`}
-                      fill
-                      className="object-cover"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
                     <div
@@ -360,11 +362,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     {isOwner && (
                       <Link
                         href="/profile/studio"
-                        className="inline-flex w-full items-center justify-center rounded-full text-sm font-semibold text-white"
+                        className="inline-flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-black"
                         style={{
                           backgroundColor: theme.accent,
-                          color: "#0b0b0f",
-                          padding: "0.8rem 1rem",
                         }}
                       >
                         Open Profile Studio
