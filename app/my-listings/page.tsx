@@ -100,17 +100,35 @@ export default async function MyListingsPage() {
                   key={listing.id}
                   className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
                 >
-                  {listing.cover_image_url ? (
-                    <img
-                      src={listing.cover_image_url}
-                      alt={`${listing.brand} ${listing.model}`}
-                      className="h-72 w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-72 w-full items-center justify-center bg-white/[0.03] text-white/35">
-                      No image
-                    </div>
-                  )}
+                  <div className="relative">
+                    {listing.cover_image_url ? (
+                      <img
+                        src={listing.cover_image_url}
+                        alt={`${listing.brand} ${listing.model}`}
+                        className={`h-72 w-full object-cover ${
+                          listing.admin_removed ? "grayscale" : ""
+                        }`}
+                      />
+                    ) : (
+                      <div className="flex h-72 w-full items-center justify-center bg-white/[0.03] text-white/35">
+                        No image
+                      </div>
+                    )}
+
+                    {listing.admin_removed && (
+                      <div className="absolute inset-x-4 top-4 rounded-[1rem] border border-red-400/20 bg-red-500/20 p-4 backdrop-blur-md">
+                        <p className="text-sm font-semibold text-white">Removed by Relay</p>
+                        <p className="mt-1 text-sm text-white/80">
+                          This listing cannot be restored by the seller.
+                        </p>
+                        {listing.admin_removed_reason && (
+                          <p className="mt-2 text-sm text-white/72">
+                            Reason: {listing.admin_removed_reason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-4">
@@ -137,20 +155,6 @@ export default async function MyListingsPage() {
                     <p className="mt-4 text-2xl font-bold text-white">
                       ${(listing.price_cents / 100).toFixed(2)}
                     </p>
-
-                    {listing.admin_removed && (
-                      <div className="mt-4 rounded-[1rem] border border-red-400/20 bg-red-500/10 p-3">
-                        <p className="text-sm font-medium text-white">Removed by Relay</p>
-                        <p className="mt-1 text-sm text-white/65">
-                          This listing cannot be restored by the seller.
-                        </p>
-                        {listing.admin_removed_reason && (
-                          <p className="mt-1 text-sm text-white/55">
-                            Reason: {listing.admin_removed_reason}
-                          </p>
-                        )}
-                      </div>
-                    )}
 
                     <div className="mt-5 flex flex-wrap gap-3">
                       <Link

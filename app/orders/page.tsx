@@ -2,6 +2,88 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+function getStatusBadge(status: string) {
+  const normalized = status.toLowerCase();
+
+  if (normalized === "paid") {
+    return {
+      label: "Paid",
+      className:
+        "border-emerald-400/20 bg-emerald-400/12 text-emerald-200",
+    };
+  }
+
+  if (normalized === "label_created") {
+    return {
+      label: "Label Created",
+      className:
+        "border-sky-400/20 bg-sky-400/12 text-sky-200",
+    };
+  }
+
+  if (normalized === "shipped") {
+    return {
+      label: "Shipped",
+      className:
+        "border-blue-400/20 bg-blue-400/12 text-blue-200",
+    };
+  }
+
+  if (normalized === "in_transit") {
+    return {
+      label: "In Transit",
+      className:
+        "border-violet-400/20 bg-violet-400/12 text-violet-200",
+    };
+  }
+
+  if (normalized === "out_for_delivery") {
+    return {
+      label: "Out for Delivery",
+      className:
+        "border-amber-400/20 bg-amber-400/12 text-amber-200",
+    };
+  }
+
+  if (normalized === "delivered") {
+    return {
+      label: "Delivered",
+      className:
+        "border-teal-400/20 bg-teal-400/12 text-teal-200",
+    };
+  }
+
+  if (normalized === "completed") {
+    return {
+      label: "Completed",
+      className:
+        "border-green-400/20 bg-green-400/12 text-green-200",
+    };
+  }
+
+  if (normalized === "pending") {
+    return {
+      label: "Pending",
+      className:
+        "border-yellow-400/20 bg-yellow-400/12 text-yellow-200",
+    };
+  }
+
+  if (normalized === "cancelled") {
+    return {
+      label: "Cancelled",
+      className:
+        "border-red-400/20 bg-red-400/12 text-red-200",
+    };
+  }
+
+  return {
+    label: status.replaceAll("_", " "),
+    className:
+      "border-white/10 bg-white/[0.05] text-white/75",
+  };
+}
+
 export default async function OrdersPage() {
   const supabase = await createClient();
 
@@ -79,48 +161,60 @@ export default async function OrdersPage() {
                 <p>No orders yet.</p>
               </div>
             ) : (
-              rows.map(({ order, listing, buyer, seller, isBuyer }) => (
-                <Link
-                  key={order.id}
-                  href={`/orders/${order.id}`}
-                  className="block rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl transition hover:bg-white/[0.055]"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold text-white">
-                        {listing
-                          ? `${listing.brand} ${listing.model}${listing.nickname ? ` · ${listing.nickname}` : ""}`
-                          : "Listing"}
-                      </h2>
+              rows.map(({ order, listing, buyer, seller, isBuyer }) => {
+                const badge = getStatusBadge(order.status);
 
-                      <p className="mt-2 text-sm text-white/60">
-                        {isBuyer
-                          ? `Seller: @${seller?.username ?? "unknown"}`
-                          : `Buyer: @${buyer?.username ?? "unknown"}`}
-                      </p>
+                return (
+                  <Link
+                    key={order.id}
+                    href={`/orders/${order.id}`}
+                    className="block rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl transition hover:bg-white/[0.055]"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
 
-                      <p className="mt-2 text-sm text-white/50">
-                        Status: <span className="font-medium text-white/80">{order.status}</span>
-                      </p>
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/45">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
 
-                      {order.tracking_code && (
-                        <p className="mt-1 text-sm text-white/45">
-                          Tracking: {order.tracking_code}
+                        <h2 className="text-lg font-semibold text-white">
+                          {listing
+                            ? `${listing.brand} ${listing.model}${listing.nickname ? ` · ${listing.nickname}` : ""}`
+                            : "Listing"}
+                        </h2>
+
+                        <p className="mt-2 text-sm text-white/60">
+                          {isBuyer
+                            ? `Seller: @${seller?.username ?? "unknown"}`
+                            : `Buyer: @${buyer?.username ?? "unknown"}`}
                         </p>
-                      )}
-                    </div>
 
-                    <div className="shrink-0 text-right">
-                      <p className="text-lg font-semibold text-white">
-                        ${((order.total_amount_cents ?? order.amount_cents) / 100).toFixed(2)}
-                      </p>
-                      <p className="mt-2 text-xs text-white/40">
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </p>
+                        {order.tracking_code && (
+                          <p className="mt-2 text-sm text-white/45">
+                            Tracking: {order.tracking_code}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-semibold text-white">
+                          ${((order.total_amount_cents ?? order.amount_cents) / 100).toFixed(2)}
+                        </p>
+                        <p className="mt-2 text-xs text-white/40">
+                          Total
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))
+                  </Link>
+                );
+              })
             )}
           </div>
         </div>

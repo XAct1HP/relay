@@ -45,7 +45,7 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
       <div className="relay-page-shell">
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <div>
               <ListingImageGallery
                 brand={listing.brand}
                 model={listing.model}
