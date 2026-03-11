@@ -147,109 +147,69 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
             )}
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
-
-            <div className="absolute right-4 top-4 flex flex-wrap gap-2 sm:right-6 sm:top-6">
-              {isOwner && (
-                <>
-                  <Link
-                    href="/profile/studio"
-                    className="rounded-full border border-white/12 bg-white/[0.08] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.12]"
-                  >
-                    Edit Storefront
-                  </Link>
-                  <Link
-                    href="/onboarding"
-                    className="rounded-full border border-white/12 bg-black/25 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/35"
-                  >
-                    Edit Profile Info
-                  </Link>
-                </>
-              )}
-            </div>
           </div>
 
           <div className="relative px-6 pb-8 sm:px-8">
-            <div className="-mt-16 flex flex-col gap-6 sm:-mt-20 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-                <div className="relative h-28 w-28 overflow-hidden rounded-[1.75rem] border border-white/15 bg-black/25 shadow-2xl sm:h-36 sm:w-36">
-                  {profile.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={`${profile.username} avatar`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="flex h-full w-full items-center justify-center text-3xl font-semibold text-white"
-                      style={{ background: `${theme.accent}33` }}
-                    >
-                      {profile.username.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pb-1">
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-                    Relay Storefront
-                  </p>
-                  <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-5xl">
-                    {displayName}
-                  </h1>
-                  <p className="mt-2 text-base text-white/60">@{profile.username}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 sm:w-auto">
-                {[
-                  { label: "Rating", value: profile.average_rating ?? 0 },
-                  { label: "Reviews", value: profile.total_reviews ?? 0 },
-                  { label: "Sales", value: profile.total_sales ?? 0 },
-                ].map((item) => (
+            <div className="-mt-16 sm:-mt-20">
+              <div className="relative h-28 w-28 overflow-hidden rounded-[1.75rem] border border-white/15 bg-black/25 shadow-2xl sm:h-36 sm:w-36">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={`${profile.username} avatar`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
                   <div
-                    key={item.label}
-                    className="rounded-[1.5rem] border border-white/10 px-4 py-4 text-center backdrop-blur"
-                    style={{ background: "rgba(255,255,255,0.05)" }}
+                    className="flex h-full w-full items-center justify-center text-3xl font-semibold text-white"
+                    style={{ background: `${theme.accent}33` }}
                   >
-                    <p className="text-xs uppercase tracking-[0.16em] text-white/45">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
+                    {profile.username.charAt(0).toUpperCase()}
                   </div>
-                ))}
+                )}
               </div>
+
+              <div className="mt-5">
+                <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Relay Storefront
+                </p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+                  {displayName}
+                </h1>
+                <p className="mt-2 text-base text-white/60">@{profile.username}</p>
+              </div>
+
+              <div className="mt-6 max-w-3xl border-t border-white/10 pt-6">
+                <p className="text-sm leading-8 text-white/72 sm:text-base">
+                  {profile.bio || "No bio added yet."}
+                </p>
+
+                <p className="mt-5 text-sm text-white/42">
+                  Member since {new Date(profile.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {[
+                { label: "Rating", value: profile.average_rating ?? 0 },
+                { label: "Reviews", value: profile.total_reviews ?? 0 },
+                { label: "Sales", value: profile.total_sales ?? 0 },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[1.5rem] border border-white/10 px-4 py-4 text-center backdrop-blur"
+                  style={{ background: "rgba(255,255,255,0.05)" }}
+                >
+                  <p className="text-xs uppercase tracking-[0.16em] text-white/45">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
+                </div>
+              ))}
             </div>
 
             <div className="mt-8 grid gap-8 lg:grid-cols-[1.35fr_0.65fr]">
               <div className="space-y-8">
-                <section
-                  className="rounded-[1.75rem] border border-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18)]"
-                  style={{ background: "rgba(255,255,255,0.05)" }}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.22em] text-white/38">
-                        Bio
-                      </p>
-                      <h2 className="mt-2 text-2xl font-semibold text-white">
-                        About this seller
-                      </h2>
-                    </div>
-
-                    <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: theme.accent }}
-                    />
-                  </div>
-
-                  <p className="mt-5 max-w-3xl text-sm leading-8 text-white/72 sm:text-base">
-                    {profile.bio || "No bio added yet."}
-                  </p>
-
-                  <p className="mt-6 text-sm text-white/42">
-                    Member since {new Date(profile.created_at).toLocaleDateString()}
-                  </p>
-                </section>
-
                 <section
                   className="rounded-[1.75rem] border border-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18)]"
                   style={{ background: "rgba(255,255,255,0.05)" }}
@@ -348,27 +308,35 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                           className="h-5 w-5 rounded-full border border-white/20"
                           style={{ backgroundColor: theme.accent }}
                         />
-                        <p className="text-sm text-white/72">{theme.accent}</p>
                       </div>
                     </div>
 
                     <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm text-white/45">Storefront feel</p>
+                      <p className="text-sm text-white/45">Storefront customization</p>
                       <p className="mt-2 text-sm leading-7 text-white/62">
                         Custom banner, avatar, posts, listings, and seller-specific theming.
                       </p>
                     </div>
 
                     {isOwner && (
-                      <Link
-                        href="/profile/studio"
-                        className="inline-flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-black"
-                        style={{
-                          backgroundColor: theme.accent,
-                        }}
-                      >
-                        Open Profile Studio
-                      </Link>
+                      <>
+                        <Link
+                          href="/profile/studio"
+                          className="inline-flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-black"
+                          style={{
+                            backgroundColor: theme.accent,
+                          }}
+                        >
+                          Open Profile Studio
+                        </Link>
+
+                        <Link
+                          href="/onboarding"
+                          className="inline-flex w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                        >
+                          Edit Profile Info
+                        </Link>
+                      </>
                     )}
                   </div>
                 </div>

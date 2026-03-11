@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 
 type Listing = {
@@ -40,11 +39,10 @@ export default function ProfileListingsRail({
           >
             <div className="relative h-48 overflow-hidden">
               {listing.cover_image_url ? (
-                <Image
+                <img
                   src={listing.cover_image_url}
                   alt={`${listing.brand} ${listing.model}`}
-                  fill
-                  className="object-cover transition duration-300 group-hover:scale-[1.03]"
+                  className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
                 />
               ) : (
                 <div

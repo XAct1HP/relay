@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, FormEvent, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -74,6 +74,51 @@ function withAlpha(hex: string, alpha: number) {
   const b = parseInt(normalized.slice(4, 6), 16);
 
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function ThemeColorPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <div>
+      <p className="mb-3 text-sm font-medium text-white/72">{label}</p>
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="group w-full rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-white/20 hover:bg-white/[0.06]"
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="h-12 w-12 shrink-0 rounded-xl border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]"
+            style={{ backgroundColor: value }}
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white">Choose {label.toLowerCase()}</p>
+            <p className="mt-1 text-xs text-white/45 group-hover:text-white/60">
+              Open color spectrum
+            </p>
+          </div>
+        </div>
+      </button>
+
+      <input
+        ref={inputRef}
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+      />
+    </div>
+  );
 }
 
 export default function ProfileStudioForm({ profile, posts }: Props) {
@@ -331,83 +376,38 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
               </div>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/72">
-                  Background Color
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="color"
-                    value={themeBackground}
-                    onChange={(e) => setThemeBackground(e.target.value)}
-                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
-                  />
-                  <input
-                    value={themeBackground}
-                    onChange={(e) => setThemeBackground(e.target.value)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
-                </div>
+            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+              <div className="mb-4">
+                <p className="text-sm font-medium text-white">Theme colors</p>
+                <p className="mt-1 text-xs text-white/45">
+                  Tap any tile to open the color spectrum.
+                </p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/72">
-                  Accent Color
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="color"
-                    value={themeAccent}
-                    onChange={(e) => setThemeAccent(e.target.value)}
-                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
-                  />
-                  <input
-                    value={themeAccent}
-                    onChange={(e) => setThemeAccent(e.target.value)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
-                </div>
-              </div>
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ThemeColorPicker
+                  label="Background"
+                  value={themeBackground}
+                  onChange={setThemeBackground}
+                />
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/72">
-                  Card Background
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="color"
-                    value={themeCard}
-                    onChange={(e) => setThemeCard(e.target.value)}
-                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
-                  />
-                  <input
-                    value={themeCard}
-                    onChange={(e) => setThemeCard(e.target.value)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
-                </div>
-              </div>
+                <ThemeColorPicker
+                  label="Accent"
+                  value={themeAccent}
+                  onChange={setThemeAccent}
+                />
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/72">
-                  Glow Color
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="color"
-                    value={themeGlow}
-                    onChange={(e) => setThemeGlow(e.target.value)}
-                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
-                  />
-                  <input
-                    value={themeGlow}
-                    onChange={(e) => setThemeGlow(e.target.value)}
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
-                </div>
+                <ThemeColorPicker
+                  label="Card Background"
+                  value={themeCard}
+                  onChange={setThemeCard}
+                />
+
+                <ThemeColorPicker
+                  label="Glow"
+                  value={themeGlow}
+                  onChange={setThemeGlow}
+                />
               </div>
             </div>
           </div>
