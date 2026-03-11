@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -278,13 +279,24 @@ export default function OnboardingPage() {
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="mx-auto max-w-2xl">
-          <p className="relay-eyebrow">Relay</p>
-          <h1 className="relay-title">
-            {isEditingExistingProfile ? "Edit your profile" : "Set up your profile"}
-          </h1>
-          <p className="relay-subtitle">
-            Add your public seller identity and your private ship-from address.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="relay-eyebrow">Relay</p>
+              <h1 className="relay-title">
+                {isEditingExistingProfile ? "Edit your profile info" : "Set up your profile"}
+              </h1>
+              <p className="relay-subtitle">
+                Manage your username, bio, and private ship-from details here.
+              </p>
+            </div>
+
+            <Link
+              href="/profile/studio"
+              className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
+            >
+              Open Storefront Studio
+            </Link>
+          </div>
 
           {!shippingComplete && (
             <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-white/70 backdrop-blur-xl">

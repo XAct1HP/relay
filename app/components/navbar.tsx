@@ -131,6 +131,13 @@ export default async function Navbar() {
                 {profileLabel}
               </Link>
 
+              <Link
+                href="/profile/studio"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Studio
+              </Link>
+
               <LogoutButton />
             </>
           ) : (
