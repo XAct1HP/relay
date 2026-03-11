@@ -65,11 +65,6 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const isDefaultUsername = profile.username.startsWith("user_");
-  if (isDefaultUsername) {
-    redirect("/onboarding");
-  }
-
   const adminEmails = getAdminEmails();
   const isAdmin = Boolean(user.email && adminEmails.has(user.email.toLowerCase()));
 

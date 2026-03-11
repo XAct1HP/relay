@@ -52,6 +52,9 @@ export default async function Navbar() {
     ).size;
   }
 
+  const profileHref = username ? `/profile/${username}` : "/onboarding";
+  const profileLabel = username ? `@${username}` : "Profile";
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#06070a]/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -121,14 +124,12 @@ export default async function Navbar() {
                 initialUnreadConversationCount={unreadConversationCount}
               />
 
-              {username && !username.startsWith("user_") && (
-                <Link
-                  href={`/profile/${username}`}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                >
-                  @{username}
-                </Link>
-              )}
+              <Link
+                href={profileHref}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                {profileLabel}
+              </Link>
 
               <LogoutButton />
             </>
