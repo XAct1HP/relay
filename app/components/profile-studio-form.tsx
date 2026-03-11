@@ -40,31 +40,42 @@ const presets = [
     name: "Midnight",
     background: "#0b1020",
     accent: "#8b5cf6",
-    glow: "rgba(139,92,246,0.22)",
-    card: "rgba(255,255,255,0.08)",
+    glow: "#8b5cf6",
+    card: "#1a2033",
   },
   {
     name: "Arctic",
     background: "#08111f",
     accent: "#60a5fa",
-    glow: "rgba(96,165,250,0.22)",
-    card: "rgba(255,255,255,0.07)",
+    glow: "#60a5fa",
+    card: "#182235",
   },
   {
     name: "Rose",
     background: "#140c16",
     accent: "#f472b6",
-    glow: "rgba(244,114,182,0.22)",
-    card: "rgba(255,255,255,0.08)",
+    glow: "#f472b6",
+    card: "#2a1623",
   },
   {
     name: "Forest",
     background: "#0a1512",
     accent: "#34d399",
-    glow: "rgba(52,211,153,0.22)",
-    card: "rgba(255,255,255,0.07)",
+    glow: "#34d399",
+    card: "#162922",
   },
 ];
+
+function withAlpha(hex: string, alpha: number) {
+  const normalized = hex.replace("#", "");
+  if (normalized.length !== 6) return `rgba(255,255,255,${alpha})`;
+
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function ProfileStudioForm({ profile, posts }: Props) {
   const supabase = useMemo(() => createClient(), []);
@@ -75,9 +86,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url ?? "");
   const [bannerUrl, setBannerUrl] = useState(profile.banner_url ?? "");
   const [themeBackground, setThemeBackground] = useState(profile.theme_background ?? "#0b1020");
-  const [themeCard, setThemeCard] = useState(profile.theme_card ?? "rgba(255,255,255,0.08)");
+  const [themeCard, setThemeCard] = useState(profile.theme_card ?? "#1a2033");
   const [themeAccent, setThemeAccent] = useState(profile.theme_accent ?? "#8b5cf6");
-  const [themeGlow, setThemeGlow] = useState(profile.theme_glow ?? "rgba(139,92,246,0.22)");
+  const [themeGlow, setThemeGlow] = useState(profile.theme_glow ?? "#8b5cf6");
 
   const [postCaption, setPostCaption] = useState("");
   const [postImageUrl, setPostImageUrl] = useState("");
@@ -87,11 +98,7 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
   const [uploadingAsset, setUploadingAsset] = useState<"avatar" | "banner" | "post" | null>(null);
   const [message, setMessage] = useState("");
 
-  async function uploadFile(
-    file: File,
-    bucket: string,
-    folder: string
-  ) {
+  async function uploadFile(file: File, bucket: string, folder: string) {
     if (!file.type.startsWith("image/")) {
       throw new Error("Only image uploads are supported.");
     }
@@ -129,9 +136,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
         avatar_url: avatarUrl.trim() || null,
         banner_url: bannerUrl.trim() || null,
         theme_background: themeBackground.trim() || "#0b1020",
-        theme_card: themeCard.trim() || "rgba(255,255,255,0.08)",
+        theme_card: themeCard.trim() || "#1a2033",
         theme_accent: themeAccent.trim() || "#8b5cf6",
-        theme_glow: themeGlow.trim() || "rgba(139,92,246,0.22)",
+        theme_glow: themeGlow.trim() || "#8b5cf6",
       })
       .eq("id", profile.id);
 
@@ -288,15 +295,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 <label className="mb-2 block text-sm font-medium text-white/72">
                   Avatar / Logo
                 </label>
-                <div className="flex gap-3">
-                  <input
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="Avatar image URL"
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
+                <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                    {uploadingAsset === "avatar" ? "Uploading..." : "Upload"}
+                    {uploadingAsset === "avatar" ? "Uploading..." : avatarUrl ? "Replace Avatar" : "Upload Avatar"}
                     <input
                       type="file"
                       accept="image/*"
@@ -304,6 +305,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                       onChange={(e) => handleAssetUpload(e, "avatar")}
                     />
                   </label>
+                  <span className="text-sm text-white/50">
+                    {avatarUrl ? "Avatar uploaded" : "No avatar uploaded"}
+                  </span>
                 </div>
               </div>
 
@@ -311,15 +315,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 <label className="mb-2 block text-sm font-medium text-white/72">
                   Banner
                 </label>
-                <div className="flex gap-3">
-                  <input
-                    value={bannerUrl}
-                    onChange={(e) => setBannerUrl(e.target.value)}
-                    placeholder="Banner image URL"
-                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                  />
+                <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                    {uploadingAsset === "banner" ? "Uploading..." : "Upload"}
+                    {uploadingAsset === "banner" ? "Uploading..." : bannerUrl ? "Replace Banner" : "Upload Banner"}
                     <input
                       type="file"
                       accept="image/*"
@@ -327,6 +325,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                       onChange={(e) => handleAssetUpload(e, "banner")}
                     />
                   </label>
+                  <span className="text-sm text-white/50">
+                    {bannerUrl ? "Banner uploaded" : "No banner uploaded"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -376,24 +377,38 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 <label className="mb-2 block text-sm font-medium text-white/72">
                   Card Background
                 </label>
-                <input
-                  value={themeCard}
-                  onChange={(e) => setThemeCard(e.target.value)}
-                  placeholder="rgba(255,255,255,0.08)"
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                />
+                <div className="flex gap-3">
+                  <input
+                    type="color"
+                    value={themeCard}
+                    onChange={(e) => setThemeCard(e.target.value)}
+                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
+                  />
+                  <input
+                    value={themeCard}
+                    onChange={(e) => setThemeCard(e.target.value)}
+                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-white/72">
                   Glow Color
                 </label>
-                <input
-                  value={themeGlow}
-                  onChange={(e) => setThemeGlow(e.target.value)}
-                  placeholder="rgba(139,92,246,0.22)"
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                />
+                <div className="flex gap-3">
+                  <input
+                    type="color"
+                    value={themeGlow}
+                    onChange={(e) => setThemeGlow(e.target.value)}
+                    className="h-12 w-16 rounded-xl border border-white/10 bg-transparent"
+                  />
+                  <input
+                    value={themeGlow}
+                    onChange={(e) => setThemeGlow(e.target.value)}
+                    className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -437,15 +452,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
               <label className="mb-2 block text-sm font-medium text-white/72">
                 Post Image
               </label>
-              <div className="flex gap-3">
-                <input
-                  value={postImageUrl}
-                  onChange={(e) => setPostImageUrl(e.target.value)}
-                  placeholder="Post image URL"
-                  className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-                />
+              <div className="flex items-center gap-3">
                 <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                  {uploadingAsset === "post" ? "Uploading..." : "Upload"}
+                  {uploadingAsset === "post" ? "Uploading..." : postImageUrl ? "Replace Post Image" : "Upload Post Image"}
                   <input
                     type="file"
                     accept="image/*"
@@ -453,6 +462,9 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                     onChange={(e) => handleAssetUpload(e, "post")}
                   />
                 </label>
+                <span className="text-sm text-white/50">
+                  {postImageUrl ? "Post image uploaded" : "No post image uploaded"}
+                </span>
               </div>
             </div>
           </div>
@@ -480,7 +492,7 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 <div
                   className="absolute inset-0"
                   style={{
-                    background: `linear-gradient(135deg, ${themeAccent}33 0%, rgba(255,255,255,0.06) 35%, rgba(0,0,0,0.1) 100%)`,
+                    background: `linear-gradient(135deg, ${withAlpha(themeAccent, 0.2)} 0%, rgba(255,255,255,0.06) 35%, rgba(0,0,0,0.1) 100%)`,
                   }}
                 />
               )}
@@ -495,7 +507,7 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                   ) : (
                     <div
                       className="flex h-full w-full items-center justify-center text-2xl font-semibold text-white"
-                      style={{ background: `${themeAccent}33` }}
+                      style={{ background: withAlpha(themeAccent, 0.2) }}
                     >
                       {profile.username.charAt(0).toUpperCase()}
                     </div>
@@ -510,7 +522,10 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[1.25rem] border border-white/10 p-4" style={{ background: themeCard }}>
+              <div
+                className="mt-4 rounded-[1.25rem] border border-white/10 p-4"
+                style={{ background: withAlpha(themeCard, 0.35) }}
+              >
                 <p className="text-sm leading-7 text-white/70">
                   {bio.trim() || "Your storefront bio will preview here."}
                 </p>
@@ -575,13 +590,13 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
               ))}
             </div>
           )}
-        </div>
 
-        {message && (
-          <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/72">
-            {message}
-          </div>
-        )}
+          {message && (
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/72">
+              {message}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
