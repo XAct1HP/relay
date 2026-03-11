@@ -38,6 +38,9 @@ export default function OnboardingPage() {
   const [shipFromZip, setShipFromZip] = useState("");
   const [shipFromCountry, setShipFromCountry] = useState("US");
 
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [originalUsername, setOriginalUsername] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState("");
@@ -53,6 +56,8 @@ export default function OnboardingPage() {
         router.push("/auth/login");
         return;
       }
+
+      setCurrentUserId(user.id);
 
       const { data, error } = await supabase
         .from("profiles")
@@ -78,7 +83,10 @@ export default function OnboardingPage() {
       }
 
       if (data) {
-        setUsername(data.username ?? "");
+        const loadedUsername = data.username ?? "";
+
+        setUsername(loadedUsername);
+        setOriginalUsername(loadedUsername);
         setBio(data.bio ?? "");
         setShipFromName(data.ship_from_name ?? "");
         setShipFromPhone(data.ship_from_phone ?? "");
@@ -89,7 +97,9 @@ export default function OnboardingPage() {
         setShipFromZip(data.ship_from_zip ?? "");
         setShipFromCountry(data.ship_from_country ?? "US");
 
-        const hasStartedProfile = Boolean((data.username ?? "").trim() || (data.bio ?? "").trim());
+        const hasStartedProfile = Boolean(
+          (data.username ?? "").trim() || (data.bio ?? "").trim()
+        );
         setIsEditingExistingProfile(hasStartedProfile);
       }
 
@@ -98,6 +108,21 @@ export default function OnboardingPage() {
 
     loadProfile();
   }, [router, supabase]);
+
+  async function isUsernameTaken(cleanedUsername: string, userId: string) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", cleanedUsername)
+      .neq("id", userId)
+      .maybeSingle();
+
+    if (error) {
+      return { taken: false, error: error.message };
+    }
+
+    return { taken: Boolean(data), error: null as string | null };
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -127,6 +152,12 @@ export default function OnboardingPage() {
 
     if (cleanedUsername.length < 3) {
       setMessage("Username must be at least 3 characters.");
+      setLoading(false);
+      return;
+    }
+
+    if (!/^[a-z0-9_]+$/.test(cleanedUsername)) {
+      setMessage("Username can only contain lowercase letters, numbers, and underscores.");
       setLoading(false);
       return;
     }
@@ -167,6 +198,24 @@ export default function OnboardingPage() {
       return;
     }
 
+    const usernameChanged = cleanedUsername !== originalUsername.trim().toLowerCase();
+
+    if (usernameChanged) {
+      const usernameCheck = await isUsernameTaken(cleanedUsername, user.id);
+
+      if (usernameCheck.error) {
+        setMessage(usernameCheck.error);
+        setLoading(false);
+        return;
+      }
+
+      if (usernameCheck.taken) {
+        setMessage("That username is already taken.");
+        setLoading(false);
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -184,7 +233,11 @@ export default function OnboardingPage() {
       .eq("id", user.id);
 
     if (error) {
-      setMessage(error.message);
+      if (error.message.toLowerCase().includes("duplicate key")) {
+        setMessage("That username is already taken.");
+      } else {
+        setMessage(error.message);
+      }
       setLoading(false);
       return;
     }
@@ -260,6 +313,9 @@ export default function OnboardingPage() {
                     placeholder="midwestkicks"
                     required
                   />
+                  <p className="mt-2 text-xs text-white/45">
+                    Must be unique. Use lowercase letters, numbers, and underscores only.
+                  </p>
                 </div>
 
                 <div>
