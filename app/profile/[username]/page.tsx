@@ -208,7 +208,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               ))}
             </div>
 
-            <div className="mt-8 grid gap-8 lg:grid-cols-[1.35fr_0.65fr]">
+            <div className={`mt-8 grid gap-8 ${isOwner ? "lg:grid-cols-[1.35fr_0.65fr]" : "lg:grid-cols-1"}`}>
               <div className="space-y-8">
                 <section
                   className="rounded-[1.75rem] border border-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18)]"
@@ -292,55 +292,54 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 </section>
               </div>
 
-              <aside className="space-y-6">
-                <div
-                  className="rounded-[1.75rem] border border-white/10 p-6"
-                  style={{ background: "rgba(255,255,255,0.05)" }}
-                >
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/38">
-                    Store details
-                  </p>
-                  <div className="mt-5 space-y-4">
-                    <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm text-white/45">Theme accent</p>
-                      <div className="mt-3 flex items-center gap-3">
-                        <div
-                          className="h-5 w-5 rounded-full border border-white/20"
-                          style={{ backgroundColor: theme.accent }}
-                        />
+              {isOwner && (
+                <aside className="space-y-6">
+                  <div
+                    className="rounded-[1.75rem] border border-white/10 p-6"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                      Store details
+                    </p>
+
+                    <div className="mt-5 space-y-4">
+                      <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+                        <p className="text-sm text-white/45">Theme accent</p>
+                        <div className="mt-3 flex items-center gap-3">
+                          <div
+                            className="h-5 w-5 rounded-full border border-white/20"
+                            style={{ backgroundColor: theme.accent }}
+                          />
+                        </div>
                       </div>
+
+                      <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+                        <p className="text-sm text-white/45">Storefront feel</p>
+                        <p className="mt-2 text-sm leading-7 text-white/62">
+                          Custom banner, avatar, posts, listings, and seller-specific theming.
+                        </p>
+                      </div>
+
+                      <Link
+                        href="/profile/studio"
+                        className="inline-flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-black"
+                        style={{
+                          backgroundColor: theme.accent,
+                        }}
+                      >
+                        Open Profile Studio
+                      </Link>
+
+                      <Link
+                        href="/onboarding"
+                        className="inline-flex w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                      >
+                        Edit Profile Info
+                      </Link>
                     </div>
-
-                    <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm text-white/45">Storefront customization</p>
-                      <p className="mt-2 text-sm leading-7 text-white/62">
-                        Custom banner, avatar, posts, listings, and seller-specific theming.
-                      </p>
-                    </div>
-
-                    {isOwner && (
-                      <>
-                        <Link
-                          href="/profile/studio"
-                          className="inline-flex w-full items-center justify-center rounded-full px-4 py-3 text-sm font-semibold text-black"
-                          style={{
-                            backgroundColor: theme.accent,
-                          }}
-                        >
-                          Open Profile Studio
-                        </Link>
-
-                        <Link
-                          href="/onboarding"
-                          className="inline-flex w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
-                        >
-                          Edit Profile Info
-                        </Link>
-                      </>
-                    )}
                   </div>
-                </div>
-              </aside>
+                </aside>
+              )}
             </div>
           </div>
         </div>

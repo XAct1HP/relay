@@ -29,15 +29,15 @@ export default function ProfileListingsRail({
   }
 
   return (
-    <div className="overflow-x-auto pb-2">
-      <div className="flex min-w-max gap-4">
+    <div className="max-h-[520px] overflow-y-auto pr-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         {listings.map((listing) => (
           <Link
             key={listing.id}
             href={`/listings/${listing.id}`}
-            className="group w-[280px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.04] transition hover:bg-white/[0.06]"
+            className="group overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.04] transition hover:bg-white/[0.06]"
           >
-            <div className="relative h-48 overflow-hidden">
+            <div className="relative h-44 overflow-hidden">
               {listing.cover_image_url ? (
                 <img
                   src={listing.cover_image_url}
@@ -52,6 +52,7 @@ export default function ProfileListingsRail({
                   No image
                 </div>
               )}
+
               <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
             </div>
 
