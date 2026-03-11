@@ -56,7 +56,7 @@ export default async function Navbar() {
   const profileLabel = username ? `@${username}` : "Profile";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#06070a]/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-[100] w-full border-b border-white/10 bg-[#06070a]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-[#06070a]/72">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center pt-[2px]">
