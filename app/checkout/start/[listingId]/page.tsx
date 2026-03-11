@@ -268,7 +268,7 @@ export default function CheckoutStartPage() {
               {quote ? (
                 <div className="mt-4">
                   <p className="text-4xl font-semibold tracking-tight text-white">
-                    ${(quote.shippingAmountCents / 100).toFixed(2)}
+                    ${((quote.shippingAmountCents + 150) / 100).toFixed(2)}
                   </p>
                   <p className="mt-3 text-sm text-white/58">
                     Lowest available label found through {quote.carrier} · {quote.service}
