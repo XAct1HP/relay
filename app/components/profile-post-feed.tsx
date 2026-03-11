@@ -21,7 +21,7 @@ export default function ProfilePostFeed({
   }
 
   return (
-    <div className="grid gap-5">
+    <div className="grid max-w-[720px] gap-5">
       {posts.map((post, index) => (
         <article
           key={post.id}

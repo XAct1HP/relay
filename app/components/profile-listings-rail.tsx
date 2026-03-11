@@ -30,7 +30,7 @@ export default function ProfileListingsRail({
 
   return (
     <div className="max-h-[520px] overflow-y-auto pr-2">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid max-w-[720px] gap-4 sm:grid-cols-2">
         {listings.map((listing) => (
           <Link
             key={listing.id}
