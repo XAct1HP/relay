@@ -8,9 +8,11 @@ type SellerPost = {
 export default function ProfilePostFeed({
   posts,
   accent,
+  isOwner,
 }: {
   posts: SellerPost[];
   accent: string;
+  isOwner: boolean;
 }) {
   if (posts.length === 0) {
     return (
@@ -21,14 +23,20 @@ export default function ProfilePostFeed({
   }
 
   return (
-    <div className="grid max-w-[720px] gap-5">
-      {posts.map((post, index) => (
+    <div
+      className={`grid gap-5 ${
+        isOwner
+          ? "max-w-[1080px] sm:grid-cols-2 lg:grid-cols-3"
+          : "max-w-[1400px] sm:grid-cols-2 lg:grid-cols-4"
+      }`}
+    >
+      {posts.map((post) => (
         <article
           key={post.id}
           className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03]"
         >
           {post.image_url && (
-            <div className={`relative ${index === 0 ? "h-80" : "h-64"}`}>
+            <div className="relative h-64">
               <img
                 src={post.image_url}
                 alt="Seller post"

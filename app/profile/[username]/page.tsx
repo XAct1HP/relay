@@ -228,7 +228,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     </div>
                   </div>
 
-                  <ProfileListingsRail listings={listings} accent={theme.accent} />
+                  <ProfileListingsRail
+                    listings={listings}
+                    accent={theme.accent}
+                    isOwner={isOwner}
+                  />
                 </section>
 
                 <section
@@ -246,7 +250,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     </div>
                   </div>
 
-                  <ProfilePostFeed posts={posts} accent={theme.accent} />
+                  <ProfilePostFeed
+                    posts={posts}
+                    accent={theme.accent}
+                    isOwner={isOwner}
+                  />
                 </section>
 
                 <section

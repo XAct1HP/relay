@@ -16,9 +16,11 @@ type Listing = {
 export default function ProfileListingsRail({
   listings,
   accent,
+  isOwner,
 }: {
   listings: Listing[];
   accent: string;
+  isOwner: boolean;
 }) {
   if (listings.length === 0) {
     return (
@@ -30,7 +32,7 @@ export default function ProfileListingsRail({
 
   return (
     <div className="max-h-[520px] overflow-y-auto pr-2">
-      <div className="grid max-w-[720px] gap-4 sm:grid-cols-2">
+      <div className={`grid gap-4 ${isOwner ? "max-w-[720px] sm:grid-cols-2" : "max-w-[1080px] sm:grid-cols-2 lg:grid-cols-3"}`}>
         {listings.map((listing) => (
           <Link
             key={listing.id}
