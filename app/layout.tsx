@@ -24,9 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
         <div className="relative isolate min-h-screen">
-          <div className="relative z-[60]">
-            <Navbar />
-          </div>
+          <Navbar />
           <div className="relative z-10">{children}</div>
         </div>
       </body>
