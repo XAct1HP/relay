@@ -20,6 +20,59 @@ export default async function MarketplacePage({
   const supabase = await createClient();
   const params = await searchParams;
 
+  const { data: marketplaceSettingsRow } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", "marketplace")
+    .maybeSingle();
+
+  const marketplaceSettings = marketplaceSettingsRow?.value ?? {
+    enabled: true,
+    disabledMessage: "The marketplace is temporarily unavailable.",
+  };
+
+  const marketplaceEnabled = Boolean(marketplaceSettings.enabled);
+  const disabledMessage =
+    typeof marketplaceSettings.disabledMessage === "string" &&
+    marketplaceSettings.disabledMessage.trim()
+      ? marketplaceSettings.disabledMessage.trim()
+      : "The marketplace is temporarily unavailable.";
+
+  if (!marketplaceEnabled) {
+    return (
+      <main className="relay-page">
+        <div className="relay-site-bg" />
+        <div className="relay-page-shell">
+          <div className="mx-auto max-w-5xl">
+            <div className="relay-page-header">
+              <div>
+                <p className="relay-eyebrow">Relay</p>
+                <h1 className="relay-title">Marketplace</h1>
+                <p className="relay-subtitle">
+                  Browse sneaker listings from Relay sellers.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.05] p-10 text-center text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.10] text-xl text-amber-200">
+                !
+              </div>
+
+              <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white">
+                Marketplace unavailable
+              </h2>
+
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-white/65 sm:text-base">
+                {disabledMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const queryText = params.query?.trim() ?? "";
   const brand = params.brand?.trim() ?? "";
   const condition = params.condition?.trim() ?? "";
@@ -33,7 +86,8 @@ export default async function MarketplacePage({
     .select(
       "id, brand, model, nickname, size, condition, price_cents, cover_image_url, seller_id, created_at"
     )
-    .eq("status", "active");
+    .eq("status", "active")
+    .eq("admin_removed", false);
 
   if (brand) {
     query = query.ilike("brand", `%${brand}%`);

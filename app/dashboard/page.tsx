@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import SellerPayoutsButton from "@/app/components/enable-payouts-button";
 import AdminModerationPanel from "@/app/components/admin-moderation-panel";
+import AdminMarketplaceControls from "@/app/components/admin-marketplace-controls";
 
 function formatCurrency(cents: number | null | undefined) {
   return `$${(((cents ?? 0) as number) / 100).toFixed(2)}`;
@@ -339,6 +340,7 @@ export default async function DashboardPage() {
     ordersResult,
     reviewsCountResult,
     conversationsCountResult,
+    marketplaceSettingsResult,
   ] = await Promise.all([
     supabaseAdmin
       .from("profiles")
@@ -359,11 +361,24 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false }),
     supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
     supabaseAdmin.from("conversations").select("*", { count: "exact", head: true }),
+    supabaseAdmin.from("site_settings").select("value").eq("key", "marketplace").maybeSingle(),
   ]);
 
   const profiles = profilesResult.data ?? [];
   const listings = listingsResult.data ?? [];
   const orders = ordersResult.data ?? [];
+
+  const marketplaceSettings = marketplaceSettingsResult.data?.value ?? {
+    enabled: true,
+    disabledMessage: "The marketplace is temporarily unavailable.",
+  };
+
+  const marketplaceEnabled = Boolean(marketplaceSettings.enabled);
+  const marketplaceDisabledMessage =
+    typeof marketplaceSettings.disabledMessage === "string" &&
+    marketplaceSettings.disabledMessage.trim()
+      ? marketplaceSettings.disabledMessage.trim()
+      : "The marketplace is temporarily unavailable.";
 
   const profilesById = new Map(
     profiles.map((entry) => [
@@ -553,6 +568,13 @@ export default async function DashboardPage() {
                 <p className="mt-2 text-sm text-white/50">{item.meta}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-8">
+            <AdminMarketplaceControls
+              initialEnabled={marketplaceEnabled}
+              initialMessage={marketplaceDisabledMessage}
+            />
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
