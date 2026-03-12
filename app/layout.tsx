@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Navbar from "@/app/components/navbar";
-import MobileBottomNav from "@/app/components/mobile-bottom-nav";
-import PWARegister from "@/app/components/pwa-register";
-import InstallPrompt from "@/app/components/install-prompt";
+import AppShell from "@/app/components/app-shell";
 
 export const metadata: Metadata = {
   title: {
@@ -26,15 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
-
-        <PWARegister />
-        <InstallPrompt />
-        
-        <div className="relative isolate min-h-screen">
-          <Navbar />
-          <div className="relative z-10 pb-24 md:pb-0">{children}</div>
-          <MobileBottomNav />
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

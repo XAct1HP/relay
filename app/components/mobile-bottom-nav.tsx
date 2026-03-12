@@ -11,8 +11,15 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import LogoutButton from "@/app/components/logout-button";
 
-export default function MobileBottomNav() {
+type MobileBottomNavProps = {
+  nativeApp?: boolean;
+};
+
+export default function MobileBottomNav({
+  nativeApp = false,
+}: MobileBottomNavProps) {
   const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -192,8 +199,8 @@ export default function MobileBottomNav() {
         <div className="fixed inset-0 z-[55] bg-black/20 md:hidden" />
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid h-[70px] max-w-7xl grid-cols-5 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+      <nav className="fixed inset-x-0 bottom-[env(safe-area-inset-bottom)] z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
+        <div className="mx-auto grid h-[72px] max-w-7xl grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.href);
@@ -287,6 +294,7 @@ export default function MobileBottomNav() {
                     >
                       {profileLabel}
                     </Link>
+
                     <Link
                       href={dashboardHref}
                       onClick={() => setProfileMenuOpen(false)}
@@ -294,6 +302,12 @@ export default function MobileBottomNav() {
                     >
                       Dashboard
                     </Link>
+
+                    {nativeApp && (
+                      <div className="px-2 pt-2">
+                        <LogoutButton compact />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-2">
