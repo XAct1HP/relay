@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Relay',
   webDir: 'out',
   server: {
-    url: 'https://relay-tan-three.vercel.app/auth/login',
+    url: 'https://relay-tan-three.vercel.app/dashboard',
     cleartext: false
   }
 };

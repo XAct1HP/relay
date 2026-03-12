@@ -12,14 +12,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LogoutButton from "@/app/components/logout-button";
+import { Capacitor } from "@capacitor/core";
 
-type MobileBottomNavProps = {
-  nativeApp?: boolean;
-};
-
-export default function MobileBottomNav({
-  nativeApp = false,
-}: MobileBottomNavProps) {
+export default function MobileBottomNav() {
   const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -27,10 +22,14 @@ export default function MobileBottomNav({
   const [profileHref, setProfileHref] = useState("/auth/login");
   const [dashboardHref, setDashboardHref] = useState("/auth/login");
   const [profileLabel, setProfileLabel] = useState("Profile");
+
   const [messagesBadgeCount, setMessagesBadgeCount] = useState(0);
   const [ordersBadgeCount, setOrdersBadgeCount] = useState(0);
+
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+
+  const nativeApp = Capacitor.isNativePlatform();
 
   async function refreshBadges(userId: string) {
     const [{ data: unreadMessages }, { count: unreadNotifications }] =
@@ -40,6 +39,7 @@ export default function MobileBottomNav({
           .select("conversation_id")
           .is("read_at", null)
           .neq("sender_id", userId),
+
         supabase
           .from("notifications")
           .select("*", { count: "exact", head: true })
@@ -86,9 +86,6 @@ export default function MobileBottomNav({
     if (profile?.username) {
       setProfileHref(`/profile/${profile.username}`);
       setProfileLabel(`@${profile.username}`);
-    } else {
-      setProfileHref("/onboarding");
-      setProfileLabel("Profile");
     }
 
     await refreshBadges(user.id);
@@ -115,20 +112,13 @@ export default function MobileBottomNav({
       .channel("mobile-bottom-nav-notifications")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-        },
+        { event: "*", schema: "public", table: "notifications" },
         async () => {
           const {
             data: { user },
           } = await supabase.auth.getUser();
-          if (user) {
-            await refreshBadges(user.id);
-          } else {
-            setOrdersBadgeCount(0);
-          }
+
+          if (user) await refreshBadges(user.id);
         }
       )
       .subscribe();
@@ -137,20 +127,13 @@ export default function MobileBottomNav({
       .channel("mobile-bottom-nav-messages")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "messages",
-        },
+        { event: "*", schema: "public", table: "messages" },
         async () => {
           const {
             data: { user },
           } = await supabase.auth.getUser();
-          if (user) {
-            await refreshBadges(user.id);
-          } else {
-            setMessagesBadgeCount(0);
-          }
+
+          if (user) await refreshBadges(user.id);
         }
       )
       .subscribe();
@@ -199,8 +182,8 @@ export default function MobileBottomNav({
         <div className="fixed inset-0 z-[55] bg-black/20 md:hidden" />
       )}
 
-      <nav className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+10px)] z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid h-[70px] max-w-7xl grid-cols-5 px-1">
+      <nav className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-[#06070a]/98 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] md:hidden">
+        <div className="mx-auto grid h-[72px] max-w-7xl grid-cols-5 px-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.href);
@@ -222,6 +205,7 @@ export default function MobileBottomNav({
                   >
                     <Icon size={22} />
                   </div>
+
                   <span
                     className={`text-[11px] font-semibold ${
                       active ? "text-white" : "text-white/70"
@@ -244,12 +228,14 @@ export default function MobileBottomNav({
                     size={20}
                     className={active ? "text-white" : "text-white/50"}
                   />
+
                   {badge >= 1 && (
-                    <span className="absolute -right-2 -top-2 inline-flex min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                    <span className="absolute -right-2 -top-2 inline-flex min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                       {badge}
                     </span>
                   )}
                 </div>
+
                 <span
                   className={`text-[11px] font-medium ${
                     active ? "text-white" : "text-white/50"
@@ -266,7 +252,6 @@ export default function MobileBottomNav({
             className="relative flex min-h-[70px] items-center justify-center"
           >
             <button
-              type="button"
               onClick={() => setProfileMenuOpen((prev) => !prev)}
               className="flex min-h-[70px] w-full flex-col items-center justify-center gap-1 px-1"
             >
@@ -274,6 +259,7 @@ export default function MobileBottomNav({
                 size={20}
                 className={profileActive ? "text-white" : "text-white/50"}
               />
+
               <span
                 className={`text-[11px] font-medium ${
                   profileActive ? "text-white" : "text-white/50"
@@ -290,7 +276,7 @@ export default function MobileBottomNav({
                     <Link
                       href={profileHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
                     >
                       {profileLabel}
                     </Link>
@@ -298,12 +284,12 @@ export default function MobileBottomNav({
                     <Link
                       href={dashboardHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
                     >
                       Dashboard
                     </Link>
 
-                    {nativeApp && (
+                    {nativeApp && isAuthed && (
                       <div className="px-2 pt-2">
                         <LogoutButton compact />
                       </div>
@@ -314,14 +300,15 @@ export default function MobileBottomNav({
                     <Link
                       href="/auth/login"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
                     >
                       Log In
                     </Link>
+
                     <Link
                       href="/auth/signup"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
                     >
                       Sign Up
                     </Link>
