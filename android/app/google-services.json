@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "585389198512",
+    "project_id": "relay-71d60",
+    "storage_bucket": "relay-71d60.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:585389198512:android:7f6eaa9ca710a2ea203f75",
+        "android_client_info": {
+          "package_name": "com.relay.marketplace"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWyhzd7DcoXsYalqlYvw6XyBBk_uY5QQA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
