@@ -43,9 +43,7 @@ export default function SendOfferForm({
       return;
     }
 
-    const expiresAt = new Date(
-      Date.now() + parsedHours * 60 * 60 * 1000
-    ).toISOString();
+    const expiresAt = new Date(Date.now() + parsedHours * 60 * 60 * 1000).toISOString();
 
     const { error } = await supabase.from("offers").insert({
       conversation_id: conversationId,
@@ -70,21 +68,19 @@ export default function SendOfferForm({
   }
 
   const inputClassName =
-    "w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
+    "w-full min-h-12 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]";
   const selectClassName =
-    "w-full appearance-none rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-[#151922]";
+    "w-full min-h-12 appearance-none rounded-2xl border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none transition focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/72";
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-[1.75rem] border border-white/10 bg-white/[0.05] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)] backdrop-blur-xl"
+      className="rounded-[1.75rem] border border-white/10 bg-white/[0.05] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.22)] backdrop-blur-xl sm:p-5"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-white/38">
-            Seller tools
-          </p>
+          <p className="text-xs uppercase tracking-[0.22em] text-white/38">Seller tools</p>
           <h3 className="mt-2 text-xl font-semibold text-white">Send offer</h3>
         </div>
       </div>
@@ -110,11 +106,21 @@ export default function SendOfferForm({
             onChange={(e) => setExpiresInHours(e.target.value)}
             className={selectClassName}
           >
-            <option value="1" className="bg-[#0f1117] text-white">1 hour</option>
-            <option value="6" className="bg-[#0f1117] text-white">6 hours</option>
-            <option value="12" className="bg-[#0f1117] text-white">12 hours</option>
-            <option value="24" className="bg-[#0f1117] text-white">24 hours</option>
-            <option value="48" className="bg-[#0f1117] text-white">48 hours</option>
+            <option value="1" className="bg-[#0f1117] text-white">
+              1 hour
+            </option>
+            <option value="6" className="bg-[#0f1117] text-white">
+              6 hours
+            </option>
+            <option value="12" className="bg-[#0f1117] text-white">
+              12 hours
+            </option>
+            <option value="24" className="bg-[#0f1117] text-white">
+              24 hours
+            </option>
+            <option value="48" className="bg-[#0f1117] text-white">
+              48 hours
+            </option>
           </select>
         </div>
       </div>
@@ -122,7 +128,7 @@ export default function SendOfferForm({
       <button
         type="submit"
         disabled={loading}
-        className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+        className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50 sm:w-auto"
       >
         {loading ? "Sending..." : "Send Offer"}
       </button>

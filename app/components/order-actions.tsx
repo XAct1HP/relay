@@ -75,7 +75,7 @@ export default function OrderActions({
   return (
     <div className="space-y-4">
       {isSeller && status === "paid" && (
-        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
           <p className="text-sm font-medium text-white">Generate shipping label</p>
           <p className="mt-2 text-sm leading-7 text-white/55">
             Purchase the prepaid label so the order can move into fulfillment.
@@ -84,7 +84,7 @@ export default function OrderActions({
           <button
             onClick={buyLabel}
             disabled={loading !== null}
-            className="mt-4 w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
           >
             {loading === "label" ? "Generating label..." : "Generate Shipping Label"}
           </button>
@@ -92,7 +92,7 @@ export default function OrderActions({
       )}
 
       {isSeller && shippingLabelUrl && (
-        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
           <p className="text-sm font-medium text-white">Shipping label ready</p>
           <p className="mt-2 text-sm leading-7 text-white/55">
             Your label has been generated. Download it and attach it to the package.
@@ -102,7 +102,7 @@ export default function OrderActions({
             href={shippingLabelUrl}
             target="_blank"
             rel="noreferrer"
-            className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08]"
+            className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.08]"
           >
             Download Label
           </a>
@@ -110,7 +110,7 @@ export default function OrderActions({
       )}
 
       {isBuyer && status === "delivered" && (
-        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
           <p className="text-sm font-medium text-white">Confirm delivery</p>
           <p className="mt-2 text-sm leading-7 text-white/55">
             Mark the order as received once the package arrives and everything looks good.
@@ -119,7 +119,7 @@ export default function OrderActions({
           <button
             onClick={markCompleted}
             disabled={loading !== null}
-            className="mt-4 w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
           >
             {loading === "complete" ? "Updating..." : "Mark as Received"}
           </button>
@@ -127,7 +127,7 @@ export default function OrderActions({
       )}
 
       {trackingCode && (
-        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+        <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
           <p className="text-sm text-white/50">Tracking Code</p>
           <p className="mt-2 break-all text-sm font-medium text-white">{trackingCode}</p>
         </div>

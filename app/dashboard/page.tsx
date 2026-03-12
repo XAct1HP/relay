@@ -77,11 +77,13 @@ export default async function DashboardPage() {
         <main className="relay-page">
           <div className="relay-site-bg" />
           <div className="relay-page-shell">
-            <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-400/20 bg-red-500/10 p-8 text-white backdrop-blur-xl">
+            <div className="mx-auto max-w-2xl rounded-[2rem] border border-red-400/20 bg-red-500/10 p-6 text-white backdrop-blur-xl sm:p-8">
               <p className="text-sm font-medium uppercase tracking-[0.2em] text-red-200">
                 Relay
               </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">Account Restricted</h1>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+                Account Restricted
+              </h1>
               <p className="mt-4 text-white/80">
                 Your account is currently restricted from using Relay.
               </p>
@@ -159,14 +161,14 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: "Active Listings", value: activeListingsCount },
                 { label: "Completed Sales", value: profile.total_sales },
                 { label: "Pending Orders", value: pendingOrdersCount },
                 { label: "Conversations", value: conversations.length },
               ].map((item) => (
-                <div key={item.label} className="relay-card p-6">
+                <div key={item.label} className="relay-card p-5 sm:p-6">
                   <p className="text-sm font-medium text-white/55">{item.label}</p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
                     {item.value}
@@ -175,8 +177,8 @@ export default async function DashboardPage() {
               ))}
             </div>
 
-            <div className="mt-8 grid gap-6 lg:grid-cols-3">
-              <div className="relay-card p-6 lg:col-span-2">
+            <div className="mt-8 grid gap-6 xl:grid-cols-3">
+              <div className="relay-card p-5 xl:col-span-2 sm:p-6">
                 <p className="text-sm font-medium text-white/55">Profile Bio</p>
                 <p className="mt-3 leading-7 text-white/85">{profile.bio || "No bio yet."}</p>
 
@@ -213,10 +215,10 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relay-card p-6">
+              <div className="relay-card p-5 sm:p-6">
                 <p className="text-sm font-medium text-white/55">Quick Actions</p>
 
-                <div className="mt-4 flex flex-col gap-3">
+                <div className="mt-4 grid gap-3">
                   <a href={`/profile/${profile.username}`} className="relay-button-primary">
                     View Public Profile
                   </a>
@@ -246,8 +248,8 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-6 lg:grid-cols-3">
-              <div className="relay-card p-6">
+            <div className="mt-8 grid gap-6 xl:grid-cols-3">
+              <div className="relay-card p-5 sm:p-6">
                 <h2 className="text-xl font-semibold text-white">Recent Listings</h2>
 
                 <div className="mt-4 space-y-3">
@@ -276,7 +278,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relay-card p-6">
+              <div className="relay-card p-5 sm:p-6">
                 <h2 className="text-xl font-semibold text-white">Recent Sales</h2>
 
                 <div className="mt-4 space-y-3">
@@ -302,7 +304,7 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relay-card p-6">
+              <div className="relay-card p-5 sm:p-6">
                 <h2 className="text-xl font-semibold text-white">Recent Purchases</h2>
 
                 <div className="mt-4 space-y-3">
@@ -517,7 +519,7 @@ export default async function DashboardPage() {
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="relay-page-container">
-          <div className="relay-page-header">
+          <div className="relay-page-header gap-5">
             <div>
               <p className="relay-eyebrow">Relay Admin</p>
               <h1 className="relay-title">Marketplace Dashboard</h1>
@@ -526,28 +528,30 @@ export default async function DashboardPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-white backdrop-blur-xl">
+            <div className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-white backdrop-blur-xl sm:w-auto">
               <p className="text-sm text-white/55">Signed in as</p>
               <p className="mt-1 font-medium text-white">@{profile.username}</p>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Marketplace GMV", value: formatCurrency(gmvCents), meta: "Item value only" },
               { label: "Relay Revenue", value: formatCurrency(relayRevenueCents), meta: "Platform fees collected" },
               { label: "Shipping Collected", value: formatCurrency(shippingCollectedCents), meta: "Buyer-paid shipping" },
               { label: "Open Exceptions", value: shippingExceptions.length, meta: "Orders needing attention" },
             ].map((item) => (
-              <div key={item.label} className="relay-card p-6">
+              <div key={item.label} className="relay-card p-5 sm:p-6">
                 <p className="text-sm font-medium text-white/55">{item.label}</p>
-                <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{item.value}</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+                  {item.value}
+                </p>
                 <p className="mt-2 text-sm text-white/50">{item.meta}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Users", value: totalUsers, meta: `${newUsers30d} in last 30 days` },
               { label: "Orders", value: totalOrders, meta: `${newOrders30d} in last 30 days` },
@@ -562,9 +566,11 @@ export default async function DashboardPage() {
                 meta: `${sellersWithPayoutsEnabled} payouts enabled`,
               },
             ].map((item) => (
-              <div key={item.label} className="relay-card p-6">
+              <div key={item.label} className="relay-card p-5 sm:p-6">
                 <p className="text-sm font-medium text-white/55">{item.label}</p>
-                <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{item.value}</p>
+                <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+                  {item.value}
+                </p>
                 <p className="mt-2 text-sm text-white/50">{item.meta}</p>
               </div>
             ))}
@@ -577,9 +583,9 @@ export default async function DashboardPage() {
             />
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <div className="relay-card flex h-[420px] flex-col p-6 lg:col-span-2">
-              <div className="flex items-center justify-between gap-4">
+          <div className="mt-8 grid gap-6 xl:grid-cols-3">
+            <div className="relay-card flex min-h-[420px] flex-col p-5 xl:col-span-2 sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-xl font-semibold text-white">Order Status Breakdown</h2>
                 <p className="text-sm text-white/50">
                   {deliveredAwaitingCompletion} delivered awaiting confirmation
@@ -634,7 +640,7 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="relay-card flex h-[420px] flex-col p-6">
+            <div className="relay-card flex min-h-[420px] flex-col p-5 sm:p-6">
               <h2 className="text-xl font-semibold text-white">Top Sellers</h2>
 
               <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -681,8 +687,8 @@ export default async function DashboardPage() {
             removedListings={removedListings.slice(0, 8)}
           />
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <div className="relay-card flex h-[520px] flex-col p-6">
+          <div className="mt-8 grid gap-6 xl:grid-cols-2">
+            <div className="relay-card flex min-h-[520px] flex-col p-5 sm:p-6">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-xl font-semibold text-white">Recent Orders</h2>
                 <Link href="/orders" className="text-sm font-medium text-white underline">
@@ -705,7 +711,7 @@ export default async function DashboardPage() {
                         className="block rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:bg-white/[0.05]"
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-white">Order #{order.id.slice(0, 8)}</p>
                             <p className="mt-1 text-sm text-white/50">
                               Buyer: @{buyerName} · Seller: @{sellerName}
@@ -716,7 +722,7 @@ export default async function DashboardPage() {
                             </p>
                           </div>
 
-                          <div className="text-right">
+                          <div className="shrink-0 text-right">
                             <p className="font-semibold text-white">
                               {formatCurrency(order.total_amount_cents ?? order.amount_cents)}
                             </p>
@@ -732,7 +738,7 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="relay-card flex h-[520px] flex-col p-6">
+            <div className="relay-card flex min-h-[520px] flex-col p-5 sm:p-6">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-xl font-semibold text-white">Shipping Exceptions</h2>
                 <p className="text-sm text-white/50">Operational watchlist</p>
@@ -752,7 +758,7 @@ export default async function DashboardPage() {
                         className="block rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:bg-white/[0.05]"
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-white">Order #{order.id.slice(0, 8)}</p>
                             <p className="mt-1 text-sm text-white/50">Seller: @{sellerName}</p>
                             <p className="mt-1 text-sm text-white/50">
@@ -760,7 +766,9 @@ export default async function DashboardPage() {
                             </p>
                           </div>
 
-                          <p className="text-sm text-white/50">{daysSince(order.created_at)}d old</p>
+                          <p className="shrink-0 text-sm text-white/50">
+                            {daysSince(order.created_at)}d old
+                          </p>
                         </div>
                       </Link>
                     );
