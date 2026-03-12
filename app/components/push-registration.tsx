@@ -1,54 +1,118 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import { PushNotifications } from "@capacitor/push-notifications";
+import { createClient } from "@/lib/supabase/client";
 
 export default function PushRegistration() {
+  const supabase = useMemo(() => createClient(), []);
+  const currentTokenRef = useRef<string | null>(null);
+  const listenersAttachedRef = useRef(false);
+
+  async function saveTokenToSupabase(token: string) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const platform =
+      Capacitor.getPlatform() === "ios"
+        ? "ios"
+        : Capacitor.getPlatform() === "android"
+          ? "android"
+          : "unknown";
+
+    const { error } = await supabase.from("device_push_tokens").upsert(
+      {
+        user_id: user.id,
+        token,
+        platform,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "token",
+      }
+    );
+
+    if (error) {
+      console.error("Failed to save push token:", error);
+    }
+  }
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    let authSubscription:
+      | { unsubscribe: () => void }
+      | undefined;
+
     const register = async () => {
-      const perm = await PushNotifications.checkPermissions();
+      try {
+        const permission = await PushNotifications.checkPermissions();
+        let status = permission.receive;
 
-      let status = perm.receive;
-
-      if (status === "prompt") {
-        const req = await PushNotifications.requestPermissions();
-        status = req.receive;
-      }
-
-      if (status !== "granted") {
-        console.log("Push permission not granted");
-        return;
-      }
-
-      await PushNotifications.register();
-
-      PushNotifications.addListener("registration", token => {
-        console.log("Push token:", token.value);
-
-        // TODO: send this to your database
-      });
-
-      PushNotifications.addListener("registrationError", err => {
-        console.error("Push registration error:", err);
-      });
-
-      PushNotifications.addListener("pushNotificationReceived", notif => {
-        console.log("Push received:", notif);
-      });
-
-      PushNotifications.addListener(
-        "pushNotificationActionPerformed",
-        action => {
-          console.log("Push action:", action);
+        if (status === "prompt") {
+          const req = await PushNotifications.requestPermissions();
+          status = req.receive;
         }
-      );
+
+        if (status !== "granted") {
+          console.log("Push permission denied");
+          return;
+        }
+
+        if (!listenersAttachedRef.current) {
+          PushNotifications.addListener("registration", async (token) => {
+            currentTokenRef.current = token.value;
+            console.log("Push token:", token.value);
+            await saveTokenToSupabase(token.value);
+          });
+
+          PushNotifications.addListener("registrationError", (error) => {
+            console.error("Push registration error:", error);
+          });
+
+          PushNotifications.addListener(
+            "pushNotificationReceived",
+            (notification) => {
+              console.log("Push received:", notification);
+            }
+          );
+
+          PushNotifications.addListener(
+            "pushNotificationActionPerformed",
+            (action) => {
+              console.log("Push action performed:", action);
+            }
+          );
+
+          listenersAttachedRef.current = true;
+        }
+
+        await PushNotifications.register();
+
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          if (session?.user && currentTokenRef.current) {
+            await saveTokenToSupabase(currentTokenRef.current);
+          }
+        });
+
+        authSubscription = subscription;
+      } catch (err) {
+        console.error("Push setup failed:", err);
+      }
     };
 
     register();
-  }, []);
+
+    return () => {
+      authSubscription?.unsubscribe();
+    };
+  }, [supabase]);
 
   return null;
 }
