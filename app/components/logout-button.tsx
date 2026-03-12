@@ -10,6 +10,7 @@ type LogoutButtonProps = {
 
 export default function LogoutButton({ compact = false }: LogoutButtonProps) {
   const router = useRouter();
+  const supabase = createClient();
   const [loading, setLoading] = useState(false);
 
   async function handleLogout() {
@@ -17,10 +18,12 @@ export default function LogoutButton({ compact = false }: LogoutButtonProps) {
 
     setLoading(true);
 
-    const supabase = createClient();
     await supabase.auth.signOut();
 
-    router.replace("/auth/login");
+    // Immediately redirect to login
+    router.push("/auth/login");
+
+    // Force React server components to update auth state
     router.refresh();
   }
 
