@@ -199,8 +199,8 @@ export default function MobileBottomNav({
         <div className="fixed inset-0 z-[55] bg-black/20 md:hidden" />
       )}
 
-      <nav className="fixed inset-x-0 bottom-[env(safe-area-inset-bottom)] z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid h-[72px] max-w-7xl grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+10px)] z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
+        <div className="mx-auto grid h-[70px] max-w-7xl grid-cols-5 px-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.href);

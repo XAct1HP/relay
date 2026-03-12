@@ -17,13 +17,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
-        <AppShell>{children}</AppShell>
+        <AppShell>
+          <div className="relative z-10 pb-28 md:pb-0">
+            {children}
+          </div>
+        </AppShell>
       </body>
     </html>
   );
