@@ -1,16 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type LogoutButtonProps = {
   compact?: boolean;
 };
 
 export default function LogoutButton({ compact = false }: LogoutButtonProps) {
-  const router = useRouter();
-  const supabase = createClient();
   const [loading, setLoading] = useState(false);
 
   async function handleLogout() {
@@ -18,13 +15,16 @@ export default function LogoutButton({ compact = false }: LogoutButtonProps) {
 
     setLoading(true);
 
-    await supabase.auth.signOut();
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
 
-    // Immediately redirect to login
-    router.push("/auth/login");
-
-    // Force React server components to update auth state
-    router.refresh();
+      // Use a hard navigation so the PWA does not get stuck
+      window.location.replace("/auth/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      setLoading(false);
+    }
   }
 
   if (compact) {
@@ -36,7 +36,7 @@ export default function LogoutButton({ compact = false }: LogoutButtonProps) {
         aria-label="Log out"
         className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
       >
-        {loading ? "..." : "Log out"}
+        {loading ? "Signing out..." : "Log out"}
       </button>
     );
   }
