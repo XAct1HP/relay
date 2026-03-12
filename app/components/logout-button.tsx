@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 type LogoutButtonProps = {
   compact?: boolean;
@@ -10,21 +9,13 @@ type LogoutButtonProps = {
 export default function LogoutButton({ compact = false }: LogoutButtonProps) {
   const [loading, setLoading] = useState(false);
 
-  async function handleLogout() {
+  function handleLogout() {
     if (loading) return;
-
     setLoading(true);
 
-    try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-
-      // Use a hard navigation so the PWA does not get stuck
-      window.location.replace("/auth/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-      setLoading(false);
-    }
+    // Use a full navigation to a server logout route.
+    // The route clears cookies/session and redirects to /auth/login.
+    window.location.href = "/auth/logout";
   }
 
   if (compact) {
