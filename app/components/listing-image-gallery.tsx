@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type ListingImage = {
   id: string;
@@ -21,43 +21,47 @@ export default function ListingImageGallery({
   coverImageUrl,
   images,
 }: ListingImageGalleryProps) {
-  const allImages = images.length
-    ? images
-    : coverImageUrl
-      ? [
-          {
-            id: "cover",
-            image_url: coverImageUrl,
-            sort_order: 0,
-          },
-        ]
-      : [];
+  const allImages = useMemo(
+    () =>
+      images.length
+        ? images
+        : coverImageUrl
+          ? [
+              {
+                id: "cover",
+                image_url: coverImageUrl,
+                sort_order: 0,
+              },
+            ]
+          : [],
+    [coverImageUrl, images]
+  );
 
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(
     coverImageUrl || allImages[0]?.image_url || null
   );
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-xl sm:rounded-[2rem]">
         {selectedImageUrl ? (
-          <div className="relative min-h-[540px]">
+          <div className="relative aspect-[4/4.3] min-h-[320px] sm:aspect-[4/4.2] sm:min-h-[480px]">
             <img
               src={selectedImageUrl}
               alt={`${brand} ${model}`}
-              className="h-full min-h-[540px] w-full object-cover"
+              className="h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/18 via-transparent to-transparent" />
           </div>
         ) : (
-          <div className="flex min-h-[540px] items-center justify-center bg-white/[0.03] text-white/35">
+          <div className="flex min-h-[320px] items-center justify-center bg-white/[0.03] text-white/35 sm:min-h-[480px]">
             No image
           </div>
         )}
       </div>
 
       {allImages.length > 1 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2 sm:gap-4">
           {allImages.map((image) => {
             const isSelected = image.image_url === selectedImageUrl;
 
@@ -66,7 +70,7 @@ export default function ListingImageGallery({
                 key={image.id}
                 type="button"
                 onClick={() => setSelectedImageUrl(image.image_url)}
-                className={`group overflow-hidden rounded-[1.35rem] border bg-white/[0.04] transition ${
+                className={`group overflow-hidden rounded-[1rem] border bg-white/[0.04] transition sm:rounded-[1.35rem] ${
                   isSelected
                     ? "border-white/30 ring-1 ring-white/25"
                     : "border-white/10 hover:border-white/20"
@@ -75,7 +79,7 @@ export default function ListingImageGallery({
                 <img
                   src={image.image_url}
                   alt={`${brand} ${model} thumbnail`}
-                  className="h-28 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                  className="h-20 w-full object-cover transition duration-300 group-hover:scale-[1.02] sm:h-28"
                 />
               </button>
             );

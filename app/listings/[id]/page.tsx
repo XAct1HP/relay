@@ -44,7 +44,7 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8">
             <div>
               <ListingImageGallery
                 brand={listing.brand}
@@ -54,18 +54,20 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
               />
             </div>
 
-            <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-8 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.75rem] sm:p-6 lg:p-8">
               <p className="relay-eyebrow !mb-0">Relay Listing</p>
 
-              <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
                 {listing.brand} {listing.model}
               </h1>
 
               {listing.nickname && (
-                <p className="mt-2 text-lg text-white/60">{listing.nickname}</p>
+                <p className="mt-2 text-base text-white/60 sm:text-lg">
+                  {listing.nickname}
+                </p>
               )}
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-sm font-medium text-white/75">
                   Size {listing.size}
                 </span>
@@ -83,19 +85,19 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
                 </p>
               )}
 
-              <p className="mt-8 text-4xl font-bold tracking-tight text-white">
+              <p className="mt-7 text-3xl font-bold tracking-tight text-white sm:mt-8 sm:text-4xl">
                 ${(listing.price_cents / 100).toFixed(2)}
               </p>
 
-              <div className="mt-8 border-t border-white/10 pt-8">
+              <div className="mt-7 border-t border-white/10 pt-7 sm:mt-8 sm:pt-8">
                 <p className="text-sm font-medium text-white/50">Description</p>
-                <p className="mt-3 leading-7 text-white/75">
+                <p className="mt-3 text-sm leading-7 text-white/75 sm:text-base">
                   {listing.description || "No description added."}
                 </p>
               </div>
 
               {seller && (
-                <div className="mt-8 rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-5">
+                <div className="mt-7 rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4 sm:mt-8 sm:p-5">
                   <p className="text-sm font-medium text-white/50">Seller</p>
                   <Link
                     href={`/profile/${seller.username}`}
@@ -109,17 +111,14 @@ export default async function ListingDetailPage({ params }: ListingPageProps) {
                 </div>
               )}
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href="/marketplace"
-                  className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
-                >
+              <div className="mt-7 grid gap-3 sm:mt-8 sm:flex sm:flex-wrap">
+                <Link href="/marketplace" className="relay-button-secondary">
                   Back to Marketplace
                 </Link>
 
                 <Link
                   href={`/messages/start/${listing.id}`}
-                  className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
+                  className="relay-button-secondary"
                 >
                   Message Seller
                 </Link>

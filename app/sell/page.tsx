@@ -1,13 +1,13 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const BUCKET_NAME = "listing-images";
+const MAX_FILES = 8;
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-const MAX_FILES = 5;
 
 function hasRequiredShippingProfile(profile: {
   ship_from_name?: string | null;
@@ -90,10 +90,17 @@ export default function SellPage() {
     loadShippingProfile();
   }, [router, supabase]);
 
+  useEffect(() => {
+    return () => {
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imagePreviewUrls]);
+
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
 
     if (files.length === 0) {
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
       setImageFiles([]);
       setImagePreviewUrls([]);
       return;
@@ -119,6 +126,7 @@ export default function SellPage() {
       }
     }
 
+    imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     setMessage("");
     setImageFiles(files);
     setImagePreviewUrls(files.map((file) => URL.createObjectURL(file)));
@@ -253,9 +261,9 @@ export default function SellPage() {
   }
 
   const inputClassName =
-    "w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20";
+    "w-full min-h-12 rounded-[1rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20";
   const selectClassName =
-    "w-full appearance-none rounded-[1rem] border border-white/10 bg-[#0f1117] px-3 py-2 text-white outline-none focus:border-white/20 focus:bg-[#151922]";
+    "w-full min-h-12 appearance-none rounded-[1rem] border border-white/10 bg-[#0f1117] px-4 py-3 text-white outline-none focus:border-white/20 focus:bg-[#151922]";
   const labelClassName = "mb-2 block text-sm font-medium text-white/75";
 
   if (checkingProfile) {
@@ -275,12 +283,16 @@ export default function SellPage() {
     <main className="relay-page">
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
-        <div className="mx-auto max-w-2xl">
-          <p className="relay-eyebrow">Relay</p>
-          <h1 className="relay-title">Create Listing</h1>
-          <p className="relay-subtitle">
-            Post a sneaker listing to the Relay marketplace.
-          </p>
+        <div className="mx-auto max-w-4xl">
+          <div className="relay-page-header">
+            <div>
+              <p className="relay-eyebrow">Relay</p>
+              <h1 className="relay-title">Create Listing</h1>
+              <p className="relay-subtitle">
+                Post a sneaker listing to the Relay marketplace.
+              </p>
+            </div>
+          </div>
 
           {!hasShippingProfile && (
             <div className="mt-6 rounded-[1.25rem] border border-amber-300/20 bg-amber-300/[0.08] p-4 text-sm text-amber-100 backdrop-blur-xl">
@@ -290,7 +302,7 @@ export default function SellPage() {
               </p>
               <Link
                 href="/onboarding"
-                className="mt-3 inline-flex rounded-full border border-amber-200/20 bg-amber-200/[0.10] px-4 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-200/[0.16]"
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-amber-200/20 bg-amber-200/[0.10] px-4 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-200/[0.16]"
               >
                 Complete Ship-From Details
               </Link>
@@ -299,159 +311,177 @@ export default function SellPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="mt-8 space-y-5 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+            className="mt-8 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-4 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:p-6"
           >
-            <div>
-              <label className={labelClassName}>Brand</label>
-              <input
-                type="text"
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                placeholder="Nike"
-                className={inputClassName}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={labelClassName}>Model</label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="Jordan 4"
-                className={inputClassName}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={labelClassName}>Nickname</label>
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="Bred"
-                className={inputClassName}
-              />
-            </div>
-
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className={labelClassName}>Size</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  placeholder="10.5"
-                  className={inputClassName}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className={labelClassName}>Condition</label>
-                <select
-                  value={condition}
-                  onChange={(e) => setCondition(e.target.value)}
-                  className={selectClassName}
-                >
-                  <option className="bg-[#0f1117] text-white">New</option>
-                  <option className="bg-[#0f1117] text-white">VNDS</option>
-                  <option className="bg-[#0f1117] text-white">Used</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className={labelClassName}>Price (USD)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="315.00"
-                className={inputClassName}
-                required
-              />
-            </div>
-
-            <div>
-              <label className={labelClassName}>Shipping Weight</label>
-              <select
-                value={shippingWeightOz}
-                onChange={(e) => setShippingWeightOz(e.target.value)}
-                className={selectClassName}
-              >
-                <option value="24" className="bg-[#0f1117] text-white">
-                  Light pair / no heavy extras
-                </option>
-                <option value="32" className="bg-[#0f1117] text-white">
-                  Standard sneakers with box
-                </option>
-                <option value="48" className="bg-[#0f1117] text-white">
-                  Heavy pair / boots / bulky box
-                </option>
-              </select>
-              <p className="mt-2 text-xs text-white/45">
-                This is used to estimate the prepaid shipping label the buyer will pay for.
-              </p>
-            </div>
-
-            <div>
-              <label className={labelClassName}>Listing Images</label>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFileChange}
-                className="block w-full rounded-[1rem] border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-white"
-                required
-              />
-              <p className="mt-2 text-xs text-white/45">
-                Upload up to {MAX_FILES} images. The first image will be used as the cover photo.
-              </p>
-
-              {imagePreviewUrls.length > 0 && (
-                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {imagePreviewUrls.map((previewUrl, index) => (
-                    <div
-                      key={previewUrl}
-                      className="overflow-hidden rounded-[1rem] border border-white/10"
-                    >
-                      <img
-                        src={previewUrl}
-                        alt={`Preview ${index + 1}`}
-                        className="h-40 w-full object-cover"
-                      />
-                    </div>
-                  ))}
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-5">
+                <div>
+                  <label className={labelClassName}>Brand</label>
+                  <input
+                    type="text"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="Nike"
+                    className={inputClassName}
+                    required
+                  />
                 </div>
-              )}
+
+                <div>
+                  <label className={labelClassName}>Model</label>
+                  <input
+                    type="text"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="Jordan 4"
+                    className={inputClassName}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClassName}>Nickname</label>
+                  <input
+                    type="text"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    placeholder="Bred"
+                    className={inputClassName}
+                  />
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <label className={labelClassName}>Size</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={size}
+                      onChange={(e) => setSize(e.target.value)}
+                      placeholder="10.5"
+                      className={inputClassName}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClassName}>Condition</label>
+                    <select
+                      value={condition}
+                      onChange={(e) => setCondition(e.target.value)}
+                      className={selectClassName}
+                    >
+                      <option className="bg-[#0f1117] text-white">New</option>
+                      <option className="bg-[#0f1117] text-white">VNDS</option>
+                      <option className="bg-[#0f1117] text-white">Used</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>Price (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="315.00"
+                    className={inputClassName}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClassName}>Shipping Weight</label>
+                  <select
+                    value={shippingWeightOz}
+                    onChange={(e) => setShippingWeightOz(e.target.value)}
+                    className={selectClassName}
+                  >
+                    <option value="24" className="bg-[#0f1117] text-white">
+                      Light pair / no heavy extras
+                    </option>
+                    <option value="32" className="bg-[#0f1117] text-white">
+                      Standard sneakers with box
+                    </option>
+                    <option value="48" className="bg-[#0f1117] text-white">
+                      Heavy pair / boots / bulky box
+                    </option>
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    This is used to estimate the prepaid shipping label the buyer will pay for.
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>Description</label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Clean pair, ships next day, OG all."
+                    className="min-h-32 w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-white outline-none placeholder:text-white/30 focus:border-white/20"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="rounded-[1.35rem] border border-white/10 bg-white/[0.03] p-4">
+                  <label className={labelClassName}>Listing Images</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileChange}
+                    className="block w-full rounded-[1rem] border border-white/10 bg-white/[0.03] px-3 py-3 text-sm text-white file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-white"
+                    required
+                  />
+                  <p className="mt-2 text-xs leading-5 text-white/45">
+                    Upload up to {MAX_FILES} images. The first image will be used as the cover photo.
+                  </p>
+
+                  {imagePreviewUrls.length > 0 ? (
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {imagePreviewUrls.map((previewUrl, index) => (
+                        <div
+                          key={previewUrl}
+                          className="overflow-hidden rounded-[1rem] border border-white/10"
+                        >
+                          <img
+                            src={previewUrl}
+                            alt={`Preview ${index + 1}`}
+                            className="h-28 w-full object-cover sm:h-32"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex min-h-[180px] items-center justify-center rounded-[1rem] border border-dashed border-white/10 bg-white/[0.02] text-sm text-white/40">
+                      Your image previews will appear here.
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[1.35rem] border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-sm font-medium text-white/70">Listing checklist</p>
+                  <div className="mt-3 space-y-2 text-sm text-white/55">
+                    <p>• Add a clear cover image</p>
+                    <p>• Use the exact brand and model name</p>
+                    <p>• Pick the right size and condition</p>
+                    <p>• Set a realistic shipping weight</p>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !hasShippingProfile}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-white/10 bg-white px-4 py-3 font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? "Creating listing..." : "Create Listing"}
+                </button>
+
+                {message && <p className="text-sm text-white/65">{message}</p>}
+              </div>
             </div>
-
-            <div>
-              <label className={labelClassName}>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Clean pair, ships next day, OG all."
-                className="min-h-28 w-full rounded-[1rem] border border-white/10 bg-white/[0.04] px-3 py-2 text-white outline-none placeholder:text-white/30 focus:border-white/20"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !hasShippingProfile}
-              className="w-full rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 font-medium text-white transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Creating listing..." : "Create Listing"}
-            </button>
-
-            {message && (
-              <p className="text-sm text-white/65">{message}</p>
-            )}
           </form>
         </div>
       </div>

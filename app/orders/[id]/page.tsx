@@ -119,8 +119,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
     notFound();
   }
 
-  const isParticipant =
-    order.buyer_id === user.id || order.seller_id === user.id;
+  const isParticipant = order.buyer_id === user.id || order.seller_id === user.id;
 
   if (!isParticipant) {
     redirect("/orders");
@@ -161,7 +160,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="mx-auto max-w-6xl">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="relay-eyebrow">Relay</p>
               <h1 className="relay-title">Order Details</h1>
@@ -170,78 +169,75 @@ export default async function OrderPage({ params }: OrderPageProps) {
               </p>
             </div>
 
-            <Link
-              href="/orders"
-              className="rounded-full border border-white/12 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.06]"
-            >
+            <Link href="/orders" className="relay-button-secondary">
               Back to Orders
             </Link>
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-6">
-              <section className="overflow-hidden rounded-[1.9rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-                <div className="border-b border-white/10 bg-white/[0.03] px-6 py-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
+              <section className="overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem]">
+                <div className="border-b border-white/10 bg-white/[0.03] px-4 py-5 sm:px-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                         Order Overview
                       </p>
-                      <h2 className="mt-2 text-2xl font-semibold text-white">
+                      <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
                         {listing
                           ? `${listing.brand} ${listing.model}${listing.nickname ? ` · ${listing.nickname}` : ""}`
                           : "Listing"}
                       </h2>
                     </div>
 
-                    <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}>
+                    <div className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${badge.className}`}>
                       {badge.label}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid gap-4 p-6 sm:grid-cols-2">
+                <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6">
                   <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-white/50">Buyer</p>
-                    <p className="mt-2 text-lg font-semibold text-white">
+                    <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                       @{buyer?.username ?? "unknown"}
                     </p>
                   </div>
 
                   <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-white/50">Seller</p>
-                    <p className="mt-2 text-lg font-semibold text-white">
+                    <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                       @{seller?.username ?? "unknown"}
                     </p>
                   </div>
 
                   <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-white/50">Placed</p>
-                    <p className="mt-2 text-lg font-semibold text-white">
+                    <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                       {new Date(order.created_at).toLocaleDateString()}
                     </p>
                   </div>
 
                   <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-white/50">Tracking Status</p>
-                    <p className="mt-2 text-lg font-semibold text-white">
+                    <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                       {order.last_tracking_status ?? "Not available yet"}
                     </p>
                     {order.tracking_code && (
-                      <p className="mt-1 text-sm text-white/45">{order.tracking_code}</p>
+                      <p className="mt-1 break-all text-sm text-white/45">
+                        {order.tracking_code}
+                      </p>
                     )}
                   </div>
                 </div>
               </section>
 
-              <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+              <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
                 <div className="mb-5">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                     Payment Breakdown
                   </p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">
-                    Charges
-                  </h3>
+                  <h3 className="mt-2 text-xl font-semibold text-white">Charges</h3>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -273,27 +269,29 @@ export default async function OrderPage({ params }: OrderPageProps) {
                 </div>
               </section>
 
-              {order.status === "completed" && user.id === order.buyer_id && !existingReview && (
-                <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-                  <div className="mb-5">
-                    <p className="text-xs uppercase tracking-[0.22em] text-white/38">
-                      Review
-                    </p>
-                    <h3 className="mt-2 text-xl font-semibold text-white">
-                      Leave feedback
-                    </h3>
-                  </div>
+              {order.status === "completed" &&
+                user.id === order.buyer_id &&
+                !existingReview && (
+                  <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
+                    <div className="mb-5">
+                      <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                        Review
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold text-white">
+                        Leave feedback
+                      </h3>
+                    </div>
 
-                  <ReviewForm
-                    orderId={order.id}
-                    reviewerId={order.buyer_id}
-                    revieweeId={order.seller_id}
-                  />
-                </section>
-              )}
+                    <ReviewForm
+                      orderId={order.id}
+                      reviewerId={order.buyer_id}
+                      revieweeId={order.seller_id}
+                    />
+                  </section>
+                )}
 
               {existingReview && (
-                <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+                <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
                   <div className="mb-5">
                     <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                       Review
@@ -304,7 +302,10 @@ export default async function OrderPage({ params }: OrderPageProps) {
                   </div>
 
                   <p className="text-white/60">
-                    Rating: <span className="font-medium text-white">{existingReview.rating}/5</span>
+                    Rating:{" "}
+                    <span className="font-medium text-white">
+                      {existingReview.rating}/5
+                    </span>
                   </p>
                   <p className="mt-3 text-white/75">
                     {existingReview.comment || "No comment provided."}
@@ -314,7 +315,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
             </div>
 
             <div className="space-y-6">
-              <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+              <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
                 <div className="mb-5">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                     Actions
@@ -338,7 +339,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
                 </div>
               </section>
 
-              <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+              <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
                 <div className="mb-5">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                     Shipping
@@ -360,7 +361,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
                   <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm text-white/50">Tracking Code</p>
-                    <p className="mt-2 text-white font-semibold">
+                    <p className="mt-2 break-all text-white font-semibold">
                       {order.tracking_code || "Not available yet"}
                     </p>
                   </div>
@@ -375,7 +376,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
               </section>
 
               {listing && (
-                <section className="rounded-[1.9rem] border border-white/10 bg-white/[0.04] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+                <section className="rounded-[1.65rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.9rem] sm:p-6">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/38">
                     Listing
                   </p>
@@ -385,7 +386,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
                   <Link
                     href={`/listings/${listing.id}`}
-                    className="mt-5 inline-flex rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                    className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
                   >
                     Open Listing
                   </Link>
