@@ -2,17 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  MessageCircle,
-  PlusSquare,
-  Package,
-  User,
-} from "lucide-react";
+import { Home, MessageCircle, PlusSquare, Package, User } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LogoutButton from "@/app/components/logout-button";
 import { Capacitor } from "@capacitor/core";
+import type { Session } from "@supabase/supabase-js";
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
@@ -64,10 +59,8 @@ export default function MobileBottomNav() {
     setOrdersBadgeCount(0);
   }
 
-  async function syncFromSession() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function syncFromSession(session: Session | null) {
+    const user = session?.user;
 
     if (!user) {
       resetToSignedOutState();
@@ -86,6 +79,9 @@ export default function MobileBottomNav() {
     if (profile?.username) {
       setProfileHref(`/profile/${profile.username}`);
       setProfileLabel(`@${profile.username}`);
+    } else {
+      setProfileHref("/onboarding");
+      setProfileLabel("Profile");
     }
 
     await refreshBadges(user.id);
@@ -95,30 +91,43 @@ export default function MobileBottomNav() {
     let mounted = true;
 
     async function init() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!mounted) return;
-      await syncFromSession();
+      await syncFromSession(session);
     }
 
     init();
 
     const {
       data: { subscription: authSubscription },
-    } = supabase.auth.onAuthStateChange(async () => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
       setProfileMenuOpen(false);
-      await syncFromSession();
+      await syncFromSession(session);
     });
 
     const notificationsChannel = supabase
       .channel("mobile-bottom-nav-notifications")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
         async () => {
           const {
-            data: { user },
-          } = await supabase.auth.getUser();
+            data: { session },
+          } = await supabase.auth.getSession();
 
-          if (user) await refreshBadges(user.id);
+          if (session?.user) {
+            await refreshBadges(session.user.id);
+          } else {
+            setOrdersBadgeCount(0);
+          }
         }
       )
       .subscribe();
@@ -127,13 +136,21 @@ export default function MobileBottomNav() {
       .channel("mobile-bottom-nav-messages")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+        },
         async () => {
           const {
-            data: { user },
-          } = await supabase.auth.getUser();
+            data: { session },
+          } = await supabase.auth.getSession();
 
-          if (user) await refreshBadges(user.id);
+          if (session?.user) {
+            await refreshBadges(session.user.id);
+          } else {
+            setMessagesBadgeCount(0);
+          }
         }
       )
       .subscribe();
@@ -182,7 +199,7 @@ export default function MobileBottomNav() {
         <div className="fixed inset-0 z-[55] bg-black/20 md:hidden" />
       )}
 
-      <nav className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-[#06070a]/98 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-[#06070a]/98 backdrop-blur-xl pb-[calc(env(safe-area-inset-bottom)+12px)] md:hidden">
         <div className="mx-auto grid h-[72px] max-w-7xl grid-cols-5 px-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -252,6 +269,7 @@ export default function MobileBottomNav() {
             className="relative flex min-h-[70px] items-center justify-center"
           >
             <button
+              type="button"
               onClick={() => setProfileMenuOpen((prev) => !prev)}
               className="flex min-h-[70px] w-full flex-col items-center justify-center gap-1 px-1"
             >
@@ -276,7 +294,7 @@ export default function MobileBottomNav() {
                     <Link
                       href={profileHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       {profileLabel}
                     </Link>
@@ -284,12 +302,12 @@ export default function MobileBottomNav() {
                     <Link
                       href={dashboardHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Dashboard
                     </Link>
 
-                    {nativeApp && isAuthed && (
+                    {nativeApp && (
                       <div className="px-2 pt-2">
                         <LogoutButton compact />
                       </div>
@@ -300,7 +318,7 @@ export default function MobileBottomNav() {
                     <Link
                       href="/auth/login"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Log In
                     </Link>
@@ -308,7 +326,7 @@ export default function MobileBottomNav() {
                     <Link
                       href="/auth/signup"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white hover:bg-white/10"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Sign Up
                     </Link>
