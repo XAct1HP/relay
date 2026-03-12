@@ -54,16 +54,16 @@ export default async function MarketplacePage({
               </div>
             </div>
 
-            <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.05] p-10 text-center text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.10] text-xl text-amber-200">
+            <div className="mt-8 rounded-[1.75rem] border border-white/10 bg-white/[0.05] px-5 py-8 text-center text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] backdrop-blur-2xl sm:rounded-[2rem] sm:p-10">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-amber-300/20 bg-amber-300/[0.10] text-xl text-amber-200 sm:h-16 sm:w-16">
                 !
               </div>
 
-              <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white">
+              <h2 className="mt-5 text-2xl font-semibold tracking-tight text-white sm:mt-6 sm:text-3xl">
                 Marketplace unavailable
               </h2>
 
-              <p className="mx-auto mt-4 max-w-2xl text-sm leading-8 text-white/65 sm:text-base">
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/65 sm:text-base sm:leading-8">
                 {disabledMessage}
               </p>
             </div>
@@ -162,14 +162,16 @@ export default async function MarketplacePage({
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="mx-auto max-w-6xl">
-          <div className="relay-page-header">
-            <div>
+          <div className="relay-page-header gap-5">
+            <div className="min-w-0">
               <p className="relay-eyebrow">Relay</p>
               <h1 className="relay-title">Marketplace</h1>
-              <p className="relay-subtitle">Browse sneaker listings from Relay sellers.</p>
+              <p className="relay-subtitle">
+                Browse sneaker listings from Relay sellers.
+              </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-white backdrop-blur-xl">
+            <div className="w-full rounded-[1.35rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-white backdrop-blur-xl sm:w-auto sm:min-w-[132px] sm:rounded-2xl">
               <p className="text-sm text-white/55">Results</p>
               <p className="mt-1 text-2xl font-semibold">{listings.length}</p>
             </div>
@@ -178,7 +180,7 @@ export default async function MarketplacePage({
           <MarketplaceFilters />
 
           {activeFilterCount > 0 && (
-            <div className="mt-4 flex items-center gap-2 text-sm text-white/50">
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-white/50">
               <span>
                 {activeFilterCount} active filter{activeFilterCount > 1 ? "s" : ""}
               </span>
@@ -186,7 +188,7 @@ export default async function MarketplacePage({
           )}
 
           {listings.length === 0 ? (
-            <div className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-10 text-center text-white backdrop-blur-xl">
+            <div className="mt-8 rounded-[1.75rem] border border-white/10 bg-white/[0.04] px-5 py-8 text-center text-white backdrop-blur-xl sm:rounded-[2rem] sm:p-10">
               <h2 className="text-2xl font-semibold">No listings match your filters</h2>
               <p className="mt-3 text-white/65">
                 Try broadening your search or clearing a few filters.
@@ -198,50 +200,50 @@ export default async function MarketplacePage({
               </div>
             </div>
           ) : (
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3">
               {listings.map((listing) => (
                 <Link
                   key={listing.id}
                   href={`/listings/${listing.id}`}
-                  className="group overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-200 hover:-translate-y-1 hover:bg-white/[0.055]"
+                  className="group overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-200 hover:-translate-y-1 hover:bg-white/[0.055] sm:rounded-[1.75rem]"
                 >
                   <div className="relative">
                     {listing.cover_image_url ? (
                       <img
                         src={listing.cover_image_url}
                         alt={`${listing.brand} ${listing.model}`}
-                        className="h-72 w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                        className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.02] sm:h-60 lg:h-72"
                       />
                     ) : (
-                      <div className="flex h-72 w-full items-center justify-center bg-[#10131a] text-white/35">
+                      <div className="flex h-44 w-full items-center justify-center bg-[#10131a] text-sm text-white/35 sm:h-60 lg:h-72">
                         No image
                       </div>
                     )}
 
-                    <div className="absolute left-4 top-4 rounded-full border border-white/10 bg-black/35 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
+                    <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[11px] font-medium text-white/80 backdrop-blur sm:left-4 sm:top-4 sm:px-3 sm:text-xs">
                       {listing.condition}
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-semibold leading-tight text-white">
+                  <div className="p-3 sm:p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <h2 className="line-clamp-2 text-sm font-semibold leading-tight text-white sm:text-lg">
                           {listing.brand} {listing.model}
                         </h2>
 
-                        <p className="mt-1 text-sm text-white/50">
+                        <p className="mt-1 line-clamp-2 text-xs text-white/50 sm:text-sm">
                           {listing.nickname || "Standard release"}
                         </p>
                       </div>
 
-                      <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/70">
+                      <div className="w-fit shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70 sm:px-3 sm:text-xs">
                         Size {listing.size}
                       </div>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between">
-                      <p className="text-2xl font-semibold tracking-tight text-white">
+                    <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
                         ${(listing.price_cents / 100).toFixed(2)}
                       </p>
 

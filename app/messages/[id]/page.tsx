@@ -69,7 +69,9 @@ export default async function MessagePage({ params }: MessagePageProps) {
     .neq("sender_id", user.id);
 
   const otherUserId =
-    conversation.buyer_id === user.id ? conversation.seller_id : conversation.buyer_id;
+    conversation.buyer_id === user.id
+      ? conversation.seller_id
+      : conversation.buyer_id;
 
   const isSeller = user.id === conversation.seller_id;
 
@@ -116,22 +118,22 @@ export default async function MessagePage({ params }: MessagePageProps) {
       <div className="relay-site-bg" />
       <div className="relay-page-shell">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <div>
+          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <p className="relay-eyebrow">Relay</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
                 Conversation with @{otherProfile?.username ?? "unknown-user"}
               </h1>
 
               {listing && (
-                <p className="mt-2 text-white/60">
+                <p className="mt-2 text-sm text-white/60 sm:text-base">
                   About: {listing.brand} {listing.model}
                   {listing.nickname ? ` · ${listing.nickname}` : ""}
                 </p>
               )}
             </div>
 
-            <div className="flex gap-3">
+            <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
               <Link href="/messages" className="relay-button-secondary">
                 Back to Inbox
               </Link>
@@ -144,7 +146,7 @@ export default async function MessagePage({ params }: MessagePageProps) {
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5 sm:space-y-6">
             {isSeller && conversation.listing_id && (
               <SendOfferForm
                 conversationId={conversation.id}

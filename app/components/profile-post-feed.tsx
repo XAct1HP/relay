@@ -24,19 +24,17 @@ export default function ProfilePostFeed({
 
   return (
     <div
-      className={`grid gap-5 ${
-        isOwner
-          ? "max-w-[1080px] sm:grid-cols-2 lg:grid-cols-3"
-          : "max-w-[1400px] sm:grid-cols-2 lg:grid-cols-4"
+      className={`grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 ${
+        isOwner ? "max-w-[1080px] lg:grid-cols-3" : "max-w-[1400px] lg:grid-cols-4"
       }`}
     >
       {posts.map((post) => (
         <article
           key={post.id}
-          className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.03]"
+          className="overflow-hidden rounded-[1.3rem] border border-white/10 bg-white/[0.03] sm:rounded-[1.5rem]"
         >
           {post.image_url && (
-            <div className="relative h-64">
+            <div className="relative h-56 sm:h-60 lg:h-64">
               <img
                 src={post.image_url}
                 alt="Seller post"
@@ -46,24 +44,24 @@ export default function ProfilePostFeed({
             </div>
           )}
 
-          <div className="p-5">
-            <div className="mb-3 flex items-center justify-between gap-4">
+          <div className="p-4 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ backgroundColor: accent }}
                 />
-                <p className="text-xs uppercase tracking-[0.18em] text-white/42">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/42 sm:text-xs">
                   Seller Post
                 </p>
               </div>
 
-              <p className="text-xs text-white/40">
+              <p className="text-[11px] text-white/40 sm:text-xs">
                 {new Date(post.created_at).toLocaleDateString()}
               </p>
             </div>
 
-            <p className="text-sm leading-8 text-white/72">
+            <p className="text-sm leading-7 text-white/72 sm:leading-8">
               {post.caption || "Image-only post"}
             </p>
           </div>

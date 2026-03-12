@@ -31,15 +31,21 @@ export default function ProfileListingsRail({
   }
 
   return (
-    <div className="max-h-[520px] overflow-y-auto pr-2">
-      <div className={`grid gap-4 ${isOwner ? "max-w-[720px] sm:grid-cols-2" : "max-w-[1080px] sm:grid-cols-2 lg:grid-cols-3"}`}>
+    <div className="max-h-[520px] overflow-y-auto pr-1 sm:pr-2">
+      <div
+        className={`grid grid-cols-2 gap-3 sm:gap-4 ${
+          isOwner
+            ? "max-w-[720px] lg:grid-cols-2"
+            : "max-w-[1080px] lg:grid-cols-3"
+        }`}
+      >
         {listings.map((listing) => (
           <Link
             key={listing.id}
             href={`/listings/${listing.id}`}
-            className="group overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.04] transition hover:bg-white/[0.06]"
+            className="group overflow-hidden rounded-[1.25rem] border border-white/10 bg-white/[0.04] transition hover:bg-white/[0.06] sm:rounded-[1.5rem]"
           >
-            <div className="relative h-44 overflow-hidden">
+            <div className="relative h-32 overflow-hidden sm:h-40 lg:h-44">
               {listing.cover_image_url ? (
                 <img
                   src={listing.cover_image_url}
@@ -48,7 +54,7 @@ export default function ProfileListingsRail({
                 />
               ) : (
                 <div
-                  className="flex h-full w-full items-center justify-center text-white/35"
+                  className="flex h-full w-full items-center justify-center text-sm text-white/35"
                   style={{ backgroundColor: `${accent}22` }}
                 >
                   No image
@@ -58,25 +64,25 @@ export default function ProfileListingsRail({
               <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
             </div>
 
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-white">
+            <div className="p-3 sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-semibold text-white sm:text-base">
                     {listing.brand} {listing.model}
                   </p>
-                  <p className="mt-1 text-sm text-white/52">
+                  <p className="mt-1 line-clamp-2 text-xs text-white/52 sm:text-sm">
                     {listing.nickname || "Standard release"}
                   </p>
                 </div>
 
-                <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-medium text-white/65">
+                <div className="w-fit rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-white/65 sm:text-xs">
                   Size {listing.size}
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-sm text-white/62">
-                <span>{listing.condition}</span>
-                <span className="font-semibold text-white">
+              <div className="mt-4 flex items-center justify-between gap-3 text-xs text-white/62 sm:text-sm">
+                <span className="truncate">{listing.condition}</span>
+                <span className="shrink-0 font-semibold text-white">
                   ${(listing.price_cents / 100).toFixed(2)}
                 </span>
               </div>

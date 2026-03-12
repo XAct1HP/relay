@@ -93,6 +93,8 @@
   --relay-accent: #7ca6ff;
   --relay-accent-strong: #5f8fff;
   --relay-glow: rgba(95, 143, 255, 0.25);
+
+  --relay-header-height: 72px;
 }
 
 .dark {
@@ -152,7 +154,7 @@
 
 @layer utilities {
   .relay-container {
-    @apply mx-auto w-full max-w-7xl px-6 md:px-10;
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 
   .relay-page {
@@ -160,7 +162,7 @@
   }
 
   .relay-page-shell {
-    @apply relative z-10 px-6 py-10 md:px-10 md:py-12;
+    @apply relative z-10 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
   }
 
   .relay-page-container {
@@ -168,19 +170,19 @@
   }
 
   .relay-page-header {
-    @apply flex flex-wrap items-end justify-between gap-4;
+    @apply flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end;
   }
 
   .relay-eyebrow {
-    @apply text-xs font-medium uppercase tracking-[0.24em] text-white/45;
+    @apply text-[11px] font-medium uppercase tracking-[0.24em] text-white/45 sm:text-xs;
   }
 
   .relay-title {
-    @apply mt-2 text-4xl font-semibold tracking-[-0.04em] text-white;
+    @apply mt-2 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl;
   }
 
   .relay-subtitle {
-    @apply mt-3 text-white/65;
+    @apply mt-3 text-sm text-white/65 sm:text-base;
   }
 
   .relay-panel {
@@ -196,11 +198,11 @@
   }
 
   .relay-card {
-    @apply rounded-[1.75rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl;
+    @apply rounded-[1.5rem] border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:rounded-[1.75rem];
   }
 
   .relay-card-soft {
-    @apply rounded-[1.25rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl;
+    @apply rounded-[1.1rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl sm:rounded-[1.25rem];
   }
 
   .relay-subcard {
@@ -212,15 +214,15 @@
   }
 
   .relay-button-secondary {
-    @apply inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/10;
   }
 
   .relay-button-primary {
-    @apply inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90;
   }
 
   .relay-empty {
-    @apply rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-8 text-white/65 backdrop-blur-xl;
+    @apply rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-6 text-white/65 backdrop-blur-xl sm:rounded-[1.75rem] sm:p-8;
   }
 
   .relay-site-bg {

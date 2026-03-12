@@ -265,20 +265,23 @@ export default function ChatThread({
   }
 
   return (
-    <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.05] shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-2xl">
-      <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
-        <div>
+    <div className="flex min-h-[65dvh] flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.05] shadow-[0_30px_100px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:rounded-[2rem]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6">
+        <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-[0.22em] text-white/38">
             Conversation
           </p>
-          <p className="mt-1 text-sm font-medium text-white">Live messages and offers</p>
+          <p className="mt-1 text-sm font-medium text-white">
+            Live messages and offers
+          </p>
         </div>
+
         <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-white/55">
           Real time
         </div>
       </div>
 
-      <div className="max-h-[640px] space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5">
         {items.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/50">
             No messages yet. Start the conversation.
@@ -294,13 +297,13 @@ export default function ChatThread({
                   className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[78%] rounded-[1.5rem] px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.14)] ${
+                    className={`max-w-[88%] rounded-[1.35rem] px-4 py-3 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.14)] sm:max-w-[78%] ${
                       isOwn
                         ? "border border-white/10 bg-white/[0.11] text-white"
                         : "border border-white/10 bg-[#0d1118] text-white/88"
                     }`}
                   >
-                    <p className="leading-7">{item.content}</p>
+                    <p className="break-words leading-7">{item.content}</p>
                     <p
                       className={`mt-2 text-[11px] ${
                         isOwn ? "text-white/42" : "text-white/38"
@@ -324,7 +327,7 @@ export default function ChatThread({
                 key={`offer-${item.id}`}
                 className={`flex ${isSeller ? "justify-end" : "justify-start"}`}
               >
-                <div className="max-w-[88%] overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.055] shadow-[0_12px_35px_rgba(0,0,0,0.16)]">
+                <div className="max-w-[92%] overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.055] shadow-[0_12px_35px_rgba(0,0,0,0.16)] sm:max-w-[88%]">
                   <div className="border-b border-white/10 bg-black/20 px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.2em] text-white/40">
                       Seller Offer
@@ -355,12 +358,12 @@ export default function ChatThread({
                     )}
 
                     {isBuyer && isPending && !isExpired && (
-                      <div className="mt-4 flex flex-wrap gap-3">
+                      <div className="mt-4 grid gap-3 sm:flex sm:flex-wrap">
                         <button
                           type="button"
                           disabled={loadingOfferId === item.id}
                           onClick={() => acceptOffer(item.id, item.listing_id)}
-                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+                          className="inline-flex min-h-11 items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
                         >
                           {loadingOfferId === item.id
                             ? "Redirecting..."
@@ -371,7 +374,7 @@ export default function ChatThread({
                           type="button"
                           disabled={loadingOfferId === item.id}
                           onClick={() => updateOfferStatus(item.id, "rejected")}
-                          className="rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:opacity-50"
+                          className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:opacity-50"
                         >
                           Decline
                         </button>
@@ -400,19 +403,19 @@ export default function ChatThread({
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={handleSend} className="border-t border-white/10 p-4 sm:p-5">
-        <div className="flex gap-3">
+      <form onSubmit={handleSend} className="border-t border-white/10 p-3 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <input
             type="text"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Send a message..."
-            className="flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]"
+            className="min-h-12 flex-1 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-white outline-none transition placeholder:text-white/30 focus:border-white/20 focus:bg-white/[0.06]"
           />
           <button
             type="submit"
             disabled={sending}
-            className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="inline-flex min-h-12 items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-50 sm:min-w-[110px]"
           >
             {sending ? "Sending..." : "Send"}
           </button>
