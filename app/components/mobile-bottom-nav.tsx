@@ -66,64 +66,61 @@ export default function MobileBottomNav() {
   ];
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 md:hidden">
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#06070a] via-[#06070a]/92 to-transparent" />
-      <div className="mx-auto max-w-7xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="grid h-[72px] grid-cols-5 items-end rounded-[1.7rem] border border-white/10 bg-[#0a0c12]/92 px-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = item.matchPrefix
-              ? pathname.startsWith(item.matchPrefix)
-              : pathname.startsWith(item.href);
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
+      <div className="mx-auto grid h-[68px] max-w-7xl grid-cols-5 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = item.matchPrefix
+            ? pathname.startsWith(item.matchPrefix)
+            : pathname.startsWith(item.href);
 
-            if (item.isPrimary) {
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="flex min-h-[72px] flex-col items-center justify-center gap-1 px-1"
-                >
-                  <div
-                    className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition ${
-                      active
-                        ? "border-white/25 bg-white text-black shadow-[0_12px_30px_rgba(255,255,255,0.18)]"
-                        : "border-white/12 bg-white/[0.08] text-white"
-                    }`}
-                  >
-                    <Icon size={21} />
-                  </div>
-                  <span
-                    className={`text-[11px] font-semibold ${
-                      active ? "text-white" : "text-white/70"
-                    }`}
-                  >
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            }
-
+          if (item.isPrimary) {
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                className="flex min-h-[72px] flex-col items-center justify-center gap-1 px-1"
+                className="flex min-h-[68px] flex-col items-center justify-center gap-1 px-1"
               >
-                <Icon
-                  size={20}
-                  className={active ? "text-white" : "text-white/50"}
-                />
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition ${
+                    active
+                      ? "border-white/25 bg-white text-black"
+                      : "border-white/12 bg-white/[0.08] text-white"
+                  }`}
+                >
+                  <Icon size={20} />
+                </div>
                 <span
-                  className={`text-[11px] font-medium ${
-                    active ? "text-white" : "text-white/50"
+                  className={`text-[11px] font-semibold ${
+                    active ? "text-white" : "text-white/70"
                   }`}
                 >
                   {item.label}
                 </span>
               </Link>
             );
-          })}
-        </div>
+          }
+
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="flex min-h-[68px] flex-col items-center justify-center gap-1 px-1"
+            >
+              <Icon
+                size={20}
+                className={active ? "text-white" : "text-white/50"}
+              />
+              <span
+                className={`text-[11px] font-medium ${
+                  active ? "text-white" : "text-white/50"
+                }`}
+              >
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
