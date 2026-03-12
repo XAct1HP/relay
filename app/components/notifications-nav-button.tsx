@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Bell } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -8,12 +9,14 @@ type NotificationsNavButtonProps = {
   userId: string;
   initialUnreadNotificationCount: number;
   initialUnreadConversationCount: number;
+  mobileIconOnly?: boolean;
 };
 
 export default function NotificationsNavButton({
   userId,
   initialUnreadNotificationCount,
   initialUnreadConversationCount,
+  mobileIconOnly = false,
 }: NotificationsNavButtonProps) {
   const supabase = useMemo(() => createClient(), []);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(
@@ -88,6 +91,23 @@ export default function NotificationsNavButton({
   }, [supabase, userId]);
 
   const totalBadgeCount = unreadNotificationCount + unreadConversationCount;
+
+  if (mobileIconOnly) {
+    return (
+      <Link
+        href="/notifications"
+        aria-label="Notifications"
+        className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/10"
+      >
+        <Bell size={18} />
+        {totalBadgeCount >= 1 && (
+          <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+            {totalBadgeCount}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <Link

@@ -26,7 +26,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
         <div className="relative isolate min-h-screen">
           <Navbar />
-          <div className="relative z-10 pb-20 md:pb-0">{children}</div>
+          <div className="relative z-10 pb-24 md:pb-0">{children}</div>
           <MobileBottomNav />
         </div>
       </body>
