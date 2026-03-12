@@ -51,7 +51,12 @@ export default function MobileBottomNav() {
     { href: "/messages", icon: MessageCircle, label: "Messages" },
     { href: "/sell", icon: PlusSquare, label: "Sell" },
     { href: "/orders", icon: Package, label: "Orders" },
-    { href: profileHref, icon: User, label: "Profile", matchPrefix: "/profile/" },
+    {
+      href: profileHref,
+      icon: User,
+      label: "Profile",
+      matchPrefix: "/profile/",
+    },
   ];
 
   return (
@@ -59,10 +64,9 @@ export default function MobileBottomNav() {
       <div className="mx-auto grid h-16 max-w-7xl grid-cols-5">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active =
-            item.matchPrefix
-              ? pathname.startsWith(item.matchPrefix)
-              : pathname.startsWith(item.href);
+          const active = item.matchPrefix
+            ? pathname.startsWith(item.matchPrefix)
+            : pathname.startsWith(item.href);
 
           return (
             <Link
