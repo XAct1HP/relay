@@ -9,26 +9,66 @@ import {
   Package,
   User,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   const [profileHref, setProfileHref] = useState("/onboarding");
+  const [dashboardHref, setDashboardHref] = useState("/dashboard");
+  const [profileLabel, setProfileLabel] = useState("Profile");
+  const [messagesBadgeCount, setMessagesBadgeCount] = useState(0);
+  const [ordersBadgeCount, setOrdersBadgeCount] = useState(0);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  async function refreshBadges(userId: string) {
+    const [{ data: unreadMessages }, { count: unreadNotifications }] =
+      await Promise.all([
+        supabase
+          .from("messages")
+          .select("conversation_id")
+          .is("read_at", null)
+          .neq("sender_id", userId),
+        supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("profile_id", userId)
+          .eq("is_read", false),
+      ]);
+
+    const uniqueConversationIds = new Set(
+      (unreadMessages ?? []).map((row) => row.conversation_id)
+    );
+
+    setMessagesBadgeCount(uniqueConversationIds.size);
+    setOrdersBadgeCount(unreadNotifications ?? 0);
+  }
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadProfileHref() {
+    async function init() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      if (!mounted) return;
+
       if (!user) {
-        if (mounted) setProfileHref("/auth/login");
+        setIsAuthed(false);
+        setProfileHref("/auth/login");
+        setDashboardHref("/auth/login");
+        setProfileLabel("Profile");
+        setMessagesBadgeCount(0);
+        setOrdersBadgeCount(0);
         return;
       }
+
+      setIsAuthed(true);
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -40,88 +80,216 @@ export default function MobileBottomNav() {
 
       if (profile?.username) {
         setProfileHref(`/profile/${profile.username}`);
+        setProfileLabel(`@${profile.username}`);
       } else {
         setProfileHref("/onboarding");
+        setProfileLabel("Profile");
+      }
+
+      setDashboardHref("/dashboard");
+      await refreshBadges(user.id);
+    }
+
+    init();
+
+    const notificationsChannel = supabase
+      .channel("mobile-bottom-nav-notifications")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
+        async () => {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user) await refreshBadges(user.id);
+        }
+      )
+      .subscribe();
+
+    const messagesChannel = supabase
+      .channel("mobile-bottom-nav-messages")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+        },
+        async () => {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user) await refreshBadges(user.id);
+        }
+      )
+      .subscribe();
+
+    function handleOutsideClick(event: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
       }
     }
 
-    loadProfileHref();
+    document.addEventListener("mousedown", handleOutsideClick);
 
     return () => {
       mounted = false;
+      document.removeEventListener("mousedown", handleOutsideClick);
+      supabase.removeChannel(notificationsChannel);
+      supabase.removeChannel(messagesChannel);
     };
   }, [supabase]);
 
   const navItems = [
     { href: "/marketplace", icon: Home, label: "Market" },
-    { href: "/messages", icon: MessageCircle, label: "Messages" },
-    { href: "/sell", icon: PlusSquare, label: "Sell", isPrimary: true },
-    { href: "/orders", icon: Package, label: "Orders" },
     {
-      href: profileHref,
-      icon: User,
-      label: "Profile",
-      matchPrefix: "/profile/",
+      href: "/messages",
+      icon: MessageCircle,
+      label: "Messages",
+      badge: messagesBadgeCount,
+    },
+    { href: "/sell", icon: PlusSquare, label: "Sell", isPrimary: true },
+    {
+      href: "/orders",
+      icon: Package,
+      label: "Orders",
+      badge: ordersBadgeCount,
     },
   ];
 
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
-      <div className="mx-auto grid h-[68px] max-w-7xl grid-cols-5 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = item.matchPrefix
-            ? pathname.startsWith(item.matchPrefix)
-            : pathname.startsWith(item.href);
+  const profileActive = pathname.startsWith("/profile/") || pathname === "/dashboard";
 
-          if (item.isPrimary) {
+  return (
+    <>
+      {profileMenuOpen && (
+        <div className="fixed inset-0 z-[55] bg-black/20 md:hidden" />
+      )}
+
+      <nav className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-[#06070a]/96 backdrop-blur-xl md:hidden">
+        <div className="mx-auto grid h-[70px] max-w-7xl grid-cols-5 px-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = pathname.startsWith(item.href);
+            const badge = item.badge ?? 0;
+
+            if (item.isPrimary) {
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="flex min-h-[70px] flex-col items-center justify-start gap-1 px-1 pt-0.5"
+                >
+                  <div
+                    className={`-mt-3 flex h-13 w-13 items-center justify-center rounded-[1.15rem] border transition ${
+                      active
+                        ? "border-white/25 bg-white text-black"
+                        : "border-white/12 bg-white/[0.08] text-white"
+                    }`}
+                  >
+                    <Icon size={22} />
+                  </div>
+                  <span
+                    className={`text-[11px] font-semibold ${
+                      active ? "text-white" : "text-white/70"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            }
+
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                className="flex min-h-[68px] flex-col items-center justify-center gap-1 px-1"
+                className="relative flex min-h-[70px] flex-col items-center justify-center gap-1 px-1"
               >
-                <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition ${
-                    active
-                      ? "border-white/25 bg-white text-black"
-                      : "border-white/12 bg-white/[0.08] text-white"
-                  }`}
-                >
-                  <Icon size={20} />
+                <div className="relative">
+                  <Icon
+                    size={20}
+                    className={active ? "text-white" : "text-white/50"}
+                  />
+                  {badge >= 1 && (
+                    <span className="absolute -right-2 -top-2 inline-flex min-w-[17px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                      {badge}
+                    </span>
+                  )}
                 </div>
                 <span
-                  className={`text-[11px] font-semibold ${
-                    active ? "text-white" : "text-white/70"
+                  className={`text-[11px] font-medium ${
+                    active ? "text-white" : "text-white/50"
                   }`}
                 >
                   {item.label}
                 </span>
               </Link>
             );
-          }
+          })}
 
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="flex min-h-[68px] flex-col items-center justify-center gap-1 px-1"
+          <div ref={menuRef} className="relative flex min-h-[70px] items-center justify-center">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((prev) => !prev)}
+              className="flex min-h-[70px] w-full flex-col items-center justify-center gap-1 px-1"
             >
-              <Icon
-                size={20}
-                className={active ? "text-white" : "text-white/50"}
-              />
+              <User size={20} className={profileActive ? "text-white" : "text-white/50"} />
               <span
                 className={`text-[11px] font-medium ${
-                  active ? "text-white" : "text-white/50"
+                  profileActive ? "text-white" : "text-white/50"
                 }`}
               >
-                {item.label}
+                Profile
               </span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+            </button>
+
+            {profileMenuOpen && (
+              <div className="absolute bottom-[78px] right-0 w-44 overflow-hidden rounded-2xl border border-white/10 bg-[#0d1017]/98 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+                {isAuthed ? (
+                  <div className="p-2">
+                    <Link
+                      href={profileHref}
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                    >
+                      {profileLabel}
+                    </Link>
+                    <Link
+                      href={dashboardHref}
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                    >
+                      Dashboard
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="p-2">
+                    <Link
+                      href="/auth/login"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                    >
+                      Log In
+                    </Link>
+                    <Link
+                      href="/auth/signup"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </nav>
+    </>
   );
 }
