@@ -186,11 +186,12 @@ export default function MobileBottomNav() {
                 >
                   <div
                     className={`-mt-3 flex h-13 w-13 items-center justify-center rounded-[1.15rem] border transition ${
-                      active
+                        active
                         ? "border-white/25 bg-white text-black"
-                        : "border-white/12 bg-white/[0.08] text-white"
+                        : "border-white/20 bg-[#06070a] text-white"
                     }`}
-                  >
+                    >
+
                     <Icon size={22} />
                   </div>
                   <span
