@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "native-build": "next build && npx cap sync"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
