@@ -17,8 +17,8 @@ export default function MobileBottomNav() {
   const supabase = useMemo(() => createClient(), []);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const [profileHref, setProfileHref] = useState("/onboarding");
-  const [dashboardHref, setDashboardHref] = useState("/dashboard");
+  const [profileHref, setProfileHref] = useState("/auth/login");
+  const [dashboardHref, setDashboardHref] = useState("/auth/login");
   const [profileLabel, setProfileLabel] = useState("Profile");
   const [messagesBadgeCount, setMessagesBadgeCount] = useState(0);
   const [ordersBadgeCount, setOrdersBadgeCount] = useState(0);
@@ -48,49 +48,61 @@ export default function MobileBottomNav() {
     setOrdersBadgeCount(unreadNotifications ?? 0);
   }
 
+  function resetToSignedOutState() {
+    setIsAuthed(false);
+    setProfileHref("/auth/login");
+    setDashboardHref("/auth/login");
+    setProfileLabel("Profile");
+    setMessagesBadgeCount(0);
+    setOrdersBadgeCount(0);
+  }
+
+  async function syncFromSession() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      resetToSignedOutState();
+      return;
+    }
+
+    setIsAuthed(true);
+    setDashboardHref("/dashboard");
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.username) {
+      setProfileHref(`/profile/${profile.username}`);
+      setProfileLabel(`@${profile.username}`);
+    } else {
+      setProfileHref("/onboarding");
+      setProfileLabel("Profile");
+    }
+
+    await refreshBadges(user.id);
+  }
+
   useEffect(() => {
     let mounted = true;
 
     async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (!mounted) return;
-
-      if (!user) {
-        setIsAuthed(false);
-        setProfileHref("/auth/login");
-        setDashboardHref("/auth/login");
-        setProfileLabel("Profile");
-        setMessagesBadgeCount(0);
-        setOrdersBadgeCount(0);
-        return;
-      }
-
-      setIsAuthed(true);
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!mounted) return;
-
-      if (profile?.username) {
-        setProfileHref(`/profile/${profile.username}`);
-        setProfileLabel(`@${profile.username}`);
-      } else {
-        setProfileHref("/onboarding");
-        setProfileLabel("Profile");
-      }
-
-      setDashboardHref("/dashboard");
-      await refreshBadges(user.id);
+      await syncFromSession();
     }
 
     init();
+
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange(async () => {
+      setProfileMenuOpen(false);
+      await syncFromSession();
+    });
 
     const notificationsChannel = supabase
       .channel("mobile-bottom-nav-notifications")
@@ -105,7 +117,11 @@ export default function MobileBottomNav() {
           const {
             data: { user },
           } = await supabase.auth.getUser();
-          if (user) await refreshBadges(user.id);
+          if (user) {
+            await refreshBadges(user.id);
+          } else {
+            setOrdersBadgeCount(0);
+          }
         }
       )
       .subscribe();
@@ -123,7 +139,11 @@ export default function MobileBottomNav() {
           const {
             data: { user },
           } = await supabase.auth.getUser();
-          if (user) await refreshBadges(user.id);
+          if (user) {
+            await refreshBadges(user.id);
+          } else {
+            setMessagesBadgeCount(0);
+          }
         }
       )
       .subscribe();
@@ -140,6 +160,7 @@ export default function MobileBottomNav() {
     return () => {
       mounted = false;
       document.removeEventListener("mousedown", handleOutsideClick);
+      authSubscription.unsubscribe();
       supabase.removeChannel(notificationsChannel);
       supabase.removeChannel(messagesChannel);
     };
@@ -162,7 +183,8 @@ export default function MobileBottomNav() {
     },
   ];
 
-  const profileActive = pathname.startsWith("/profile/") || pathname === "/dashboard";
+  const profileActive =
+    pathname.startsWith("/profile/") || pathname === "/dashboard";
 
   return (
     <>
@@ -185,13 +207,12 @@ export default function MobileBottomNav() {
                   className="flex min-h-[70px] flex-col items-center justify-start gap-1 px-1 pt-0.5"
                 >
                   <div
-                    className={`-mt-3 flex h-13 w-13 items-center justify-center rounded-[1.15rem] border transition ${
-                        active
+                    className={`-mt-3 flex h-[52px] w-[52px] items-center justify-center rounded-[1.15rem] border transition ${
+                      active
                         ? "border-white/25 bg-white text-black"
                         : "border-white/20 bg-[#06070a] text-white"
                     }`}
-                    >
-
+                  >
                     <Icon size={22} />
                   </div>
                   <span
@@ -233,13 +254,19 @@ export default function MobileBottomNav() {
             );
           })}
 
-          <div ref={menuRef} className="relative flex min-h-[70px] items-center justify-center">
+          <div
+            ref={menuRef}
+            className="relative flex min-h-[70px] items-center justify-center"
+          >
             <button
               type="button"
               onClick={() => setProfileMenuOpen((prev) => !prev)}
               className="flex min-h-[70px] w-full flex-col items-center justify-center gap-1 px-1"
             >
-              <User size={20} className={profileActive ? "text-white" : "text-white/50"} />
+              <User
+                size={20}
+                className={profileActive ? "text-white" : "text-white/50"}
+              />
               <span
                 className={`text-[11px] font-medium ${
                   profileActive ? "text-white" : "text-white/50"
@@ -256,14 +283,14 @@ export default function MobileBottomNav() {
                     <Link
                       href={profileHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       {profileLabel}
                     </Link>
                     <Link
                       href={dashboardHref}
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Dashboard
                     </Link>
@@ -273,14 +300,14 @@ export default function MobileBottomNav() {
                     <Link
                       href="/auth/login"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Log In
                     </Link>
                     <Link
                       href="/auth/signup"
                       onClick={() => setProfileMenuOpen(false)}
-                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/8"
+                      className="flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/10"
                     >
                       Sign Up
                     </Link>
