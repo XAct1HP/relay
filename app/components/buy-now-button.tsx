@@ -14,6 +14,7 @@ type BuyNowButtonProps = {
 export default function BuyNowButton({
   listingId,
   sellerId,
+  priceCents,
   status,
 }: BuyNowButtonProps) {
   const supabase = createClient();
@@ -22,7 +23,11 @@ export default function BuyNowButton({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const isAvailable = status === "active";
+
   async function handleBuy() {
+    if (loading || !isAvailable) return;
+
     setLoading(true);
     setMessage("");
 
@@ -51,16 +56,27 @@ export default function BuyNowButton({
   }
 
   return (
-    <div>
+    <div className="w-full sm:w-auto">
       <button
+        type="button"
         onClick={handleBuy}
-        disabled={loading || status !== "active"}
-        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        disabled={loading || !isAvailable}
+        className={`inline-flex min-h-12 w-full items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition sm:min-w-[170px] ${
+          isAvailable
+            ? "bg-white text-black hover:bg-white/90"
+            : "cursor-not-allowed border border-white/10 bg-white/[0.05] text-white/45"
+        } disabled:opacity-100`}
       >
-        {loading ? "Redirecting..." : status === "active" ? "Buy Now" : "Unavailable"}
+        {loading
+          ? "Redirecting..."
+          : isAvailable
+            ? `Buy Now · $${(priceCents / 100).toFixed(2)}`
+            : "Unavailable"}
       </button>
 
-      {message && <p className="mt-3 text-sm text-slate-600">{message}</p>}
+      {message && (
+        <p className="mt-3 text-sm text-white/65 sm:max-w-[260px]">{message}</p>
+      )}
     </div>
   );
 }
