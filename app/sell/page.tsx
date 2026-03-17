@@ -49,45 +49,67 @@ export default function SellPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadShippingProfile() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (!user) {
-        router.push("/auth/login");
-        return;
+        const user = session?.user;
+
+        if (!user) {
+          if (isMounted) {
+            setCheckingProfile(false);
+            router.replace("/auth/login");
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select(
+            "ship_from_name, ship_from_street1, ship_from_city, ship_from_state, ship_from_zip, ship_from_country"
+          )
+          .eq("id", user.id)
+          .single();
+
+        if (!isMounted) return;
+
+        if (error) {
+          setMessage(error.message);
+          setCheckingProfile(false);
+          return;
+        }
+
+        setHasShippingProfile(
+          hasRequiredShippingProfile({
+            ship_from_name: data?.ship_from_name,
+            ship_from_street1: data?.ship_from_street1,
+            ship_from_city: data?.ship_from_city,
+            ship_from_state: data?.ship_from_state,
+            ship_from_zip: data?.ship_from_zip,
+            ship_from_country: data?.ship_from_country,
+          })
+        );
+      } catch (err) {
+        if (!isMounted) return;
+        setMessage(
+          err instanceof Error ? err.message : "Failed to load seller profile."
+        );
+      } finally {
+        if (isMounted) {
+          setCheckingProfile(false);
+        }
       }
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "ship_from_name, ship_from_street1, ship_from_city, ship_from_state, ship_from_zip, ship_from_country"
-        )
-        .eq("id", user.id)
-        .single();
-
-      if (error) {
-        setMessage(error.message);
-        setCheckingProfile(false);
-        return;
-      }
-
-      setHasShippingProfile(
-        hasRequiredShippingProfile({
-          ship_from_name: data?.ship_from_name,
-          ship_from_street1: data?.ship_from_street1,
-          ship_from_city: data?.ship_from_city,
-          ship_from_state: data?.ship_from_state,
-          ship_from_zip: data?.ship_from_zip,
-          ship_from_country: data?.ship_from_country,
-        })
-      );
-
-      setCheckingProfile(false);
     }
 
-    loadShippingProfile();
+    void loadShippingProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router, supabase]);
 
   useEffect(() => {
@@ -95,6 +117,19 @@ export default function SellPage() {
       imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [imagePreviewUrls]);
+
+  async function requireSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      router.replace("/auth/login");
+      throw new Error("Your session expired. Please log in again.");
+    }
+
+    return session.user;
+  }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -140,124 +175,109 @@ export default function SellPage() {
       return;
     }
 
+    if (loading) return;
+
     setLoading(true);
     setMessage("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const user = await requireSession();
 
-    if (!user) {
-      setMessage("You must be logged in to create a listing.");
-      setLoading(false);
-      return;
-    }
+      const parsedPrice = Math.round(Number(price) * 100);
+      const parsedSize = Number(size);
+      const parsedShippingWeightOz = Number(shippingWeightOz);
 
-    const parsedPrice = Math.round(Number(price) * 100);
-    const parsedSize = Number(size);
-    const parsedShippingWeightOz = Number(shippingWeightOz);
-
-    if (!brand.trim() || !model.trim()) {
-      setMessage("Brand and model are required.");
-      setLoading(false);
-      return;
-    }
-
-    if (!parsedPrice || parsedPrice <= 0) {
-      setMessage("Enter a valid price.");
-      setLoading(false);
-      return;
-    }
-
-    if (!parsedSize || parsedSize <= 0) {
-      setMessage("Enter a valid shoe size.");
-      setLoading(false);
-      return;
-    }
-
-    if (!parsedShippingWeightOz || parsedShippingWeightOz <= 0) {
-      setMessage("Choose a valid shipping weight.");
-      setLoading(false);
-      return;
-    }
-
-    if (imageFiles.length === 0) {
-      setMessage("Please choose at least one image.");
-      setLoading(false);
-      return;
-    }
-
-    const uploadedImageUrls: string[] = [];
-
-    for (const file of imageFiles) {
-      const fileExtension = file.name.split(".").pop() || "jpg";
-      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        setMessage(uploadError.message);
-        setLoading(false);
-        return;
+      if (!brand.trim() || !model.trim()) {
+        throw new Error("Brand and model are required.");
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
+      if (!parsedPrice || parsedPrice <= 0) {
+        throw new Error("Enter a valid price.");
+      }
 
-      uploadedImageUrls.push(publicUrlData.publicUrl);
-    }
+      if (!parsedSize || parsedSize <= 0) {
+        throw new Error("Enter a valid shoe size.");
+      }
 
-    const coverImageUrl = uploadedImageUrls[0] ?? null;
+      if (!parsedShippingWeightOz || parsedShippingWeightOz <= 0) {
+        throw new Error("Choose a valid shipping weight.");
+      }
 
-    const { data: listingData, error: listingError } = await supabase
-      .from("listings")
-      .insert({
-        seller_id: user.id,
-        brand: brand.trim(),
-        model: model.trim(),
-        nickname: nickname.trim() || null,
-        size: parsedSize,
-        condition,
-        price_cents: parsedPrice,
-        description: description.trim() || null,
-        cover_image_url: coverImageUrl,
-        shipping_weight_oz: parsedShippingWeightOz,
-        status: "active",
-      })
-      .select("id")
-      .single();
+      if (imageFiles.length === 0) {
+        throw new Error("Please choose at least one image.");
+      }
 
-    if (listingError) {
-      setMessage(listingError.message);
+      const uploadedImageUrls: string[] = [];
+
+      for (const file of imageFiles) {
+        const fileExtension = file.name.split(".").pop() || "jpg";
+        const filePath = `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(filePath);
+
+        uploadedImageUrls.push(publicUrlData.publicUrl);
+      }
+
+      const coverImageUrl = uploadedImageUrls[0] ?? null;
+
+      const { data: listingData, error: listingError } = await supabase
+        .from("listings")
+        .insert({
+          seller_id: user.id,
+          brand: brand.trim(),
+          model: model.trim(),
+          nickname: nickname.trim() || null,
+          size: parsedSize,
+          condition,
+          price_cents: parsedPrice,
+          description: description.trim() || null,
+          cover_image_url: coverImageUrl,
+          shipping_weight_oz: parsedShippingWeightOz,
+          status: "active",
+        })
+        .select("id")
+        .single();
+
+      if (listingError) {
+        throw new Error(listingError.message);
+      }
+
+      const imageRows = uploadedImageUrls.map((url, index) => ({
+        listing_id: listingData.id,
+        image_url: url,
+        sort_order: index,
+      }));
+
+      const { error: imageInsertError } = await supabase
+        .from("listing_images")
+        .insert(imageRows);
+
+      if (imageInsertError) {
+        throw new Error(imageInsertError.message);
+      }
+
+      router.push(`/listings/${listingData.id}`);
+      router.refresh();
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Failed to create listing."
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const imageRows = uploadedImageUrls.map((url, index) => ({
-      listing_id: listingData.id,
-      image_url: url,
-      sort_order: index,
-    }));
-
-    const { error: imageInsertError } = await supabase
-      .from("listing_images")
-      .insert(imageRows);
-
-    if (imageInsertError) {
-      setMessage(imageInsertError.message);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(false);
-    router.push(`/listings/${listingData.id}`);
-    router.refresh();
   }
 
   const inputClassName =

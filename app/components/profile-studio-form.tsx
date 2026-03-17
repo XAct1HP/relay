@@ -142,7 +142,22 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
   const [uploadingAsset, setUploadingAsset] = useState<"avatar" | "banner" | "post" | null>(null);
   const [message, setMessage] = useState("");
 
+  async function requireSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      router.replace("/auth/login");
+      throw new Error("Your session expired. Please log in again.");
+    }
+
+    return session.user;
+  }
+
   async function uploadFile(file: File, bucket: string, folder: string) {
+    await requireSession();
+
     if (!file.type.startsWith("image/")) {
       throw new Error("Only image uploads are supported.");
     }
@@ -169,62 +184,76 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
 
   async function handleAppearanceSubmit(e: FormEvent) {
     e.preventDefault();
+    if (savingAppearance) return;
+
     setSavingAppearance(true);
     setMessage("");
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        display_name: displayName.trim() || null,
-        bio: bio.trim() || null,
-        avatar_url: avatarUrl.trim() || null,
-        banner_url: bannerUrl.trim() || null,
-        theme_background: themeBackground.trim() || "#0b1020",
-        theme_card: themeCard.trim() || "#1a2033",
-        theme_accent: themeAccent.trim() || "#8b5cf6",
-        theme_glow: themeGlow.trim() || "#8b5cf6",
-      })
-      .eq("id", profile.id);
+    try {
+      await requireSession();
 
-    if (error) {
-      setMessage(error.message);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          display_name: displayName.trim() || null,
+          bio: bio.trim() || null,
+          avatar_url: avatarUrl.trim() || null,
+          banner_url: bannerUrl.trim() || null,
+          theme_background: themeBackground.trim() || "#0b1020",
+          theme_card: themeCard.trim() || "#1a2033",
+          theme_accent: themeAccent.trim() || "#8b5cf6",
+          theme_glow: themeGlow.trim() || "#8b5cf6",
+        })
+        .eq("id", profile.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setMessage("Storefront updated.");
+      router.refresh();
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Failed to save storefront."
+      );
+    } finally {
       setSavingAppearance(false);
-      return;
     }
-
-    setSavingAppearance(false);
-    setMessage("Storefront updated.");
-    router.refresh();
   }
 
   async function handleCreatePost(e: FormEvent) {
     e.preventDefault();
+    if (savingPost) return;
+
     setSavingPost(true);
     setMessage("");
 
-    if (!postCaption.trim() && !postImageUrl.trim()) {
-      setMessage("Add a caption or an image to publish a post.");
+    try {
+      await requireSession();
+
+      if (!postCaption.trim() && !postImageUrl.trim()) {
+        throw new Error("Add a caption or an image to publish a post.");
+      }
+
+      const { error } = await supabase.from("seller_posts").insert({
+        profile_id: profile.id,
+        caption: postCaption.trim() || null,
+        image_url: postImageUrl.trim() || null,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setPostCaption("");
+      setPostImageUrl("");
+      setMessage("Post published.");
+      router.refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to publish post.");
+    } finally {
       setSavingPost(false);
-      return;
     }
-
-    const { error } = await supabase.from("seller_posts").insert({
-      profile_id: profile.id,
-      caption: postCaption.trim() || null,
-      image_url: postImageUrl.trim() || null,
-    });
-
-    if (error) {
-      setMessage(error.message);
-      setSavingPost(false);
-      return;
-    }
-
-    setPostCaption("");
-    setPostImageUrl("");
-    setSavingPost(false);
-    setMessage("Post published.");
-    router.refresh();
   }
 
   async function handleDeletePost(postId: string) {
@@ -233,18 +262,23 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
 
     setMessage("");
 
-    const { error } = await supabase
-      .from("seller_posts")
-      .delete()
-      .eq("id", postId)
-      .eq("profile_id", profile.id);
+    try {
+      await requireSession();
 
-    if (error) {
-      setMessage(error.message);
-      return;
+      const { error } = await supabase
+        .from("seller_posts")
+        .delete()
+        .eq("id", postId)
+        .eq("profile_id", profile.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      router.refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to delete post.");
     }
-
-    router.refresh();
   }
 
   async function handleAssetUpload(
@@ -341,7 +375,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 </label>
                 <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                    {uploadingAsset === "avatar" ? "Uploading..." : avatarUrl ? "Replace Avatar" : "Upload Avatar"}
+                    {uploadingAsset === "avatar"
+                      ? "Uploading..."
+                      : avatarUrl
+                        ? "Replace Avatar"
+                        : "Upload Avatar"}
                     <input
                       type="file"
                       accept="image/*"
@@ -361,7 +399,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 </label>
                 <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                    {uploadingAsset === "banner" ? "Uploading..." : bannerUrl ? "Replace Banner" : "Upload Banner"}
+                    {uploadingAsset === "banner"
+                      ? "Uploading..."
+                      : bannerUrl
+                        ? "Replace Banner"
+                        : "Upload Banner"}
                     <input
                       type="file"
                       accept="image/*"
@@ -453,7 +495,11 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
               </label>
               <div className="flex items-center gap-3">
                 <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/12 bg-white/[0.05] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08]">
-                  {uploadingAsset === "post" ? "Uploading..." : postImageUrl ? "Replace Post Image" : "Upload Post Image"}
+                  {uploadingAsset === "post"
+                    ? "Uploading..."
+                    : postImageUrl
+                      ? "Replace Post Image"
+                      : "Upload Post Image"}
                   <input
                     type="file"
                     accept="image/*"
@@ -495,7 +541,10 @@ export default function ProfileStudioForm({ profile, posts }: Props) {
                 <div
                   className="absolute inset-0"
                   style={{
-                    background: `linear-gradient(135deg, ${withAlpha(themeAccent, 0.2)} 0%, rgba(255,255,255,0.06) 35%, rgba(0,0,0,0.1) 100%)`,
+                    background: `linear-gradient(135deg, ${withAlpha(
+                      themeAccent,
+                      0.2
+                    )} 0%, rgba(255,255,255,0.06) 35%, rgba(0,0,0,0.1) 100%)`,
                   }}
                 />
               )}

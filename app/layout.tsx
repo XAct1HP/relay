@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AppShell from "@/app/components/app-shell";
+import AuthSessionSync from "@/app/components/auth-session-sync";
 
 export const metadata: Metadata = {
   title: {
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#06070a] text-white antialiased">
+        <AuthSessionSync />
         <AppShell>{children}</AppShell>
       </body>
     </html>
