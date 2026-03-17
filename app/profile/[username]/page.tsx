@@ -17,13 +17,19 @@ type ProfileRow = {
   bio: string | null;
   avatar_url: string | null;
   banner_url: string | null;
-  accent_color: string | null;
-  background_color: string | null;
-  card_color: string | null;
   average_rating: number | null;
   total_reviews: number | null;
   total_sales: number | null;
   created_at: string;
+
+  accent_color?: string | null;
+  background_color?: string | null;
+  card_color?: string | null;
+
+  theme_background?: string | null;
+  theme_card?: string | null;
+  theme_accent?: string | null;
+  theme_glow?: string | null;
 };
 
 type ReviewRow = {
@@ -32,6 +38,10 @@ type ReviewRow = {
   rating: number;
   comment: string | null;
   created_at: string;
+};
+
+type ReviewRowWithUser = ReviewRow & {
+  reviewerUsername: string;
 };
 
 type PostRow = {
@@ -54,16 +64,45 @@ type ListingRow = {
   created_at: string;
 };
 
-function hexToRgba(hex: string, alpha: number) {
-  const safeHex = hex.replace("#", "").trim();
+function normalizeHex(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("#")) return null;
 
-  if (safeHex.length !== 6) {
+  const hex = trimmed.slice(1);
+
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return `#${hex}`;
+  }
+
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    const expanded = hex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+    return `#${expanded}`;
+  }
+
+  return null;
+}
+
+function isRgbString(value?: string | null) {
+  if (!value) return false;
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.startsWith("rgb(") || trimmed.startsWith("rgba(");
+}
+
+function hexToRgba(hex: string | null | undefined, alpha: number) {
+  const safeHex = normalizeHex(hex);
+
+  if (!safeHex) {
     return `rgba(255,255,255,${alpha})`;
   }
 
-  const r = Number.parseInt(safeHex.slice(0, 2), 16);
-  const g = Number.parseInt(safeHex.slice(2, 4), 16);
-  const b = Number.parseInt(safeHex.slice(4, 6), 16);
+  const raw = safeHex.replace("#", "");
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
 
   if ([r, g, b].some(Number.isNaN)) {
     return `rgba(255,255,255,${alpha})`;
@@ -72,8 +111,76 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function cardBackground(cardColor: string) {
-  return `linear-gradient(180deg, ${hexToRgba(cardColor, 0.6)} 0%, rgba(255,255,255,0.035) 100%)`;
+function getTheme(profile: ProfileRow) {
+  const accent =
+    normalizeHex(profile.theme_accent) ||
+    normalizeHex(profile.accent_color) ||
+    "#7ca6ff";
+
+  const background =
+    normalizeHex(profile.theme_background) ||
+    normalizeHex(profile.background_color) ||
+    "#06070a";
+
+  const rawCard = profile.theme_card?.trim() || profile.card_color?.trim() || null;
+  const cardHex = normalizeHex(rawCard);
+  const cardRgb = isRgbString(rawCard) ? rawCard!.trim() : null;
+  const card = cardRgb || cardHex || "#10131a";
+
+  const glow =
+    (profile.theme_glow?.trim() && isRgbString(profile.theme_glow)
+      ? profile.theme_glow.trim()
+      : null) || hexToRgba(accent, 0.18);
+
+  return {
+    accent,
+    background,
+    card,
+    glow,
+  };
+}
+
+function cardBackground(cardColor: string | null | undefined) {
+  if (!cardColor) {
+    return "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.035) 100%)";
+  }
+
+  if (isRgbString(cardColor)) {
+    return `linear-gradient(180deg, ${cardColor} 0%, rgba(255,255,255,0.035) 100%)`;
+  }
+
+  const safeHex = normalizeHex(cardColor);
+
+  if (!safeHex) {
+    return "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.035) 100%)";
+  }
+
+  return `linear-gradient(180deg, ${hexToRgba(safeHex, 0.6)} 0%, rgba(255,255,255,0.035) 100%)`;
+}
+
+async function getReviews(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profileId: string
+) {
+  const reviewedResult = await supabase
+    .from("reviews")
+    .select("id, reviewer_id, rating, comment, created_at")
+    .eq("reviewed_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (!reviewedResult.error) {
+    return (reviewedResult.data ?? []) as ReviewRow[];
+  }
+
+  const revieweeResult = await supabase
+    .from("reviews")
+    .select("id, reviewer_id, rating, comment, created_at")
+    .eq("reviewee_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  return (revieweeResult.data ?? []) as ReviewRow[];
 }
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
@@ -97,21 +204,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   }
 
   const isOwner = Boolean(user && user.id === profile.id);
+  const theme = getTheme(profile);
 
-  const theme = {
-    accent: profile.accent_color?.trim() || "#7ca6ff",
-    background: profile.background_color?.trim() || "#06070a",
-    card: profile.card_color?.trim() || "#10131a",
-    glow: hexToRgba(profile.accent_color?.trim() || "#7ca6ff", 0.18),
-  };
-
-  const [reviewsResult, postsResult, listingsResult] = await Promise.all([
-    supabase
-      .from("reviews")
-      .select("id, reviewer_id, rating, comment, created_at")
-      .eq("reviewed_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(12),
+  const [reviews, postsResult, listingsResult] = await Promise.all([
+    getReviews(supabase, profile.id),
     supabase
       .from("seller_posts")
       .select("id, caption, image_url, created_at")
@@ -130,11 +226,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
       .limit(12),
   ]);
 
-  const reviews = (reviewsResult.data ?? []) as ReviewRow[];
   const posts = (postsResult.data ?? []) as PostRow[];
   const listings = (listingsResult.data ?? []) as ListingRow[];
 
-  const reviewRows = await Promise.all(
+  const reviewRows: ReviewRowWithUser[] = await Promise.all(
     reviews.map(async (review) => {
       const { data: reviewer } = await supabase
         .from("profiles")

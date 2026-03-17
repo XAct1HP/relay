@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import LogoutButton from "@/app/components/logout-button";
 import { Capacitor } from "@capacitor/core";
-import type { Session } from "@supabase/supabase-js";
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
@@ -17,10 +16,8 @@ export default function MobileBottomNav() {
   const [profileHref, setProfileHref] = useState("/auth/login");
   const [dashboardHref, setDashboardHref] = useState("/auth/login");
   const [profileLabel, setProfileLabel] = useState("Profile");
-
   const [messagesBadgeCount, setMessagesBadgeCount] = useState(0);
   const [ordersBadgeCount, setOrdersBadgeCount] = useState(0);
-
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
 
@@ -34,7 +31,6 @@ export default function MobileBottomNav() {
           .select("conversation_id")
           .is("read_at", null)
           .neq("sender_id", userId),
-
         supabase
           .from("notifications")
           .select("*", { count: "exact", head: true })
@@ -59,55 +55,44 @@ export default function MobileBottomNav() {
     setOrdersBadgeCount(0);
   }
 
-  async function syncFromSession(session: Session | null) {
-    const user = session?.user;
-
-    if (!user) {
-      resetToSignedOutState();
-      return;
-    }
-
-    setIsAuthed(true);
-    setDashboardHref("/dashboard");
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profile?.username) {
-      setProfileHref(`/profile/${profile.username}`);
-      setProfileLabel(`@${profile.username}`);
-    } else {
-      setProfileHref("/onboarding");
-      setProfileLabel("Profile");
-    }
-
-    await refreshBadges(user.id);
-  }
-
   useEffect(() => {
     let mounted = true;
 
     async function init() {
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!mounted) return;
-      await syncFromSession(session);
+
+      if (!user) {
+        resetToSignedOutState();
+        return;
+      }
+
+      setIsAuthed(true);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!mounted) return;
+
+      if (profile?.username) {
+        setProfileHref(`/profile/${profile.username}`);
+        setProfileLabel(`@${profile.username}`);
+      } else {
+        setProfileHref("/onboarding");
+        setProfileLabel("Profile");
+      }
+
+      setDashboardHref("/dashboard");
+      await refreshBadges(user.id);
     }
 
     init();
-
-    const {
-      data: { subscription: authSubscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-      setProfileMenuOpen(false);
-      await syncFromSession(session);
-    });
 
     const notificationsChannel = supabase
       .channel("mobile-bottom-nav-notifications")
@@ -120,12 +105,12 @@ export default function MobileBottomNav() {
         },
         async () => {
           const {
-            data: { session },
-          } = await supabase.auth.getSession();
+            data: { user },
+          } = await supabase.auth.getUser();
 
-          if (session?.user) {
-            await refreshBadges(session.user.id);
-          } else {
+          if (user) {
+            await refreshBadges(user.id);
+          } else if (mounted) {
             setOrdersBadgeCount(0);
           }
         }
@@ -143,12 +128,12 @@ export default function MobileBottomNav() {
         },
         async () => {
           const {
-            data: { session },
-          } = await supabase.auth.getSession();
+            data: { user },
+          } = await supabase.auth.getUser();
 
-          if (session?.user) {
-            await refreshBadges(session.user.id);
-          } else {
+          if (user) {
+            await refreshBadges(user.id);
+          } else if (mounted) {
             setMessagesBadgeCount(0);
           }
         }
@@ -167,7 +152,6 @@ export default function MobileBottomNav() {
     return () => {
       mounted = false;
       document.removeEventListener("mousedown", handleOutsideClick);
-      authSubscription.unsubscribe();
       supabase.removeChannel(notificationsChannel);
       supabase.removeChannel(messagesChannel);
     };
