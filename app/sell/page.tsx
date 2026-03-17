@@ -48,24 +48,28 @@ export default function SellPage() {
   const [hasShippingProfile, setHasShippingProfile] = useState(false);
   const [message, setMessage] = useState("");
 
+  async function requireSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const user = session?.user;
+    if (!user) {
+      throw new Error("Your session expired. Please log in again.");
+    }
+
+    return user;
+  }
+
   useEffect(() => {
-    let isMounted = true;
+    let cancelled = false;
 
     async function loadShippingProfile() {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        setCheckingProfile(true);
+        setMessage("");
 
-        const user = session?.user;
-
-        if (!user) {
-          if (isMounted) {
-            setCheckingProfile(false);
-            router.replace("/auth/login");
-          }
-          return;
-        }
+        const user = await requireSession();
 
         const { data, error } = await supabase
           .from("profiles")
@@ -75,12 +79,10 @@ export default function SellPage() {
           .eq("id", user.id)
           .single();
 
-        if (!isMounted) return;
+        if (cancelled) return;
 
         if (error) {
-          setMessage(error.message);
-          setCheckingProfile(false);
-          return;
+          throw new Error(error.message);
         }
 
         setHasShippingProfile(
@@ -94,12 +96,19 @@ export default function SellPage() {
           })
         );
       } catch (err) {
-        if (!isMounted) return;
-        setMessage(
-          err instanceof Error ? err.message : "Failed to load seller profile."
-        );
+        if (cancelled) return;
+
+        const nextMessage =
+          err instanceof Error ? err.message : "Failed to load seller profile.";
+
+        setHasShippingProfile(false);
+        setMessage(nextMessage);
+
+        if (nextMessage.toLowerCase().includes("session expired")) {
+          router.replace("/auth/login");
+        }
       } finally {
-        if (isMounted) {
+        if (!cancelled) {
           setCheckingProfile(false);
         }
       }
@@ -108,7 +117,7 @@ export default function SellPage() {
     void loadShippingProfile();
 
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [router, supabase]);
 
@@ -117,19 +126,6 @@ export default function SellPage() {
       imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [imagePreviewUrls]);
-
-  async function requireSession() {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.user) {
-      router.replace("/auth/login");
-      throw new Error("Your session expired. Please log in again.");
-    }
-
-    return session.user;
-  }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -272,9 +268,14 @@ export default function SellPage() {
       router.push(`/listings/${listingData.id}`);
       router.refresh();
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "Failed to create listing."
-      );
+      const nextMessage =
+        err instanceof Error ? err.message : "Failed to create listing.";
+
+      setMessage(nextMessage);
+
+      if (nextMessage.toLowerCase().includes("session expired")) {
+        router.replace("/auth/login");
+      }
     } finally {
       setLoading(false);
     }
