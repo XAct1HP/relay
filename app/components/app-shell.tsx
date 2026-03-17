@@ -7,8 +7,9 @@ import PushRegistration from "@/app/components/push-registration";
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="relative isolate min-h-screen">
-      <PushRegistration />
-      
+      {
+      // <PushRegistration /> 
+      }
       <NativeNavbarGuard>
         <Navbar />
       </NativeNavbarGuard>
