@@ -257,7 +257,6 @@ export default function ConversationPage() {
             </Link>
           </div>
         </div>
-      </div>
     );
   }
 
