@@ -69,7 +69,7 @@ export default function FeedPage() {
                   .from("post_likes")
                   .select("id")
                   .eq("post_id", post.id)
-                  .eq("user_id", currentUser.id)
+                  .eq("user_id", currentUser!.id)
                   .single();
                 isLiked = !!likeData;
               }
@@ -128,12 +128,12 @@ export default function FeedPage() {
           .from("post_likes")
           .delete()
           .eq("post_id", postId)
-          .eq("user_id", currentUser.id);
+          .eq("user_id", currentUser!.id);
       } else {
         // Like
         await supabase.from("post_likes").insert({
           post_id: postId,
-          user_id: currentUser.id,
+          user_id: currentUser!.id,
         });
       }
 

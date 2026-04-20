@@ -112,7 +112,7 @@ export default function MyListingsPage() {
         const { data } = await supabase
           .from('listings')
           .select('*')
-          .eq('seller_id', currentUser.id)
+          .eq('seller_id', currentUser!.id)
           .order('created_at', { ascending: false })
 
         if (data) {

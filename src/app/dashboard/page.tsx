@@ -152,7 +152,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const userId = currentUser.id;
+    const userId = currentUser!.id;
     async function fetchDashboardData() {
       const supabase = createClient();
 

@@ -33,7 +33,7 @@ export default function SettingsPage() {
       const { data } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', currentUser.id)
+        .eq('id', currentUser!.id)
         .single()
 
       if (data) {
@@ -42,7 +42,7 @@ export default function SettingsPage() {
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
       }
 
-      setEmail(currentUser.email || '')
+      setEmail(currentUser!.email || '')
       setLoading(false)
     }
 
@@ -67,11 +67,11 @@ export default function SettingsPage() {
 
     try {
       const supabase = createClient()
-      let avatarUrl = currentUser.avatar_url
+      let avatarUrl = currentUser!.avatar_url
 
       if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop()
-        const filePath = `${currentUser.id}/avatar.${fileExt}`
+        const filePath = `${currentUser!.id}/avatar.${fileExt}`
 
         const { error: uploadError } = await supabase.storage
           .from('profile-images')
@@ -128,7 +128,7 @@ export default function SettingsPage() {
     await supabase
       .from('profiles')
       .update({ is_deleted: true })
-      .eq('id', currentUser.id)
+      .eq('id', currentUser!.id)
 
     await supabase.auth.signOut()
   }

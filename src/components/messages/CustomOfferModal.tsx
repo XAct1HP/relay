@@ -43,7 +43,7 @@ export function CustomOfferModal({
       const { data, error } = await supabase
         .from("listings")
         .select("id, brand, model, nickname, sizes")
-        .eq("seller_id", currentUser.id)
+        .eq("seller_id", currentUser!.id)
         .eq("status", "active")
         .order("created_at", { ascending: false });
 
@@ -97,7 +97,7 @@ export function CustomOfferModal({
         .from("custom_offers")
         .insert({
           conversation_id: conversationId,
-          sender_id: currentUser.id,
+          sender_id: currentUser!.id,
           listing_id: selectedListingId,
           size: selectedSize,
           original_price: originalPrice,
@@ -116,7 +116,7 @@ export function CustomOfferModal({
         .from("messages")
         .insert({
           conversation_id: conversationId,
-          sender_id: currentUser.id,
+          sender_id: currentUser!.id,
           content: messageContent,
           message_type: "custom_offer",
           custom_offer_price: offerPriceNum,

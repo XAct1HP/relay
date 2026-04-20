@@ -127,13 +127,13 @@ export default function OrdersPage() {
         const { data: buyingOrders } = await supabase
           .from("orders")
           .select("*, listing:listings(brand, model)")
-          .eq("buyer_id", currentUser.id)
+          .eq("buyer_id", currentUser!.id)
           .order("created_at", { ascending: false })
 
         const { data: sellingOrders } = await supabase
           .from("orders")
           .select("*, listing:listings(brand, model)")
-          .eq("seller_id", currentUser.id)
+          .eq("seller_id", currentUser!.id)
           .order("created_at", { ascending: false })
 
         const formatted: DisplayOrder[] = []

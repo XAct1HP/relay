@@ -447,7 +447,7 @@ export default function MessagesPage() {
       const { data: convos } = await supabase
         .from("conversations")
         .select("*")
-        .contains("participant_ids", [currentUser.id])
+        .contains("participant_ids", [currentUser!.id])
         .order("last_message_at", { ascending: false });
 
       if (!convos) return;
@@ -456,7 +456,7 @@ export default function MessagesPage() {
       const formatted: ConversationData[] = await Promise.all(
         convos.map(async (conv) => {
           // Find the other participant
-          const otherUserId = conv.participant_ids.find((id: string) => id !== currentUser.id);
+          const otherUserId = conv.participant_ids.find((id: string) => id !== currentUser!.id);
 
           let otherUser = null;
           if (otherUserId) {
@@ -618,7 +618,7 @@ export default function MessagesPage() {
     const tempId = `temp-${Date.now()}`;
     const tempMsg: MessageData = {
       id: tempId,
-      sender_id: currentUser.id,
+      sender_id: currentUser!.id,
       content,
       created_at: now,
       message_type: "text",
@@ -642,7 +642,7 @@ export default function MessagesPage() {
       .from("messages")
       .insert({
         conversation_id: conversationId,
-        sender_id: currentUser.id,
+        sender_id: currentUser!.id,
         content,
         message_type: "text",
       })

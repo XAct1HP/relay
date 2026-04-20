@@ -181,7 +181,7 @@ export default function OnboardingPage() {
 
       // Create seller application
       const { error: appError } = await supabase.from('seller_applications').insert({
-        user_id: currentUser.id,
+        user_id: currentUser!.id,
         ship_from_address: formData.ship_from_address,
         questionnaire_responses: formData.questionnaire_responses,
         stripe_connected: true,

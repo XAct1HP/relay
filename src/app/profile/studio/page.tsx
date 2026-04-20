@@ -108,7 +108,7 @@ export default function ProfileStudioPage() {
       const { data } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', currentUser.id)
+        .eq('id', currentUser!.id)
         .single();
 
       if (data) {
@@ -116,7 +116,7 @@ export default function ProfileStudioPage() {
         setShopName(data.shop_name || '');
         setBio(data.bio || '');
         setUsername(data.username || '');
-        setEmail(currentUser.email || '');
+        setEmail(currentUser!.email || '');
         if (data.profile_theme) setSelectedTheme(data.profile_theme);
         if (data.avatar_url) setAvatarPreview(data.avatar_url);
         if (data.profile_banner_url) setBannerPreview(data.profile_banner_url);
@@ -209,7 +209,7 @@ export default function ProfileStudioPage() {
       // Upload banner if changed (data URL means it's a new local file)
       if (bannerPreview && bannerPreview.startsWith('data:')) {
         const bannerBlob = await fetch(bannerPreview).then((r) => r.blob());
-        const bannerPath = `${currentUser.id}/banner-${Date.now()}.jpg`;
+        const bannerPath = `${currentUser!.id}/banner-${Date.now()}.jpg`;
         const { error: bannerError } = await supabase.storage
           .from('profile-images')
           .upload(bannerPath, bannerBlob, { upsert: true });
@@ -226,7 +226,7 @@ export default function ProfileStudioPage() {
       // Upload avatar if changed
       if (avatarPreview && avatarPreview.startsWith('data:')) {
         const avatarBlob = await fetch(avatarPreview).then((r) => r.blob());
-        const avatarPath = `${currentUser.id}/avatar-${Date.now()}.jpg`;
+        const avatarPath = `${currentUser!.id}/avatar-${Date.now()}.jpg`;
         const { error: avatarError } = await supabase.storage
           .from('profile-images')
           .upload(avatarPath, avatarBlob, { upsert: true });
@@ -244,7 +244,7 @@ export default function ProfileStudioPage() {
       const { error } = await supabase
         .from('profiles')
         .update(profileUpdates)
-        .eq('id', currentUser.id);
+        .eq('id', currentUser!.id);
 
       if (error) throw error;
 
@@ -269,7 +269,7 @@ export default function ProfileStudioPage() {
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', currentUser.id)
+      .eq('id', currentUser!.id)
       .single();
 
     if (data) {

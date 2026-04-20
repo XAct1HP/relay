@@ -156,7 +156,7 @@ const useAuthStore = create<AuthState>((set) => ({
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
-        .eq('id', currentUser.id)
+        .eq('id', currentUser!.id)
         .select()
         .single();
 

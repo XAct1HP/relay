@@ -183,7 +183,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       return;
     }
 
-    if (currentUser.id === profile.id) {
+    if (currentUser!.id === profile.id) {
       alert("You can't message yourself!");
       return;
     }
@@ -196,7 +196,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       const { data: existingConvos } = await supabase
         .from('conversations')
         .select('*')
-        .contains('participant_ids', [currentUser.id, profile.id]);
+        .contains('participant_ids', [currentUser!.id, profile.id]);
 
       if (existingConvos && existingConvos.length > 0) {
         router.push('/messages');
@@ -207,7 +207,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       const { error } = await supabase
         .from('conversations')
         .insert({
-          participant_ids: [currentUser.id, profile.id],
+          participant_ids: [currentUser!.id, profile.id],
           listing_id: null,
           last_message: null,
           last_message_at: new Date().toISOString(),

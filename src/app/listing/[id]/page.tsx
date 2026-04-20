@@ -153,7 +153,7 @@ export default function ListingDetailPage({
       return;
     }
 
-    if (currentUser.id === sellerId) {
+    if (currentUser!.id === sellerId) {
       alert("You can't message yourself!");
       return;
     }
@@ -166,7 +166,7 @@ export default function ListingDetailPage({
       const { data: existingConvos } = await supabase
         .from("conversations")
         .select("*")
-        .contains("participant_ids", [currentUser.id, sellerId])
+        .contains("participant_ids", [currentUser!.id, sellerId])
         .eq("listing_id", params.id);
 
       if (existingConvos && existingConvos.length > 0) {
@@ -178,7 +178,7 @@ export default function ListingDetailPage({
       const { error } = await supabase
         .from("conversations")
         .insert({
-          participant_ids: [currentUser.id, sellerId],
+          participant_ids: [currentUser!.id, sellerId],
           listing_id: params.id,
           last_message: null,
           last_message_at: new Date().toISOString(),

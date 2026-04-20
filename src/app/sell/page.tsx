@@ -160,7 +160,7 @@ export default function SellPage() {
       // Upload photos to storage
       const imageUrls: string[] = [];
       for (const photo of photos) {
-        const fileName = `${currentUser.id}/${Date.now()}-${photo.id}.jpg`;
+        const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.jpg`;
         const { error: uploadError } = await supabase.storage
           .from("listing-images")
           .upload(fileName, photo.file);
@@ -181,7 +181,7 @@ export default function SellPage() {
       const { data, error } = await supabase
         .from("listings")
         .insert({
-          seller_id: currentUser.id,
+          seller_id: currentUser!.id,
           brand,
           model: modelName,
           nickname: nickname || null,

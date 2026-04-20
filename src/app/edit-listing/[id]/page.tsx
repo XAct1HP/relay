@@ -102,7 +102,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/") || existingImages.length >= 10) continue;
 
-      const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+      const fileName = `${currentUser!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("listing-images")
         .upload(fileName, file);
@@ -143,7 +143,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
           })),
         })
         .eq("id", params.id)
-        .eq("seller_id", currentUser.id);
+        .eq("seller_id", currentUser!.id);
 
       if (error) throw error;
 
