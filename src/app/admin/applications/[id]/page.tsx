@@ -146,6 +146,7 @@ export default function ApplicationDetailPage() {
   }, [applicationId]);
 
   const handleApprove = async () => {
+    if (!app) return;
     const supabase = createClient();
 
     await supabase
@@ -163,6 +164,7 @@ export default function ApplicationDetailPage() {
   };
 
   const handleReject = async () => {
+    if (!app) return;
     const supabase = createClient();
 
     await supabase
@@ -423,6 +425,12 @@ export default function ApplicationDetailPage() {
         type="reject"
         onConfirm={handleReject}
         onCancel={() => setModalState("none")}
+      />
+    </div>
+  );
+}
+
+alState("none")}
       />
     </div>
   );

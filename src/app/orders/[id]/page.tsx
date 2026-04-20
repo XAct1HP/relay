@@ -351,7 +351,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   }, [params.id, currentUser?.id])
 
   const handleCopyTracking = () => {
-    if (order.trackingNumber) {
+    if (order?.trackingNumber) {
       navigator.clipboard.writeText(order.trackingNumber)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)

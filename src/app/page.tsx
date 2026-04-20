@@ -41,13 +41,14 @@ function useInView(ref: React.RefObject<HTMLElement>, options = {}) {
 }
 
 // Animated reveal component
-function RevealSection({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function RevealSection({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   const ref = useRef(null);
   const isInView = useInView(ref);
 
   return (
     <div
       ref={ref}
+      style={style}
       className={`transition-all duration-700 ${
         isInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       } ${className}`}
