@@ -845,7 +845,3 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     </div>
   )
 }
-it} />}
-    </div>
-  )
-}
