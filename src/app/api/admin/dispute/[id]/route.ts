@@ -90,7 +90,7 @@ export async function PATCH(
       )
     }
 
-    const order = dispute.orders
+    const order = Array.isArray(dispute.orders) ? dispute.orders[0] : dispute.orders
 
     if (ruling === 'buyer') {
       // Refund the buyer
