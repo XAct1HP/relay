@@ -1,9 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase"
-import { useAuth } from "@/hooks/useAuth"
 import {
   Camera,
   CheckCircle2,
@@ -15,7 +14,7 @@ import {
   X,
   FileText,
   Package,
-  Copy,
+  Lock,
   Check,
 } from "lucide-react"
 
@@ -70,23 +69,25 @@ const AUTH_STEPS = [
   },
 ]
 
-type PageState = "loading" | "ready" | "capturing" | "review" | "certificate" | "submitting" | "done" | "error"
+type PageState = "loading" | "verify" | "ready" | "capturing" | "review" | "certificate" | "submitting" | "done" | "error"
 
 export default function MobileAuthPage() {
   const params = useParams()
-  const router = useRouter()
   const orderId = params.orderId as string
-  const { currentUser } = useAuth()
 
   const [pageState, setPageState] = useState<PageState>("loading")
   const [error, setError] = useState<string | null>(null)
   const [order, setOrder] = useState<any>(null)
 
+  // Challenge code verification
+  const [codeInput, setCodeInput] = useState("")
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
   // Photo capture state
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, Blob>>({})
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
-  const [uploadedUrls, setUploadedUrls] = useState<Record<string, string>>({})
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -100,9 +101,6 @@ export default function MobileAuthPage() {
   const [certificateUploading, setCertificateUploading] = useState(false)
   const certInputRef = useRef<HTMLInputElement>(null)
 
-  // Copy challenge code
-  const [copied, setCopied] = useState(false)
-
   // Submitting
   const [uploadProgress, setUploadProgress] = useState(0)
 
@@ -110,7 +108,7 @@ export default function MobileAuthPage() {
   const totalSteps = AUTH_STEPS.length
   const completedCount = Object.keys(capturedPhotos).length
 
-  // ── Load order data ──
+  // ── Load order (minimal info, no auth required) ──
   useEffect(() => {
     async function loadOrder() {
       if (!orderId) return
@@ -118,12 +116,12 @@ export default function MobileAuthPage() {
       const supabase = createClient()
       const { data, error: fetchError } = await supabase
         .from("orders")
-        .select("id, seller_id, status, challenge_code, listing_id, listings(brand, model)")
+        .select("id, status, listing_id, listings(brand, model)")
         .eq("id", orderId)
         .single()
 
       if (fetchError || !data) {
-        setError("Order not found. Make sure you're logged in and have the right link.")
+        setError("Order not found. Please check the link and try again.")
         setPageState("error")
         return
       }
@@ -135,24 +133,48 @@ export default function MobileAuthPage() {
       }
 
       setOrder(data)
-      setPageState("ready")
+      setPageState("verify")
     }
 
     loadOrder()
   }, [orderId])
 
-  // ── Check seller identity once user loads ──
-  useEffect(() => {
-    if (order && currentUser && order.seller_id !== currentUser.id) {
-      setError("Only the seller can authenticate this order.")
-      setPageState("error")
+  // ── Verify challenge code ──
+  const handleVerifyCode = async () => {
+    if (!codeInput.trim()) {
+      setCodeError("Please enter the challenge code.")
+      return
     }
-  }, [order, currentUser])
+
+    setVerifying(true)
+    setCodeError(null)
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/verify-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeCode: codeInput.trim() }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setCodeError(data.error || "Invalid challenge code.")
+        return
+      }
+
+      // Code is valid — proceed to ready state
+      setPageState("ready")
+    } catch (err) {
+      setCodeError("Something went wrong. Please try again.")
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   // ── Camera management ──
   const startCamera = useCallback(async () => {
     try {
-      // Stop any existing stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop())
       }
@@ -188,20 +210,15 @@ export default function MobileAuthPage() {
     setCameraReady(false)
   }, [])
 
-  // Start camera when entering capture mode
   useEffect(() => {
     if (pageState === "capturing") {
       startCamera()
     } else {
       stopCamera()
     }
-
-    return () => {
-      stopCamera()
-    }
+    return () => { stopCamera() }
   }, [pageState, startCamera, stopCamera])
 
-  // Restart camera when switching facing mode
   useEffect(() => {
     if (pageState === "capturing") {
       startCamera()
@@ -230,12 +247,10 @@ export default function MobileAuthPage() {
 
         setCapturedPhotos((prev) => ({ ...prev, [currentStep.id]: blob }))
         setPhotoUrls((prev) => {
-          // Revoke old URL
           if (prev[currentStep.id]) URL.revokeObjectURL(prev[currentStep.id])
           return { ...prev, [currentStep.id]: previewUrl }
         })
 
-        // Move to review state for this photo
         setPageState("review")
       },
       "image/jpeg",
@@ -269,7 +284,6 @@ export default function MobileAuthPage() {
       setCurrentStepIndex((prev) => prev + 1)
       setPageState("capturing")
     } else {
-      // All photos taken — move to certificate upload
       stopCamera()
       setPageState("certificate")
     }
@@ -315,7 +329,6 @@ export default function MobileAuthPage() {
       const supabase = createClient()
       const urls: string[] = []
 
-      // Upload each captured photo
       for (let i = 0; i < AUTH_STEPS.length; i++) {
         const step = AUTH_STEPS[i]
         const blob = capturedPhotos[step.id]
@@ -341,13 +354,14 @@ export default function MobileAuthPage() {
         setUploadProgress(Math.round(((i + 1) / AUTH_STEPS.length) * 100))
       }
 
-      // Submit to API
+      // Submit via challenge-code-authenticated endpoint
       const res = await fetch(`/api/orders/${order.id}/auth-submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           authPhotos: urls,
           checkcheckCertificateUrl: certificateUrl,
+          challengeCode: codeInput.trim(),
         }),
       })
 
@@ -364,20 +378,12 @@ export default function MobileAuthPage() {
     }
   }
 
-  // ── Copy challenge code ──
-  const handleCopyCode = () => {
-    if (order?.challenge_code) {
-      navigator.clipboard.writeText(order.challenge_code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   // ── Cleanup blob URLs on unmount ──
   useEffect(() => {
     return () => {
       Object.values(photoUrls).forEach((url) => URL.revokeObjectURL(url))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ════════════════════════════════════
@@ -388,7 +394,7 @@ export default function MobileAuthPage() {
       <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-10 h-10 animate-spin text-[#5f8fff] mx-auto mb-4" />
-          <p className="text-white/50">Loading order...</p>
+          <p className="text-white/50">Loading...</p>
         </div>
       </div>
     )
@@ -404,12 +410,78 @@ export default function MobileAuthPage() {
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <h1 className="text-lg font-semibold text-[#f5f7fb] mb-2">Something went wrong</h1>
           <p className="text-sm text-white/50 mb-6">{error}</p>
-          <button
-            onClick={() => router.push("/orders")}
-            className="relay-button-secondary px-6 py-2"
-          >
-            Go to Orders
-          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════════
+  // RENDER: Challenge Code Verification
+  // ════════════════════════════════════
+  if (pageState === "verify") {
+    const listing = order?.listings
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
+        <div className="max-w-sm w-full space-y-6">
+          {/* Header */}
+          <div className="text-center">
+            <Lock className="w-10 h-10 text-[#5f8fff] mx-auto mb-3" />
+            <h1 className="text-xl font-bold text-[#f5f7fb]">Enter Challenge Code</h1>
+            <p className="text-sm text-white/50 mt-2">
+              Enter the challenge code shown on your order page to continue.
+            </p>
+            {listing && (
+              <p className="text-xs text-white/30 mt-2">
+                {listing.brand} {listing.model}
+              </p>
+            )}
+          </div>
+
+          {/* Code Input */}
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(e) => {
+                setCodeInput(e.target.value.toUpperCase())
+                setCodeError(null)
+              }}
+              placeholder="Enter code..."
+              autoFocus
+              autoComplete="off"
+              className="w-full text-center text-2xl font-mono font-bold tracking-[0.3em] bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-[#f5f7fb] placeholder:text-white/20 focus:outline-none focus:border-[#5f8fff]/50 focus:ring-1 focus:ring-[#5f8fff]/30 transition-all"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleVerifyCode()
+              }}
+            />
+
+            {codeError && (
+              <p className="text-sm text-red-400 text-center">{codeError}</p>
+            )}
+
+            <button
+              onClick={handleVerifyCode}
+              disabled={verifying || !codeInput.trim()}
+              className="relay-button-primary w-full py-4 text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {verifying ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-5 h-5" />
+                  Continue
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Help text */}
+          <p className="text-xs text-white/30 text-center">
+            The challenge code is displayed on the order details page on your computer.
+          </p>
         </div>
       </div>
     )
@@ -427,12 +499,6 @@ export default function MobileAuthPage() {
           <p className="text-sm text-white/50 mb-6">
             Your photos have been uploaded. You can now go back to your computer to generate the shipping label.
           </p>
-          <button
-            onClick={() => router.push(`/orders/${orderId}`)}
-            className="relay-button-primary px-6 py-3 w-full"
-          >
-            View Order
-          </button>
         </div>
       </div>
     )
@@ -455,28 +521,9 @@ export default function MobileAuthPage() {
             </p>
           </div>
 
-          {/* Challenge Code */}
-          <div className="bg-white/5 border border-[#5f8fff]/30 rounded-xl p-5">
-            <p className="text-xs font-medium text-[#7ca6ff] mb-2 uppercase tracking-wider">Your Challenge Code</p>
-            <div className="flex items-center gap-3">
-              <code className="text-2xl font-bold text-[#f5f7fb] font-mono tracking-widest flex-1">
-                {order?.challenge_code || "N/A"}
-              </code>
-              <button
-                onClick={handleCopyCode}
-                className="p-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors"
-              >
-                {copied ? <Check className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5 text-[#7ca6ff]" />}
-              </button>
-            </div>
-            <p className="text-xs text-white/40 mt-3">
-              Write this code on paper. You&apos;ll need to include it in one of your photos.
-            </p>
-          </div>
-
           {/* Instructions */}
           <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-[#f5f7fb]">What you&apos;ll need to do:</h2>
+            <h2 className="text-sm font-semibold text-[#f5f7fb]">You&apos;ll take {totalSteps} photos:</h2>
             <ol className="text-sm text-white/60 space-y-2">
               {AUTH_STEPS.map((step, i) => (
                 <li key={step.id} className="flex gap-2">
@@ -494,9 +541,9 @@ export default function MobileAuthPage() {
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
             <p className="text-sm text-amber-300 font-medium mb-1">Important</p>
             <ul className="text-xs text-amber-200/70 space-y-1">
-              <li>• All photos must be taken live — no uploads allowed.</li>
-              <li>• The CheckCheck certificate must be printed and placed inside the shipment box.</li>
-              <li>• Make sure the challenge code is clearly visible when required.</li>
+              <li>All photos must be taken live — no uploads allowed.</li>
+              <li>The CheckCheck certificate must be printed and placed inside the shipment box.</li>
+              <li>Make sure the challenge code is clearly visible when required.</li>
             </ul>
           </div>
 
@@ -530,7 +577,6 @@ export default function MobileAuthPage() {
               if (currentStepIndex === 0 && Object.keys(capturedPhotos).length === 0) {
                 setPageState("ready")
               } else {
-                // Go back to previous step or certificate if all taken
                 setPageState("certificate")
               }
             }}
@@ -542,7 +588,7 @@ export default function MobileAuthPage() {
             <p className="text-xs text-white/50">Step {currentStepIndex + 1} of {totalSteps}</p>
             <p className="text-sm font-semibold text-white">{currentStep?.label}</p>
           </div>
-          <div className="w-9" /> {/* spacer */}
+          <div className="w-9" />
         </div>
 
         {/* Progress bar */}
@@ -564,14 +610,13 @@ export default function MobileAuthPage() {
           />
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Camera not ready overlay */}
           {!cameraReady && (
             <div className="absolute inset-0 flex items-center justify-center bg-black">
               <Loader2 className="w-8 h-8 animate-spin text-[#5f8fff]" />
             </div>
           )}
 
-          {/* Instruction overlay at bottom */}
+          {/* Instruction overlay */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-16 pb-6 px-4">
             <p className="text-sm text-white/90 text-center mb-1">{currentStep?.instruction}</p>
             <p className="text-xs text-white/50 text-center">{currentStep?.tip}</p>
@@ -580,7 +625,6 @@ export default function MobileAuthPage() {
 
         {/* Capture controls */}
         <div className="bg-black px-6 py-6 flex items-center justify-center gap-8">
-          {/* Flip camera */}
           <button
             onClick={() => setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))}
             className="p-3 rounded-full bg-white/10"
@@ -588,17 +632,15 @@ export default function MobileAuthPage() {
             <RotateCcw className="w-5 h-5 text-white" />
           </button>
 
-          {/* Capture button */}
           <button
             onClick={capturePhoto}
             disabled={!cameraReady}
             className="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-30"
             style={{ width: 72, height: 72 }}
           >
-            <div className="w-14 h-14 rounded-full bg-white" style={{ width: 56, height: 56 }} />
+            <div className="rounded-full bg-white" style={{ width: 56, height: 56 }} />
           </button>
 
-          {/* Photo count */}
           <div className="p-3 rounded-full bg-white/10 text-center min-w-[44px]">
             <p className="text-xs font-bold text-white">{completedCount}/{totalSteps}</p>
           </div>
@@ -615,7 +657,6 @@ export default function MobileAuthPage() {
 
     return (
       <div className="min-h-screen bg-black flex flex-col">
-        {/* Top bar */}
         <div className="bg-black/80 backdrop-blur-sm px-4 py-3 flex items-center justify-between z-10">
           <div className="w-9" />
           <div className="text-center">
@@ -625,7 +666,6 @@ export default function MobileAuthPage() {
           <div className="w-9" />
         </div>
 
-        {/* Photo preview */}
         <div className="flex-1 relative overflow-hidden">
           {previewUrl && (
             <img
@@ -636,7 +676,6 @@ export default function MobileAuthPage() {
           )}
         </div>
 
-        {/* Actions */}
         <div className="bg-black px-6 py-6 flex items-center justify-center gap-4">
           <button
             onClick={retakePhoto}
@@ -697,7 +736,6 @@ export default function MobileAuthPage() {
                   key={step.id}
                   onClick={() => {
                     if (!isTaken || pageState === "submitting") return
-                    // Allow retaking a specific photo
                     setCurrentStepIndex(i)
                     setPageState("capturing")
                   }}
@@ -727,11 +765,10 @@ export default function MobileAuthPage() {
             })}
           </div>
 
-          {/* Retake missing photos */}
+          {/* Continue taking photos if some are missing */}
           {!allPhotosTaken && (
             <button
               onClick={() => {
-                // Find first missing photo
                 const missingIdx = AUTH_STEPS.findIndex((s) => !capturedPhotos[s.id])
                 if (missingIdx >= 0) {
                   setCurrentStepIndex(missingIdx)
