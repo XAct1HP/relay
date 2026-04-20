@@ -397,11 +397,3 @@ export default function ConversationPage() {
     </div>
   );
 }
-erSent={(_convId: string, _offerMessage: any) => {
-            setShowOfferModal(false);
-          }}
-        />
-      )}
-    </div>
-  );
-}

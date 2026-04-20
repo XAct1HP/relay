@@ -429,9 +429,3 @@ export default function ApplicationDetailPage() {
     </div>
   );
 }
-
-alState("none")}
-      />
-    </div>
-  );
-}

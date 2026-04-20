@@ -213,6 +213,3 @@ export default function ListingsPage() {
       </div>
   );
 }
-v>
-  );
-}
