@@ -416,76 +416,145 @@ export default function MobileAuthPage() {
   if (pageState === "verify") {
     const listing = order?.listing
     return (
-      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-16 pb-8 overflow-y-auto">
-        <div className="max-w-sm w-full mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-[#5f8fff]/10 border border-[#5f8fff]/20 flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-7 h-7 text-[#5f8fff]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[#f5f7fb]">Relay Authentication</h1>
-            {listing && (
-              <p className="text-sm text-white/40 mt-2">
-                {listing.brand} {listing.model}
-              </p>
-            )}
-            <p className="text-sm text-white/50 mt-3 leading-relaxed">
-              Enter the challenge code from your order page to verify your identity.
+      <div
+        className="bg-[#0a0a0f] px-6 pb-6"
+        style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}
+      >
+        {/* Spacer — pushes content down a bit but collapses when keyboard opens */}
+        <div style={{ flex: "1 1 60px", maxHeight: 80 }} />
+
+        {/* Header — compact */}
+        <div className="text-center mb-6">
+          <Lock style={{ width: 28, height: 28, color: "#5f8fff", margin: "0 auto 12px" }} />
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f5f7fb", margin: 0 }}>
+            Relay Authentication
+          </h1>
+          {listing && (
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
+              {listing.brand} {listing.model}
             </p>
-          </div>
-
-          {/* Code Input */}
-          <div className="space-y-4 mb-6">
-            <label className="block text-xs font-medium text-white/40 uppercase tracking-wider text-center">
-              Challenge Code
-            </label>
-            <input
-              type="text"
-              inputMode="text"
-              value={codeInput}
-              onChange={(e) => {
-                setCodeInput(e.target.value.toUpperCase())
-                setCodeError(null)
-              }}
-              placeholder="ABC123"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              className="w-full text-center text-3xl font-mono font-bold tracking-[0.35em] bg-white/5 border-2 border-white/10 rounded-2xl px-4 py-5 text-[#f5f7fb] placeholder:text-white/15 focus:outline-none focus:border-[#5f8fff]/60 focus:bg-white/[0.07] transition-all"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleVerifyCode()
-              }}
-            />
-
-            {codeError && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-center">
-                <p className="text-sm text-red-400">{codeError}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Continue button */}
-          <button
-            onClick={handleVerifyCode}
-            disabled={verifying || !codeInput.trim()}
-            className="w-full rounded-2xl bg-white px-5 py-4 text-base font-semibold text-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:active:scale-100"
-          >
-            {verifying ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              "Continue"
-            )}
-          </button>
-
-          {/* Help text */}
-          <p className="text-xs text-white/25 text-center mt-6 leading-relaxed">
-            Open the order on your computer and look for the challenge code in the authentication section.
-          </p>
+          )}
         </div>
+
+        {/* Code Input — high contrast, impossible to miss */}
+        <div className="mb-5">
+          <label
+            style={{
+              display: "block",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "rgba(255,255,255,0.5)",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              marginBottom: 8,
+              textAlign: "center",
+            }}
+          >
+            Enter Challenge Code
+          </label>
+          <input
+            type="text"
+            inputMode="text"
+            value={codeInput}
+            onChange={(e) => {
+              setCodeInput(e.target.value.toUpperCase())
+              setCodeError(null)
+            }}
+            placeholder="ABC123"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            style={{
+              width: "100%",
+              textAlign: "center",
+              fontSize: 28,
+              fontFamily: "monospace",
+              fontWeight: 700,
+              letterSpacing: "0.3em",
+              padding: "18px 16px",
+              borderRadius: 16,
+              border: "2px solid rgba(255,255,255,0.25)",
+              backgroundColor: "rgba(255,255,255,0.08)",
+              color: "#f5f7fb",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "#5f8fff"
+              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.12)"
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"
+              e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)"
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleVerifyCode()
+            }}
+          />
+        </div>
+
+        {/* Error */}
+        {codeError && (
+          <div
+            style={{
+              backgroundColor: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 12,
+              padding: "10px 14px",
+              marginBottom: 16,
+              textAlign: "center",
+            }}
+          >
+            <p style={{ fontSize: 14, color: "#f87171", margin: 0 }}>{codeError}</p>
+          </div>
+        )}
+
+        {/* Continue button — always visible */}
+        <button
+          onClick={handleVerifyCode}
+          disabled={verifying || !codeInput.trim()}
+          style={{
+            width: "100%",
+            padding: "16px 20px",
+            borderRadius: 16,
+            border: "none",
+            backgroundColor: verifying || !codeInput.trim() ? "rgba(255,255,255,0.3)" : "#ffffff",
+            color: "#000000",
+            fontSize: 16,
+            fontWeight: 600,
+            cursor: verifying || !codeInput.trim() ? "default" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
+          {verifying ? (
+            <>
+              <Loader2 style={{ width: 20, height: 20, animation: "spin 1s linear infinite" }} />
+              Verifying...
+            </>
+          ) : (
+            "Continue"
+          )}
+        </button>
+
+        {/* Help text */}
+        <p
+          style={{
+            fontSize: 12,
+            color: "rgba(255,255,255,0.25)",
+            textAlign: "center",
+            marginTop: 20,
+            lineHeight: 1.5,
+          }}
+        >
+          Find the code on the order page on your computer.
+        </p>
+
+        {/* Bottom spacer */}
+        <div style={{ flex: "1 1 40px" }} />
       </div>
     )
   }
