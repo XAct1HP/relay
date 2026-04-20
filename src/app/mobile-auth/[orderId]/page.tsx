@@ -30,6 +30,8 @@ const pageBase: React.CSSProperties = {
   color: TEXT,
   margin: 0,
   padding: 0,
+  position: "relative",
+  zIndex: 1,
   WebkitTextSizeAdjust: "100%",
 }
 
@@ -326,7 +328,7 @@ export default function MobileAuthPage() {
   // CAPTURING
   if (pageState === "capturing") {
     return (
-      <div style={{ position: "fixed", inset: 0, backgroundColor: "#000000", display: "flex", flexDirection: "column", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 10, backgroundColor: "#000000", display: "flex", flexDirection: "column", fontFamily: "system-ui, -apple-system, sans-serif" }}>
         <div style={{ backgroundColor: "rgba(0,0,0,0.8)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 10 }}>
           <button
             onClick={() => { stopCamera(); if (currentStepIndex === 0 && completedCount === 0) setPageState("ready"); else setPageState("certificate") }}
@@ -371,7 +373,7 @@ export default function MobileAuthPage() {
   if (pageState === "review" && currentStep) {
     const previewUrl = photoUrls[currentStep.id]
     return (
-      <div style={{ position: "fixed", inset: 0, backgroundColor: "#000", display: "flex", flexDirection: "column", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 10, backgroundColor: "#000", display: "flex", flexDirection: "column", fontFamily: "system-ui, -apple-system, sans-serif" }}>
         <div style={{ backgroundColor: "rgba(0,0,0,0.8)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 10 }}>
           <div style={{ width: 36 }}>{" "}</div>
           <div style={{ textAlign: "center" }}>
