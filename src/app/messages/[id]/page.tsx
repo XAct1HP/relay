@@ -382,7 +382,6 @@ export default function ConversationPage() {
             Send Custom Offer
           </button>
         </div>
-      </div>
 
       {/* Custom Offer Modal */}
       {showOfferModal && (
