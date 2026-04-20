@@ -1,16 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { isLoading, fetchUser } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
+
+  // Mobile-auth is a fully public route - skip auth loading entirely
+  const isMobileAuth = pathname.startsWith("/mobile-auth");
 
   useEffect(() => {
     setMounted(true);
-    fetchUser();
-  }, [fetchUser]);
+    if (!isMobileAuth) {
+      fetchUser();
+    }
+  }, [fetchUser, isMobileAuth]);
+
+  // Never block rendering for mobile-auth routes
+  if (isMobileAuth) {
+    return <>{children}</>;
+  }
 
   if (!mounted || isLoading) {
     return (
