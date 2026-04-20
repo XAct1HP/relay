@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase'
 import { Clock, CheckCircle, XCircle } from 'lucide-react'
 
 export default function SettingsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { currentUser, updateProfile } = useAuth()
   const [avatar, setAvatar] = useState('')
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -21,9 +24,19 @@ export default function SettingsPage() {
     promotions: false,
   })
   const [stripeConnected, setStripeConnected] = useState(false)
+  const [stripeLoading, setStripeLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sellerApplicationStatus, setSellerApplicationStatus] = useState<string | null>(null)
+
+  // Handle return from Stripe onboarding
+  useEffect(() => {
+    if (searchParams.get('stripe_onboarded') === 'true') {
+      setStripeConnected(true)
+      // Clean up URL params
+      router.replace('/settings', { scroll: false })
+    }
+  }, [searchParams, router])
 
   useEffect(() => {
     async function loadProfile() {
@@ -40,6 +53,10 @@ export default function SettingsPage() {
         setFullName(data.full_name || '')
         if (data.avatar_url) setAvatar(data.avatar_url)
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
+        // Check if Stripe account is connected based on profile data
+        if (data.stripe_connect_account_id) {
+          setStripeConnected(true)
+        }
       }
 
       setEmail(currentUser!.email || '')
@@ -366,16 +383,37 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setStripeConnected(!stripeConnected)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  stripeConnected
-                    ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/30'
-                    : 'bg-[#5f8fff] text-white hover:bg-[#7ca6ff]'
-                }`}
-              >
-                {stripeConnected ? 'Disconnect' : 'Connect'}
-              </button>
+              {!stripeConnected ? (
+                <button
+                  onClick={async () => {
+                    setStripeLoading(true)
+                    try {
+                      const response = await fetch('/api/stripe/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ returnTo: 'settings' }),
+                      })
+                      const data = await response.json()
+                      if (!response.ok) throw new Error(data.error || 'Failed to connect Stripe')
+                      if (data.url) {
+                        window.location.href = data.url
+                      }
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to connect Stripe account')
+                    } finally {
+                      setStripeLoading(false)
+                    }
+                  }}
+                  disabled={stripeLoading}
+                  className="px-4 py-2 rounded-lg font-medium transition-colors bg-[#5f8fff] text-white hover:bg-[#7ca6ff] disabled:opacity-50"
+                >
+                  {stripeLoading ? 'Connecting...' : 'Connect'}
+                </button>
+              ) : (
+                <span className="px-4 py-2 rounded-lg font-medium bg-green-500/20 text-green-300 border border-green-500/30">
+                  Connected
+                </span>
+              )}
             </div>
           </div>
         </div>

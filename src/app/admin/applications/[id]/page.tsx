@@ -41,28 +41,82 @@ function QuestionResponseCard({ question, answer }: any) {
 }
 
 function AIRecommendationCard({ recommendation }: any) {
+  const decisionColors: Record<string, string> = {
+    approve: 'text-green-400 bg-green-500/20 border-green-500/30',
+    review: 'text-amber-400 bg-amber-500/20 border-amber-500/30',
+    reject: 'text-red-400 bg-red-500/20 border-red-500/30',
+  };
+
+  const decisionLabels: Record<string, string> = {
+    approve: 'Recommend Approval',
+    review: 'Needs Further Review',
+    reject: 'Recommend Rejection',
+  };
+
+  const barColor = recommendation.decision === 'approve'
+    ? 'from-green-500 to-emerald-400'
+    : recommendation.decision === 'review'
+    ? 'from-amber-500 to-yellow-400'
+    : 'from-red-500 to-orange-400';
+
   return (
     <div className="relay-card p-5 border border-[#5f8fff]/30 bg-[#5f8fff]/5">
-      <div className="flex items-start gap-3 mb-4">
-        <div className="p-2 bg-[#5f8fff]/20 rounded-lg flex-shrink-0">
-          <Zap className="w-5 h-5 text-[#5f8fff]" />
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-[#5f8fff]/20 rounded-lg flex-shrink-0">
+            <Zap className="w-5 h-5 text-[#5f8fff]" />
+          </div>
+          <div>
+            <h4 className="text-[#f5f7fb] font-semibold">AI Recommendation</h4>
+            <p className="text-white/60 text-sm">
+              Based on application analysis
+            </p>
+          </div>
         </div>
-        <div>
-          <h4 className="text-[#f5f7fb] font-semibold">AI Recommendation</h4>
-          <p className="text-white/60 text-sm">
-            Based on application analysis
-          </p>
-        </div>
+        {recommendation.decision && (
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${decisionColors[recommendation.decision] || ''}`}>
+            {decisionLabels[recommendation.decision] || recommendation.decision}
+          </span>
+        )}
       </div>
 
       <p className="text-white/70 text-sm mb-4">{recommendation.analysis}</p>
+
+      {/* Strengths & Concerns */}
+      {recommendation.strengths?.length > 0 && (
+        <div className="mb-3">
+          <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-2">Strengths</p>
+          <div className="space-y-1">
+            {recommendation.strengths.map((s: string, i: number) => (
+              <div key={i} className="flex items-start gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0" />
+                <span className="text-white/60 text-sm">{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommendation.concerns?.length > 0 && (
+        <div className="mb-4">
+          <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-2">Concerns</p>
+          <div className="space-y-1">
+            {recommendation.concerns.map((c: string, i: number) => (
+              <div key={i} className="flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <span className="text-white/60 text-sm">{c}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
         <span className="text-white/60 text-sm">Confidence Score</span>
         <div className="flex items-center gap-2">
           <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-[#5f8fff] to-[#7ca6ff]"
+              className={`h-full bg-gradient-to-r ${barColor}`}
               style={{ width: `${recommendation.confidence}%` }}
             />
           </div>
@@ -128,6 +182,7 @@ export default function ApplicationDetailPage() {
   const [adminNotes, setAdminNotes] = useState("");
   const [app, setApp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     async function loadApplication() {
@@ -140,45 +195,90 @@ export default function ApplicationDetailPage() {
 
       setApp(data);
       setLoading(false);
+
+      // Auto-generate AI recommendation if not present and application is pending
+      if (data && !data.ai_recommendation && data.status === 'pending') {
+        setAiLoading(true);
+        try {
+          const response = await fetch(`/api/admin/application/${applicationId}/ai-recommendation`, {
+            method: 'POST',
+          });
+          if (response.ok) {
+            const recommendation = await response.json();
+            setApp((prev: any) => prev ? { ...prev, ai_recommendation: recommendation } : prev);
+          }
+        } catch (err) {
+          console.error('Failed to generate AI recommendation:', err);
+        } finally {
+          setAiLoading(false);
+        }
+      }
     }
 
     loadApplication();
   }, [applicationId]);
 
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
+
   const handleApprove = async () => {
     if (!app) return;
-    const supabase = createClient();
+    setActionLoading(true);
+    setActionError('');
 
-    await supabase
-      .from("seller_applications")
-      .update({ status: "approved" })
-      .eq("id", applicationId);
+    try {
+      const response = await fetch(`/api/admin/application/${applicationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve', adminNotes }),
+      });
 
-    await supabase
-      .from("profiles")
-      .update({ role: "seller", seller_application_status: "approved", is_verified_seller: true })
-      .eq("id", app.user_id);
+      const data = await response.json();
 
-    setApp({ ...app, status: "approved" });
-    setModalState("none");
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to approve application');
+      }
+
+      setApp({ ...app, status: 'approved', admin_notes: adminNotes });
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to approve application');
+    } finally {
+      setActionLoading(false);
+      setModalState("none");
+    }
   };
 
   const handleReject = async () => {
     if (!app) return;
-    const supabase = createClient();
+    setActionLoading(true);
+    setActionError('');
 
-    await supabase
-      .from("seller_applications")
-      .update({ status: "rejected", rejection_count: (app.rejection_count || 0) + 1 })
-      .eq("id", applicationId);
+    try {
+      const response = await fetch(`/api/admin/application/${applicationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', adminNotes }),
+      });
 
-    await supabase
-      .from("profiles")
-      .update({ seller_application_status: "rejected" })
-      .eq("id", app.user_id);
+      const data = await response.json();
 
-    setApp({ ...app, status: "rejected", rejection_count: (app.rejection_count || 0) + 1 });
-    setModalState("none");
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reject application');
+      }
+
+      const newRejectionCount = (app.rejection_count || 0) + 1;
+      setApp({
+        ...app,
+        status: newRejectionCount >= 2 ? 'rejected_final' : 'rejected',
+        rejection_count: newRejectionCount,
+        admin_notes: adminNotes,
+      });
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to reject application');
+    } finally {
+      setActionLoading(false);
+      setModalState("none");
+    }
   };
 
   if (loading) {
@@ -286,7 +386,20 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* AI Recommendation */}
-      {app.ai_recommendation && (
+      {aiLoading && (
+        <div className="relay-card p-5 border border-[#5f8fff]/30 bg-[#5f8fff]/5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#5f8fff]/20 rounded-lg flex-shrink-0">
+              <Zap className="w-5 h-5 text-[#5f8fff] animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-[#f5f7fb] font-semibold">Generating AI Recommendation...</h4>
+              <p className="text-white/60 text-sm">Analyzing application responses</p>
+            </div>
+          </div>
+        </div>
+      )}
+      {!aiLoading && app.ai_recommendation && (
         <AIRecommendationCard recommendation={app.ai_recommendation} />
       )}
 
@@ -366,6 +479,13 @@ export default function ApplicationDetailPage() {
           rows={4}
         />
       </div>
+
+      {/* Action Error */}
+      {actionError && (
+        <div className="relay-card p-4 border border-red-500/30 bg-red-500/5">
+          <p className="text-red-400 text-sm">{actionError}</p>
+        </div>
+      )}
 
       {/* Action Buttons */}
       {app.status === "pending" && (

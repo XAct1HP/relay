@@ -29,40 +29,58 @@ export default function OnboardingPage() {
   const [error, setError] = useState('');
   const [stripeConnected, setStripeConnected] = useState(false);
 
+  const [formData, setFormData] = useState<OnboardingFormData>(() => {
+    // Restore saved form data from localStorage (persisted before Stripe redirect)
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('relay_onboarding_form_data');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {}
+      }
+    }
+    return {
+      ship_from_address: {
+        name: '',
+        street: '',
+        street2: '',
+        city: '',
+        state: '',
+        zip: '',
+        country: 'United States',
+      },
+      questionnaire_responses: {
+        primary_shoe_type: '',
+        reselling_duration: '',
+        previous_platforms: '',
+        authenticity_verification: '',
+        monthly_volume: '',
+        why_relay: '',
+        own_brand: '',
+      },
+      stripe_connected: false,
+      terms_accepted: false,
+    };
+  });
+
+  // Persist form data to localStorage whenever it changes (protects against redirect loss)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('relay_onboarding_form_data', JSON.stringify(formData));
+    }
+  }, [formData]);
+
   // Handle return from Stripe onboarding
   useEffect(() => {
     if (searchParams.get('stripe_onboarded') === 'true') {
       setStripeConnected(true);
-      setCurrentStep(3);
+      setCurrentStep(4); // Go to Review & Submit after successful Stripe connection
     }
     if (searchParams.get('stripe_refresh') === 'true') {
       setError('Stripe onboarding session expired. Please try again.');
       setCurrentStep(3);
     }
   }, [searchParams]);
-
-  const [formData, setFormData] = useState<OnboardingFormData>({
-    ship_from_address: {
-      name: '',
-      street: '',
-      street2: '',
-      city: '',
-      state: '',
-      zip: '',
-      country: 'United States',
-    },
-    questionnaire_responses: {
-      primary_shoe_type: '',
-      reselling_duration: '',
-      previous_platforms: '',
-      authenticity_verification: '',
-      monthly_volume: '',
-      why_relay: '',
-      own_brand: '',
-    },
-    stripe_connected: false,
-    terms_accepted: false,
-  });
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -196,6 +214,11 @@ export default function OnboardingPage() {
         ship_from_address: formData.ship_from_address,
         seller_application_status: 'pending',
       });
+
+      // Clear saved form data from localStorage after successful submission
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('relay_onboarding_form_data');
+      }
 
       // Move to success screen
       setCurrentStep(4);
