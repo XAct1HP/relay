@@ -377,7 +377,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     return (
       <div className="relay-empty text-center p-12">
           <p className="text-white/40 text-lg">Order not found</p>
-        </div>
       </div>
     )
   }
@@ -843,7 +842,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
         {/* Show rating modal */}
         {showRatingModal && <RatingModal onSubmit={handleRatingSubmit} />}
-      </div>
     </div>
   )
 }
