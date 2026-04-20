@@ -8,7 +8,7 @@ import { useSidebarStore } from "@/store/sidebarStore";
 import { useAuth } from "@/hooks/useAuth";
 
 // Routes accessible without authentication
-const PUBLIC_ROUTES = ["/", "/marketplace", "/auth/login", "/auth/signup", "/listing", "/onboarding", "/profile"];
+const PUBLIC_ROUTES = ["/", "/marketplace", "/auth/login", "/auth/signup", "/listing", "/onboarding", "/profile", "/mobile-auth"];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => {

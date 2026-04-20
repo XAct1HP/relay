@@ -22,7 +22,6 @@ import {
   User,
   ChevronDown,
   QrCode,
-  FileText,
   Loader2,
 } from "lucide-react"
 
@@ -99,7 +98,7 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ReactNode; 
   refunded: { label: "Refunded", icon: <AlertCircle className="w-4 h-4" />, color: "bg-gray-500/20 text-gray-300" },
 }
 
-const AUTH_ANGLES = ["Front", "Back", "Left", "Right", "Sole", "Tag", "Challenge Code", "Box Label"]
+const AUTH_ANGLES = ["Front", "Back", "Medial Side", "Lateral Side", "Sole", "Size Tag", "With Challenge Code", "Packed Shipment"]
 
 // ── Helper: format address ──
 function formatAddress(addr: ShippingAddress | null): string {
@@ -156,71 +155,6 @@ const ProgressTracker = ({ currentStatus }: { currentStatus: OrderStatus }) => {
           )
         })}
       </div>
-    </div>
-  )
-}
-
-// ── PhotoUploadGrid (wired) ──
-const PhotoUploadGrid = ({
-  angles,
-  uploadedUrls,
-  onFileSelected,
-  uploading,
-}: {
-  angles: string[]
-  uploadedUrls: Record<string, string>
-  onFileSelected: (angle: string, file: File) => void
-  uploading: Record<string, boolean>
-}) => {
-  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-      {angles.map((angle) => {
-        const url = uploadedUrls[angle]
-        const isUploading = uploading[angle]
-
-        return (
-          <div key={angle} className="relative">
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              ref={(el) => { fileRefs.current[angle] = el }}
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) onFileSelected(angle, f)
-              }}
-            />
-            <button
-              onClick={() => fileRefs.current[angle]?.click()}
-              disabled={isUploading}
-              className={`aspect-square w-full border rounded-xl transition-all flex flex-col items-center justify-center p-3 text-center cursor-pointer ${
-                url
-                  ? "bg-emerald-500/10 border-emerald-500/30"
-                  : "bg-white/5 border-white/10 hover:bg-white/10"
-              }`}
-            >
-              {isUploading ? (
-                <Loader2 className="w-6 h-6 text-[#7ca6ff] animate-spin mb-2" />
-              ) : url ? (
-                <img src={url} alt={angle} className="w-full h-full object-cover rounded-lg" />
-              ) : (
-                <>
-                  <Upload className="w-6 h-6 text-[#7ca6ff] mb-2" />
-                  <p className="text-xs text-[#f5f7fb]">{angle}</p>
-                </>
-              )}
-            </button>
-            {url && !isUploading && (
-              <div className="absolute top-1 right-1 bg-emerald-500 rounded-full p-0.5">
-                <Check className="w-3 h-3 text-white" />
-              </div>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -481,24 +415,15 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   // UI state
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [showDisputeForm, setShowDisputeForm] = useState(false)
-  const [showAuthForm, setShowAuthForm] = useState(false)
   const [showQrCode, setShowQrCode] = useState(false)
   const [copied, setCopied] = useState(false)
 
   // Action loading states
-  const [submittingAuth, setSubmittingAuth] = useState(false)
   const [generatingLabel, setGeneratingLabel] = useState(false)
   const [markingDelivered, setMarkingDelivered] = useState(false)
   const [submittingReview, setSubmittingReview] = useState(false)
   const [submittingDispute, setSubmittingDispute] = useState(false)
   const [submittingSellerEvidence, setSubmittingSellerEvidence] = useState(false)
-
-  // Auth photo upload state
-  const [authPhotoUrls, setAuthPhotoUrls] = useState<Record<string, string>>({})
-  const [authPhotoUploading, setAuthPhotoUploading] = useState<Record<string, boolean>>({})
-  const [certificateUrl, setCertificateUrl] = useState<string | null>(null)
-  const [certificateUploading, setCertificateUploading] = useState(false)
-  const certificateInputRef = useRef<HTMLInputElement>(null)
 
   // Seller dispute response state
   const [sellerResponse, setSellerResponse] = useState("")
@@ -596,110 +521,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       navigator.clipboard.writeText(order.challengeCode)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  // ── Auth photo upload to Supabase storage ──
-  const handleAuthPhotoUpload = async (angle: string, file: File) => {
-    if (!order) return
-    setAuthPhotoUploading((prev) => ({ ...prev, [angle]: true }))
-
-    try {
-      const supabase = createClient()
-      const ext = file.name.split(".").pop() || "jpg"
-      const safeName = angle.toLowerCase().replace(/\s+/g, "-")
-      const path = `${order.id}/${safeName}.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("order-photos")
-        .upload(path, file, { upsert: true })
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError)
-        alert(`Failed to upload ${angle} photo: ${uploadError.message}`)
-        return
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("order-photos")
-        .getPublicUrl(path)
-
-      setAuthPhotoUrls((prev) => ({ ...prev, [angle]: urlData.publicUrl }))
-    } catch (err) {
-      console.error("Upload failed:", err)
-    } finally {
-      setAuthPhotoUploading((prev) => ({ ...prev, [angle]: false }))
-    }
-  }
-
-  // ── Certificate upload ──
-  const handleCertificateUpload = async (file: File) => {
-    if (!order) return
-    setCertificateUploading(true)
-
-    try {
-      const supabase = createClient()
-      const ext = file.name.split(".").pop() || "jpg"
-      const path = `${order.id}/checkcheck-certificate.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("order-photos")
-        .upload(path, file, { upsert: true })
-
-      if (uploadError) {
-        alert(`Failed to upload certificate: ${uploadError.message}`)
-        return
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("order-photos")
-        .getPublicUrl(path)
-
-      setCertificateUrl(urlData.publicUrl)
-    } catch (err) {
-      console.error("Certificate upload failed:", err)
-    } finally {
-      setCertificateUploading(false)
-    }
-  }
-
-  // ── Submit authentication ──
-  const handleSubmitAuth = async () => {
-    if (!order) return
-    setSubmittingAuth(true)
-    setError(null)
-
-    try {
-      const photoUrls = AUTH_ANGLES.map((angle) => authPhotoUrls[angle]).filter(Boolean)
-      if (photoUrls.length < 8 || !certificateUrl) {
-        alert("Please upload all 8 photos and the CheckCheck certificate before submitting.")
-        setSubmittingAuth(false)
-        return
-      }
-
-      const res = await fetch(`/api/orders/${order.id}/auth-submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          authPhotos: photoUrls,
-          checkcheckCertificateUrl: certificateUrl,
-        }),
-      })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || "Failed to submit authentication")
-      }
-
-      // Update local state
-      setOrder((prev) =>
-        prev ? { ...prev, status: "auth_submitted", authPhotos: photoUrls, checkcheckCertificateUrl: certificateUrl } : prev
-      )
-      setShowAuthForm(false)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setSubmittingAuth(false)
     }
   }
 
@@ -944,10 +765,11 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   }
 
   // ── QR code URL ──
+  const mobileAuthUrl = order
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/mobile-auth/${order.id}`
+    : ""
   const qrUrl = order
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-        `${typeof window !== "undefined" ? window.location.origin : ""}/orders/${order.id}/auth?mobile=true`
-      )}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileAuthUrl)}`
     : ""
 
   // ── Render ──
@@ -969,7 +791,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     )
   }
 
-  const allAuthPhotosUploaded = AUTH_ANGLES.every((angle) => !!authPhotoUrls[angle])
+
 
   return (
     <div className="space-y-6">
@@ -1159,28 +981,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <button
-                onClick={() => setShowQrCode((prev) => !prev)}
-                className="relay-button-primary flex items-center justify-center gap-2"
-              >
-                <QrCode className="w-4 h-4" />
-                Complete on Phone
-              </button>
-              <button
-                onClick={() => setShowAuthForm((prev) => !prev)}
-                className="relay-button-secondary flex items-center justify-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                {showAuthForm ? "Hide Form" : "Start Authentication"}
-              </button>
-            </div>
+            {/* Start Authentication — always show QR code for mobile-only capture */}
+            <button
+              onClick={() => setShowQrCode((prev) => !prev)}
+              className="relay-button-primary w-full flex items-center justify-center gap-2 mb-4"
+            >
+              <QrCode className="w-4 h-4" />
+              {showQrCode ? "Hide QR Code" : "Start Authentication"}
+            </button>
 
-            {/* QR Code */}
             {showQrCode && (
               <div className="bg-white/5 border border-white/10 rounded-lg p-6 mb-4 text-center">
-                <p className="text-sm text-[#7ca6ff] mb-3">Scan this code to complete authentication on your phone</p>
+                <p className="text-sm text-[#7ca6ff] mb-1 font-semibold">Scan with your phone to continue</p>
+                <p className="text-xs text-white/40 mb-4">
+                  Live camera photos are required — you must use your phone to take real-time photos of the item.
+                </p>
                 <img
                   src={qrUrl}
                   alt="QR Code for mobile authentication"
@@ -1188,75 +1003,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                   width={200}
                   height={200}
                 />
+                <p className="text-xs text-white/30 mt-4">
+                  Make sure you&apos;re logged into Relay on your phone before scanning.
+                </p>
               </div>
-            )}
-
-            {/* Auth upload form */}
-            {showAuthForm && (
-              <>
-                <h3 className="text-sm font-semibold text-[#f5f7fb] mb-3">Required Photos (8 angles)</h3>
-                <div className="text-sm text-[#7ca6ff] space-y-1 mb-4">
-                  <p>Take photos with the challenge code visible in frame where applicable.</p>
-                </div>
-
-                <PhotoUploadGrid
-                  angles={AUTH_ANGLES}
-                  uploadedUrls={authPhotoUrls}
-                  onFileSelected={handleAuthPhotoUpload}
-                  uploading={authPhotoUploading}
-                />
-
-                {/* CheckCheck Certificate upload */}
-                <input
-                  ref={certificateInputRef}
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) handleCertificateUpload(f)
-                  }}
-                />
-
-                <button
-                  onClick={() => certificateInputRef.current?.click()}
-                  disabled={certificateUploading}
-                  className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all mb-4 ${
-                    certificateUrl
-                      ? "border-emerald-500/30 bg-emerald-500/10"
-                      : "border-white/10 hover:border-white/20"
-                  }`}
-                >
-                  {certificateUploading ? (
-                    <Loader2 className="w-8 h-8 text-[#7ca6ff] mx-auto animate-spin" />
-                  ) : certificateUrl ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      <p className="text-sm text-emerald-300">CheckCheck Certificate Uploaded</p>
-                    </div>
-                  ) : (
-                    <>
-                      <FileText className="w-8 h-8 text-[#7ca6ff] mx-auto mb-2" />
-                      <p className="text-sm text-[#f5f7fb]">Upload CheckCheck Certificate</p>
-                      <p className="text-xs text-white/40">PDF or image format</p>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleSubmitAuth}
-                  disabled={!allAuthPhotosUploaded || !certificateUrl || submittingAuth}
-                  className="relay-button-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {submittingAuth && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Submit Authentication
-                  {!allAuthPhotosUploaded && (
-                    <span className="text-xs opacity-70">
-                      ({Object.keys(authPhotoUrls).length}/{AUTH_ANGLES.length} photos)
-                    </span>
-                  )}
-                </button>
-              </>
             )}
 
             {/* Shipping deadline warning */}
