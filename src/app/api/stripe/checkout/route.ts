@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Fetch listing and seller info
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id, user_id, brand, model, image_url')
+      .select('id, seller_id, brand, model, images')
       .eq('id', listingId)
       .single()
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
         product_data: {
           name: `${listing.brand} ${listing.model}`,
           description: `Size: ${size}`,
-          images: listing.image_url ? [listing.image_url] : [],
+          images: listing.images?.length ? [listing.images[0]] : [],
         },
         unit_amount: Math.round(price * 100),
       },
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
         listingId,
         size,
         buyerId: user.id,
-        sellerId: listing.user_id,
+        sellerId: listing.seller_id,
         customOfferId: customOfferId || '',
         shoePrice: String(price),
         shippingCost: String(shippingCost),
