@@ -75,7 +75,7 @@ export default function ListingDetailPage({
           .single();
 
         if (data) {
-          const conditions: { [key: string]: string } = {
+          const conditions: Record<string, ListingDetail["condition"]> = {
             new: "New",
             like_new: "Like New",
             used_excellent: "Used - Excellent",
@@ -83,7 +83,7 @@ export default function ListingDetailPage({
             used_fair: "Used - Fair",
           };
 
-          const boxConditions: { [key: string]: string } = {
+          const boxConditions: Record<string, ListingDetail["boxCondition"]> = {
             perfect: "New",
             good: "Good",
             damaged: "Fair",
@@ -103,7 +103,7 @@ export default function ListingDetailPage({
             brand: data.brand,
             model: data.model,
             nickname: data.nickname,
-            condition: (conditions[data.condition] || "Used - Good") as ListingDetail["condition"],
+            condition: conditions[data.condition] || "Used - Good",
             boxCondition: boxConditions[data.box_condition] || "No Box",
             description: data.description,
             sizes: (data.sizes as any[])

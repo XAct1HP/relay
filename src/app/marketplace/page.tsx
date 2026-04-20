@@ -70,14 +70,6 @@ export default function MarketplacePage() {
           };
 
           const formatted: ListingDisplay[] = data.map((listing: Listing) => {
-            const conditions: { [key: string]: string } = {
-              new: "New",
-              like_new: "Like New",
-              used_excellent: "Used - Excellent",
-              used_good: "Used - Good",
-              used_fair: "Used - Fair",
-            };
-
             const gradients: { [key: string]: string } = {
               Nike: "from-red-500/20 to-orange-500/20",
               Adidas: "from-gray-600/20 to-slate-600/20",
@@ -106,7 +98,7 @@ export default function MarketplacePage() {
               sizes,
               price: minPrice,
               image: listing.images?.[0] || "default",
-              condition: conditions[listing.condition] || "Used - Good",
+              condition: conditionMap[listing.condition] || "Used - Good" as ListingDisplay["condition"],
               seller: {
                 name: listing.seller?.display_name || listing.seller?.full_name || "Unknown Seller",
                 avatar:
