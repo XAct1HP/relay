@@ -152,6 +152,7 @@ export default function DashboardPage() {
       return;
     }
 
+    const userId = userId;
     async function fetchDashboardData() {
       const supabase = createClient();
 
@@ -160,21 +161,21 @@ export default function DashboardPage() {
         const { data: orders } = await supabase
           .from("orders")
           .select("*, listing:listings(brand, model), buyer:profiles(full_name)")
-          .eq("seller_id", currentUser.id)
+          .eq("seller_id", userId)
           .order("created_at", { ascending: false });
 
         // Fetch active listings count
         const { data: listings } = await supabase
           .from("listings")
           .select("id")
-          .eq("seller_id", currentUser.id)
+          .eq("seller_id", userId)
           .eq("status", "active");
 
         // Fetch recent conversations
         const { data: conversations } = await supabase
           .from("conversations")
           .select("*, messages(*, sender:profiles(full_name))")
-          .contains("participant_ids", [currentUser.id])
+          .contains("participant_ids", [userId])
           .order("last_message_at", { ascending: false })
           .limit(5);
 
