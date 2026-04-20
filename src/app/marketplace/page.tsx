@@ -94,7 +94,7 @@ export default function MarketplacePage() {
               id: listing.id,
               brand: listing.brand,
               model: listing.model,
-              nickname: listing.nickname,
+              nickname: listing.nickname ?? undefined,
               sizes,
               price: minPrice,
               image: listing.images?.[0] || "default",
