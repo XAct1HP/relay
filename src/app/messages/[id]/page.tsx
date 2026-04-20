@@ -387,7 +387,11 @@ export default function ConversationPage() {
       {showOfferModal && (
         <CustomOfferModal
           onClose={() => setShowOfferModal(false)}
-          conversation={conversation}
+          conversationId={conversation.id}
+          recipientName={conversation.name}
+          onOfferSent={(convId, offerMessage) => {
+            setShowOfferModal(false);
+          }}
         />
       )}
     </div>
