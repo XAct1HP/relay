@@ -77,7 +77,7 @@ export async function PATCH(
           price,
           seller_earnings,
           payment_intent_id,
-          stripe_connect_account_id
+          stripe_account_id
         )
       `)
       .eq('id', disputeId)
@@ -123,16 +123,16 @@ export async function PATCH(
       // Complete order and transfer earnings to seller
       const { data: sellerProfile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id')
+        .select('stripe_account_id')
         .eq('id', order.seller_id)
         .single()
 
-      if (sellerProfile?.stripe_connect_account_id && order.seller_earnings > 0) {
+      if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
         try {
           await stripe.transfers.create({
             amount: Math.round(order.seller_earnings * 100),
             currency: 'usd',
-            destination: sellerProfile.stripe_connect_account_id,
+            destination: sellerProfile.stripe_account_id,
             metadata: {
               orderId: order.id,
             },

@@ -10,6 +10,8 @@ export async function PATCH(
     const { id: applicationId } = await params
 
     const cookieStore = await cookies()
+
+    // Anon client for auth verification
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -59,21 +61,7 @@ export async function PATCH(
       )
     }
 
-    // Get application
-    const { data: application, error: fetchError } = await supabase
-      .from('seller_applications')
-      .select('id, user_id, status, rejection_count')
-      .eq('id', applicationId)
-      .single()
-
-    if (fetchError || !application) {
-      return NextResponse.json(
-        { error: 'Application not found' },
-        { status: 404 }
-      )
-    }
-
-    // Use the service role key for admin operations to bypass RLS
+    // Service role client to bypass RLS for cross-user updates
     const supabaseAdmin = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -95,7 +83,40 @@ export async function PATCH(
       }
     )
 
+    // Get application
+    const { data: application, error: fetchError } = await supabaseAdmin
+      .from('seller_applications')
+      .select('id, user_id, status, rejection_count')
+      .eq('id', applicationId)
+      .single()
+
+    if (fetchError || !application) {
+      return NextResponse.json(
+        { error: 'Application not found' },
+        { status: 404 }
+      )
+    }
+
     if (action === 'approve') {
+      // Update application status (only columns that exist in the schema)
+      const { data: updatedApplication, error: updateError } = await supabaseAdmin
+        .from('seller_applications')
+        .update({
+          status: 'approved',
+          admin_notes: adminNotes || null,
+        })
+        .eq('id', applicationId)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('Application update error:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update application: ' + updateError.message },
+          { status: 500 }
+        )
+      }
+
       // Update user profile to seller role and mark application as approved
       const { error: updateUserError } = await supabaseAdmin
         .from('profiles')
@@ -107,29 +128,9 @@ export async function PATCH(
         .eq('id', application.user_id)
 
       if (updateUserError) {
-        console.error('User update error:', updateUserError)
+        console.error('User profile update error:', updateUserError)
         return NextResponse.json(
-          { error: 'Failed to update user profile: ' + updateUserError.message },
-          { status: 500 }
-        )
-      }
-
-      // Update application status
-      const { data: updatedApplication, error: updateError } = await supabaseAdmin
-        .from('seller_applications')
-        .update({
-          status: 'approved',
-          admin_notes: adminNotes,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', applicationId)
-        .select()
-        .single()
-
-      if (updateError) {
-        console.error('Application update error:', updateError)
-        return NextResponse.json(
-          { error: 'Failed to update application' },
+          { error: 'Application approved but failed to update user role: ' + updateUserError.message },
           { status: 500 }
         )
       }
@@ -138,16 +139,14 @@ export async function PATCH(
     } else if (action === 'reject') {
       // Increment rejection count
       const rejectionCount = (application.rejection_count || 0) + 1
-      const isFinalRejection = rejectionCount >= 2
 
-      // Update application status
+      // Update application status — 'rejected' is the only valid reject status in the schema constraint
       const { data: updatedApplication, error: updateError } = await supabaseAdmin
         .from('seller_applications')
         .update({
-          status: isFinalRejection ? 'rejected_final' : 'rejected',
+          status: 'rejected',
           rejection_count: rejectionCount,
-          admin_notes: adminNotes,
-          reviewed_at: new Date().toISOString(),
+          admin_notes: adminNotes || null,
         })
         .eq('id', applicationId)
         .select()
@@ -156,18 +155,24 @@ export async function PATCH(
       if (updateError) {
         console.error('Application update error:', updateError)
         return NextResponse.json(
-          { error: 'Failed to update application' },
+          { error: 'Failed to update application: ' + updateError.message },
           { status: 500 }
         )
       }
 
       // Update profile application status
-      await supabaseAdmin
+      // Use 'rejected_final' on profile if max rejections reached (profile column allows it)
+      const isFinalRejection = rejectionCount >= 2
+      const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .update({
           seller_application_status: isFinalRejection ? 'rejected_final' : 'rejected',
         })
         .eq('id', application.user_id)
+
+      if (profileError) {
+        console.error('Profile status update error:', profileError)
+      }
 
       return NextResponse.json(updatedApplication)
     }

@@ -54,7 +54,7 @@ export default function SettingsPage() {
         if (data.avatar_url) setAvatar(data.avatar_url)
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
         // Check if Stripe account is connected based on profile data
-        if (data.stripe_connect_account_id) {
+        if (data.stripe_account_id) {
           setStripeConnected(true)
         }
       }

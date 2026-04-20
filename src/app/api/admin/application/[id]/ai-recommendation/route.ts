@@ -267,10 +267,10 @@ export async function POST(
       application.ship_from_address
     )
 
-    // Save recommendation to the application
+    // Save recommendation to the application (column is TEXT, so stringify)
     const { error: updateError } = await supabase
       .from('seller_applications')
-      .update({ ai_recommendation: recommendation })
+      .update({ ai_recommendation: JSON.stringify(recommendation) })
       .eq('id', applicationId)
 
     if (updateError) {

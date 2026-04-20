@@ -193,6 +193,15 @@ export default function ApplicationDetailPage() {
         .eq("id", applicationId)
         .single();
 
+      // Parse ai_recommendation if it's a JSON string (stored as TEXT in DB)
+      if (data?.ai_recommendation && typeof data.ai_recommendation === 'string') {
+        try {
+          data.ai_recommendation = JSON.parse(data.ai_recommendation);
+        } catch {
+          // If it's not valid JSON, leave as-is
+        }
+      }
+
       setApp(data);
       setLoading(false);
 

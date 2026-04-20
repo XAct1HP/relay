@@ -58,7 +58,7 @@ export async function POST(
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
-        'id, buyer_id, seller_id, seller_earnings, status, stripe_connect_account_id'
+        'id, buyer_id, seller_id, seller_earnings, status, stripe_account_id'
       )
       .eq('id', orderId)
       .single()
@@ -99,17 +99,17 @@ export async function POST(
     // Get seller's Stripe Connect account ID
     const { data: sellerProfile } = await supabase
       .from('profiles')
-      .select('stripe_connect_account_id')
+      .select('stripe_account_id')
       .eq('id', order.seller_id)
       .single()
 
     // Create Stripe transfer to seller
-    if (sellerProfile?.stripe_connect_account_id && order.seller_earnings > 0) {
+    if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
       try {
         await stripe.transfers.create({
           amount: Math.round(order.seller_earnings * 100),
           currency: 'usd',
-          destination: sellerProfile.stripe_connect_account_id,
+          destination: sellerProfile.stripe_account_id,
           metadata: {
             orderId,
           },

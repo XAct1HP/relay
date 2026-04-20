@@ -43,11 +43,11 @@ export async function POST(request: NextRequest) {
     // Get or create Stripe Connect account
     const { data: profile } = await supabase
       .from('profiles')
-      .select('stripe_connect_account_id')
+      .select('stripe_account_id')
       .eq('id', user.id)
       .single()
 
-    let accountId = profile?.stripe_connect_account_id
+    let accountId = profile?.stripe_account_id
 
     if (!accountId) {
       // Create new Connect account
@@ -59,10 +59,14 @@ export async function POST(request: NextRequest) {
       accountId = account.id
 
       // Save account ID to profile
-      await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
-        .update({ stripe_connect_account_id: accountId })
+        .update({ stripe_account_id: accountId })
         .eq('id', user.id)
+
+      if (updateError) {
+        console.error('Failed to save Stripe account ID:', updateError)
+      }
     }
 
     // Create account link for onboarding
