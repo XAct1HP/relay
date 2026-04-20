@@ -404,6 +404,13 @@ export default function ListingDetailPage({
             {/* ACTION BUTTONS */}
             <div className="flex flex-col gap-2">
               <button
+                onClick={() => {
+                  if (!currentUser) {
+                    router.push('/auth/login');
+                    return;
+                  }
+                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}&price=${selectedSizeData?.price}`);
+                }}
                 disabled={selectedSize === null}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >

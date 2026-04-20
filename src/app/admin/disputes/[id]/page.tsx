@@ -149,11 +149,41 @@ export default function DisputeDetailPage() {
     );
   }
 
-  const hasRuling = dispute.ruling !== null;
+  const hasRuling = dispute.dispute_ruling !== null && dispute.dispute_ruling !== undefined;
+  const [rulingLoading, setRulingLoading] = useState(false);
 
-  const handleRuling = (type: ModalState, notes: string) => {
-    // Handle ruling logic
-    setModalState("none");
+  const handleRuling = async (type: ModalState, notes: string) => {
+    if (type === "none") return;
+    setRulingLoading(true);
+
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const res = await fetch(`/api/admin/dispute/${dispute.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ ruling: type, adminNotes: notes }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Failed to submit ruling");
+        return;
+      }
+
+      const updatedOrder = await res.json();
+      setDispute(updatedOrder);
+    } catch (err) {
+      console.error("Ruling error:", err);
+      alert("Failed to submit ruling");
+    } finally {
+      setRulingLoading(false);
+      setModalState("none");
+    }
   };
 
   return (

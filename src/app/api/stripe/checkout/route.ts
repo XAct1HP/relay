@@ -101,6 +101,9 @@ export async function POST(request: NextRequest) {
         buyerId: user.id,
         sellerId: listing.user_id,
         customOfferId: customOfferId || '',
+        shoePrice: String(price),
+        shippingCost: String(shippingCost),
+        buyerAddress: buyerAddress ? JSON.stringify(buyerAddress) : '',
       },
     })
 

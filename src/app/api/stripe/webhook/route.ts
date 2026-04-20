@@ -1,5 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
@@ -8,6 +7,15 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+
+function generateChallengeCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,26 +35,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
+    // Use service role client — webhooks have no user session
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Handle SSR context
-            }
-          },
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
     if (event.type === 'checkout.session.completed') {
@@ -64,19 +56,30 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid metadata' }, { status: 400 })
       }
 
-      // Calculate fees
-      const shoeAmount = (session.line_items?.data[0]?.amount_total || 0) / 100
-      const shippingAmount =
-        (session.line_items?.data?.[1]?.amount_total || 0) / 100
-      const totalAmount = shoeAmount + shippingAmount
+      // Parse prices from metadata (stored during checkout session creation)
+      const shoePrice = parseFloat(metadata.shoePrice || '0')
+      const shippingCost = parseFloat(metadata.shippingCost || '0')
 
-      const platformFee = shoeAmount * 0.01 // 1% platform fee
-      const stripeFee = shoeAmount * 0.03 + 0.3 // 3% + $0.30
-      const sellerEarnings = shoeAmount - platformFee - stripeFee // Shipping goes entirely to seller
+      // Parse buyer address from metadata
+      let buyerShippingAddress = null
+      if (metadata.buyerAddress) {
+        try {
+          buyerShippingAddress = JSON.parse(metadata.buyerAddress)
+        } catch {
+          console.error('Failed to parse buyer address from metadata')
+        }
+      }
+
+      const platformFee = shoePrice * 0.01 // 1% platform fee
+      const stripeFee = shoePrice * 0.03 + 0.3 // 3% + $0.30
+      const sellerEarnings = shoePrice - platformFee - stripeFee
 
       // Calculate shipping deadline (5 days from now)
       const shippingDeadline = new Date()
       shippingDeadline.setDate(shippingDeadline.getDate() + 5)
+
+      // Generate challenge code for authentication
+      const challengeCode = generateChallengeCode()
 
       // Create order
       const { data: order, error: orderError } = await supabase
@@ -85,14 +88,17 @@ export async function POST(request: NextRequest) {
           listing_id: listingId,
           buyer_id: buyerId,
           seller_id: sellerId,
+          custom_offer_id: customOfferId || null,
           status: 'paid',
           size,
-          price: shoeAmount,
-          shipping_cost: shippingAmount,
+          price: shoePrice,
+          shipping_cost: shippingCost,
           platform_fee: platformFee,
           stripe_fee: stripeFee,
           seller_earnings: sellerEarnings,
-          payment_intent_id: session.payment_intent,
+          stripe_payment_intent_id: session.payment_intent as string,
+          challenge_code: challengeCode,
+          buyer_shipping_address: buyerShippingAddress,
           shipping_deadline: shippingDeadline.toISOString(),
         })
         .select()
@@ -103,14 +109,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
 
-      // Decrement listing size quantity
-      const { error: updateError } = await supabase.rpc('decrement_listing_quantity', {
-        listing_id: listingId,
-        size_key: size,
-      })
+      // Decrement listing size quantity directly
+      const { data: listing, error: listingFetchError } = await supabase
+        .from('listings')
+        .select('sizes')
+        .eq('id', listingId)
+        .single()
 
-      if (updateError) {
-        console.error('Quantity update error:', updateError)
+      if (listingFetchError || !listing) {
+        console.error('Failed to fetch listing for quantity update:', listingFetchError)
+      } else {
+        const sizes = listing.sizes as Record<string, any>
+        if (sizes && sizes[size] !== undefined) {
+          const currentQty = typeof sizes[size] === 'number' ? sizes[size] : (sizes[size]?.quantity ?? 0)
+          if (typeof sizes[size] === 'number') {
+            sizes[size] = Math.max(0, currentQty - 1)
+          } else if (sizes[size] && typeof sizes[size] === 'object') {
+            sizes[size] = { ...sizes[size], quantity: Math.max(0, currentQty - 1) }
+          }
+
+          const { error: updateError } = await supabase
+            .from('listings')
+            .update({ sizes })
+            .eq('id', listingId)
+
+          if (updateError) {
+            console.error('Quantity update error:', updateError)
+          }
+        }
       }
 
       // Mark custom offer as accepted if applicable

@@ -37,27 +37,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get order with address details
+    // Verify the order exists and user is the seller
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select(`
-        id,
-        listing_id,
-        buyer_id,
-        seller_id,
-        price,
-        shipping_cost,
-        buyer_address,
-        seller_address,
-        listings (
-          id,
-          brand,
-          model
-        ),
-        profiles!seller_id (
-          full_name
-        )
-      `)
+      .select('id, seller_id, status')
       .eq('id', orderId)
       .single()
 
@@ -65,12 +56,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Get buyer profile for address
-    const { data: buyerProfile } = await supabase
-      .from('profiles')
-      .select('full_name, address')
-      .eq('id', order.buyer_id)
-      .single()
+    if (order.seller_id !== user.id) {
+      return NextResponse.json({ error: 'Only the seller can purchase a label' }, { status: 403 })
+    }
 
     // Purchase label using the rate
     const labelResponse = await fetch('https://api.goshippo.com/transactions/', {
@@ -113,9 +101,8 @@ export async function POST(request: NextRequest) {
       .from('orders')
       .update({
         tracking_number: trackingNumber,
-        label_url: labelUrl,
+        shipping_label_url: labelUrl,
         status: 'label_created',
-        shipped_at: new Date().toISOString(),
       })
       .eq('id', orderId)
 

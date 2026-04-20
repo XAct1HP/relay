@@ -47,9 +47,9 @@ export async function POST(
 
     const { rating, comment } = await request.json()
 
-    if (rating === undefined || !comment) {
+    if (rating === undefined || rating < 1 || rating > 5) {
       return NextResponse.json(
-        { error: 'Missing rating or comment' },
+        { error: 'Rating is required and must be between 1 and 5' },
         { status: 400 }
       )
     }
@@ -57,14 +57,17 @@ export async function POST(
     // Get order details
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select(
-        'id, buyer_id, seller_id, seller_earnings, status, stripe_account_id'
-      )
+      .select('id, buyer_id, seller_id, seller_earnings, status')
       .eq('id', orderId)
       .single()
 
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // Idempotency: if already completed, return early
+    if (order.status === 'completed') {
+      return NextResponse.json({ message: 'Order already completed', order })
     }
 
     // Only buyer can complete and review
@@ -81,9 +84,9 @@ export async function POST(
       .insert({
         order_id: orderId,
         reviewer_id: user.id,
-        reviewee_id: order.seller_id,
+        seller_id: order.seller_id,
         rating,
-        comment,
+        comment: comment || null,
       })
       .select()
       .single()
@@ -120,10 +123,14 @@ export async function POST(
       }
     }
 
-    // Update order status
+    // Update order status and store review data on the order
     const { error: updateError } = await supabase
       .from('orders')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .update({
+        status: 'completed',
+        review_rating: rating,
+        review_comment: comment || null,
+      })
       .eq('id', orderId)
 
     if (updateError) {
@@ -134,7 +141,7 @@ export async function POST(
       )
     }
 
-    // Update seller stats
+    // Update seller stats (check gracefully if columns exist)
     const { data: sellerStats } = await supabase
       .from('profiles')
       .select('sales_count, avg_rating')
@@ -142,18 +149,21 @@ export async function POST(
       .single()
 
     if (sellerStats) {
-      const newSalesCount = (sellerStats.sales_count || 0) + 1
-      const currentAvgRating = sellerStats.avg_rating || 0
+      const newSalesCount = ((sellerStats as any).sales_count || 0) + 1
+      const currentAvgRating = (sellerStats as any).avg_rating || 0
       const newAvgRating =
         (currentAvgRating * (newSalesCount - 1) + rating) / newSalesCount
 
-      await supabase
-        .from('profiles')
-        .update({
-          sales_count: newSalesCount,
-          avg_rating: newAvgRating,
-        })
-        .eq('id', order.seller_id)
+      const updatePayload: Record<string, any> = {}
+      if ('sales_count' in sellerStats) updatePayload.sales_count = newSalesCount
+      if ('avg_rating' in sellerStats) updatePayload.avg_rating = newAvgRating
+
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from('profiles')
+          .update(updatePayload)
+          .eq('id', order.seller_id)
+      }
     }
 
     return NextResponse.json({ review, order: { ...order, status: 'completed' } })

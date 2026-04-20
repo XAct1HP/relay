@@ -9,12 +9,14 @@ type FilterTab = "all" | "open" | "resolved";
 
 interface Dispute {
   id: string;
-  status: "disputed" | "resolved";
+  status: string;
   created_at: string;
   dispute_reason: string;
+  dispute_ruling: string | null;
   buyer_id: string;
   seller_id: string;
-  profiles: Array<any>;
+  buyer: any;
+  seller: any;
 }
 
 function DisputeRow({ dispute }: any) {
@@ -66,10 +68,11 @@ export default function DisputesPage() {
   useEffect(() => {
     async function loadDisputes() {
       const supabase = createClient();
+      // Also fetch resolved disputes (completed/refund_pending with a dispute_ruling)
       const { data } = await supabase
         .from("orders")
-        .select("*, profiles!orders_buyer_id_fkey(*), profiles!orders_seller_id_fkey(*)")
-        .eq("status", "disputed")
+        .select("*, buyer:profiles!orders_buyer_id_fkey(*), seller:profiles!orders_seller_id_fkey(*)")
+        .or("status.eq.disputed,dispute_ruling.neq.null")
         .order("created_at", { ascending: false });
 
       setDisputes(data || []);
@@ -79,13 +82,18 @@ export default function DisputesPage() {
     loadDisputes();
   }, []);
 
+  const isResolved = (d: Dispute) => d.dispute_ruling !== null;
+  const isOpen = (d: Dispute) => d.status === "disputed" && !d.dispute_ruling;
+
   const filteredDisputes =
     filter === "all"
       ? disputes
-      : disputes.filter((dispute) => (filter === "open" ? dispute.status === "disputed" : dispute.status === "resolved"));
+      : filter === "open"
+        ? disputes.filter(isOpen)
+        : disputes.filter(isResolved);
 
-  const openCount = disputes.filter((d) => d.status === "disputed").length;
-  const resolvedCount = disputes.filter((d) => d.status === "resolved").length;
+  const openCount = disputes.filter(isOpen).length;
+  const resolvedCount = disputes.filter(isResolved).length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -138,24 +146,20 @@ export default function DisputesPage() {
           <div className="relay-card overflow-hidden p-0">
             <div className="divide-y divide-white/5">
               {filteredDisputes.length > 0 ? (
-                filteredDisputes.map((dispute) => {
-                  const buyer = dispute.profiles?.find((p: any) => p.id === dispute.buyer_id);
-                  const seller = dispute.profiles?.find((p: any) => p.id === dispute.seller_id);
-                  return (
+                filteredDisputes.map((dispute) => (
                     <DisputeRow
                       key={dispute.id}
                       dispute={{
                         id: dispute.id,
-                        orderId: dispute.id,
+                        orderId: dispute.id.slice(0, 8) + '...',
                         reason: dispute.dispute_reason || 'Disputed',
-                        buyer: buyer?.display_name || 'Unknown',
-                        seller: seller?.display_name || 'Unknown',
+                        buyer: dispute.buyer?.full_name || dispute.buyer?.display_name || 'Unknown',
+                        seller: dispute.seller?.full_name || dispute.seller?.display_name || 'Unknown',
                         dateFiled: new Date(dispute.created_at).toLocaleDateString(),
-                        status: dispute.status === 'disputed' ? 'open' : 'resolved',
+                        status: isOpen(dispute) ? 'open' : 'resolved',
                       }}
                     />
-                  );
-                })
+                ))
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-white/40">No disputes found</p>

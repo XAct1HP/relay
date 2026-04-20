@@ -40,19 +40,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { reason, description, evidenceUrls } = await request.json()
-
-    if (!reason || !description) {
-      return NextResponse.json(
-        { error: 'Missing reason or description' },
-        { status: 400 }
-      )
-    }
-
     // Fetch the order
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, buyer_id, seller_id, status')
+      .select('id, buyer_id, status')
       .eq('id', orderId)
       .single()
 
@@ -60,45 +51,50 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Only buyer can file a dispute
+    // Validate user is the buyer
     if (order.buyer_id !== user.id) {
-      return NextResponse.json({ error: 'Only the buyer can file a dispute' }, { status: 403 })
+      return NextResponse.json(
+        { error: 'Only the buyer can mark an order as delivered' },
+        { status: 403 }
+      )
     }
 
-    // Validate order status — can only dispute delivered or review_window orders
-    if (!['delivered', 'review_window'].includes(order.status)) {
+    // Validate order status
+    if (order.status !== 'shipped') {
       return NextResponse.json(
-        { error: 'Order must be in delivered or review_window status to dispute' },
+        { error: 'Order must be in shipped status to mark as delivered' },
         { status: 400 }
       )
     }
 
-    // Update the order directly with dispute data
+    // Set review deadline to 48 hours from now
+    const reviewDeadline = new Date()
+    reviewDeadline.setHours(reviewDeadline.getHours() + 48)
+
+    // Update the order
     const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
       .update({
-        status: 'disputed',
-        dispute_reason: reason,
-        dispute_text_buyer: description,
-        dispute_evidence_buyer: evidenceUrls || [],
+        status: 'delivered',
+        review_deadline: reviewDeadline.toISOString(),
       })
       .eq('id', orderId)
       .select()
       .single()
 
     if (updateError) {
-      console.error('Dispute update error:', updateError)
+      console.error('Mark delivered error:', updateError)
       return NextResponse.json(
-        { error: 'Failed to file dispute' },
+        { error: 'Failed to mark order as delivered' },
         { status: 500 }
       )
     }
 
     return NextResponse.json(updatedOrder)
   } catch (error) {
-    console.error('Dispute filing error:', error)
+    console.error('Mark delivered error:', error)
     return NextResponse.json(
-      { error: 'Failed to file dispute' },
+      { error: 'Failed to mark order as delivered' },
       { status: 500 }
     )
   }

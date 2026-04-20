@@ -1,5 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
@@ -12,36 +11,25 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: disputeId } = await params
+    // The id param IS the order ID (disputes live on orders)
+    const { id: orderId } = await params
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
+    // Use service role client for admin operations
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Handle SSR context
-            }
-          },
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Get current user and verify admin
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    // Verify admin via auth header (extract token from Authorization header)
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    if (!user) {
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -59,45 +47,38 @@ export async function PATCH(
 
     if (!ruling || !['buyer', 'seller'].includes(ruling)) {
       return NextResponse.json(
-        { error: 'Invalid ruling' },
+        { error: 'Invalid ruling. Must be "buyer" or "seller".' },
         { status: 400 }
       )
     }
 
-    // Get dispute with order details
-    const { data: dispute, error: fetchError } = await supabase
-      .from('disputes')
-      .select(`
-        id,
-        order_id,
-        orders (
-          id,
-          buyer_id,
-          seller_id,
-          price,
-          seller_earnings,
-          payment_intent_id,
-          stripe_account_id
-        )
-      `)
-      .eq('id', disputeId)
+    // Fetch the order directly
+    const { data: order, error: fetchError } = await supabase
+      .from('orders')
+      .select('id, buyer_id, seller_id, price, seller_earnings, stripe_payment_intent_id, status')
+      .eq('id', orderId)
       .single()
 
-    if (fetchError || !dispute) {
+    if (fetchError || !order) {
       return NextResponse.json(
-        { error: 'Dispute not found' },
+        { error: 'Order not found' },
         { status: 404 }
       )
     }
 
-    const order = Array.isArray(dispute.orders) ? dispute.orders[0] : dispute.orders
+    if (order.status !== 'disputed') {
+      return NextResponse.json(
+        { error: 'Order is not in disputed status' },
+        { status: 400 }
+      )
+    }
 
     if (ruling === 'buyer') {
       // Refund the buyer
       try {
-        if (order.payment_intent_id) {
+        if (order.stripe_payment_intent_id) {
           await stripe.refunds.create({
-            payment_intent: order.payment_intent_id,
+            payment_intent: order.stripe_payment_intent_id,
           })
         }
       } catch (err) {
@@ -113,14 +94,20 @@ export async function PATCH(
         .from('orders')
         .update({
           status: 'refund_pending',
+          dispute_ruling: 'buyer',
+          admin_notes: adminNotes || null,
         })
-        .eq('id', order.id)
+        .eq('id', orderId)
 
       if (updateError) {
         console.error('Order update error:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update order' },
+          { status: 500 }
+        )
       }
     } else if (ruling === 'seller') {
-      // Complete order and transfer earnings to seller
+      // Transfer earnings to seller
       const { data: sellerProfile } = await supabase
         .from('profiles')
         .select('stripe_account_id')
@@ -148,37 +135,28 @@ export async function PATCH(
         .from('orders')
         .update({
           status: 'completed',
-          completed_at: new Date().toISOString(),
+          dispute_ruling: 'seller',
+          admin_notes: adminNotes || null,
         })
-        .eq('id', order.id)
+        .eq('id', orderId)
 
       if (updateError) {
         console.error('Order update error:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update order' },
+          { status: 500 }
+        )
       }
     }
 
-    // Update dispute status
-    const { data: updatedDispute, error: updateError } = await supabase
-      .from('disputes')
-      .update({
-        status: 'resolved',
-        ruling,
-        admin_notes: adminNotes,
-        resolved_at: new Date().toISOString(),
-      })
-      .eq('id', disputeId)
-      .select()
+    // Fetch the updated order to return
+    const { data: updatedOrder } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
       .single()
 
-    if (updateError) {
-      console.error('Dispute update error:', updateError)
-      return NextResponse.json(
-        { error: 'Failed to update dispute' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json(updatedDispute)
+    return NextResponse.json(updatedOrder)
   } catch (error) {
     console.error('Dispute ruling error:', error)
     return NextResponse.json(
