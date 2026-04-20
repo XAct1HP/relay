@@ -103,7 +103,7 @@ export default function ListingDetailPage({
             brand: data.brand,
             model: data.model,
             nickname: data.nickname,
-            condition: conditions[data.condition] || "Used - Good",
+            condition: (conditions[data.condition] || "Used - Good") as ListingDetail["condition"],
             boxCondition: boxConditions[data.box_condition] || "No Box",
             description: data.description,
             sizes: (data.sizes as any[])
