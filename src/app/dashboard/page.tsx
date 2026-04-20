@@ -202,7 +202,7 @@ export default function DashboardPage() {
             totalRevenue: totalRev,
             activeListings: listings?.length || 0,
             ordersThisMonth: thisMonth.length,
-            sellerRating: currentUser.role === "seller" ? 4.8 : 0,
+            sellerRating: currentUser?.role === "seller" ? 4.8 : 0,
             totalSales: completed.length,
             avgOrderValue: avgVal,
           });
