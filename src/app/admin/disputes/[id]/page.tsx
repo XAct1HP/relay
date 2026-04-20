@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase";
 import { useParams } from "next/navigation";
 
@@ -27,12 +28,13 @@ function ImageGallery({ images, title }: any) {
         {images.map((img: any) => (
           <div
             key={img.id}
-            className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer"
+            className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative"
           >
-            <img
+            <Image
               src={img.url}
               alt="Evidence"
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           </div>
         ))}
@@ -107,6 +109,7 @@ export default function DisputeDetailPage() {
   const [adminNotes, setAdminNotes] = useState("");
   const [dispute, setDispute] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [rulingLoading, setRulingLoading] = useState(false);
 
   useEffect(() => {
     async function loadDispute() {
@@ -150,7 +153,6 @@ export default function DisputeDetailPage() {
   }
 
   const hasRuling = dispute.dispute_ruling !== null && dispute.dispute_ruling !== undefined;
-  const [rulingLoading, setRulingLoading] = useState(false);
 
   const handleRuling = async (type: ModalState, notes: string) => {
     if (type === "none") return;
