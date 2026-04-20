@@ -526,7 +526,7 @@ export default function OnboardingPage() {
 
               <div className="mt-6 space-y-4">
                 <p className="text-sm text-white/70">
-                  We use Stripe to handle payouts securely. You'll need to connect your Stripe account to receive
+                  We use Stripe to handle payouts securely. You&apos;ll need to connect your Stripe account to receive
                   payments from sales.
                 </p>
 

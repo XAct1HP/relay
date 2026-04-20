@@ -267,14 +267,14 @@ export default function DisputeDetailPage() {
                   className="flex-1 relay-button-secondary bg-green-500/20 text-green-400 hover:bg-green-500/30"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Rule in Buyer's Favor
+                  Rule in Buyer&apos;s Favor
                 </button>
                 <button
                   onClick={() => setModalState("seller")}
                   className="flex-1 relay-button-secondary bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Rule in Seller's Favor
+                  Rule in Seller&apos;s Favor
                 </button>
               </div>
             </div>
@@ -315,5 +315,8 @@ export default function DisputeDetailPage() {
           onCancel={() => setModalState("none")}
         />
       </div>
+  );
+}
+v>
   );
 }

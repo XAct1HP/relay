@@ -218,7 +218,7 @@ const DisputeForm = ({ onSubmit }: { onSubmit: (reason: string, description: str
 
   return (
     <div className="relay-card p-6 mb-6 border border-red-500/20 bg-red-500/5">
-      <h3 className="text-lg font-bold text-[#f5f7fb] mb-4">What's wrong with your order?</h3>
+      <h3 className="text-lg font-bold text-[#f5f7fb] mb-4">What&apos;s wrong with your order?</h3>
 
       <div className="space-y-4">
         <div>
@@ -753,7 +753,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                 </div>
 
                 <p className="text-xs text-[#7ca6ff] bg-white/5 border border-white/10 rounded p-3">
-                  Our team is reviewing your complaint. You'll be notified once a decision is made.
+                  Our team is reviewing your complaint. You&apos;ll be notified once a decision is made.
                 </p>
               </div>
             )}
@@ -767,9 +767,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                   </h2>
 
                   <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
-                    <p className="text-xs font-semibold text-white/50 mb-2">BUYER'S REASON</p>
+                    <p className="text-xs font-semibold text-white/50 mb-2">BUYER&apos;S REASON</p>
                     <p className="text-[#f5f7fb] mb-3">{order.disputeReason}</p>
-                    <p className="text-xs font-semibold text-white/50 mb-2">BUYER'S DESCRIPTION</p>
+                    <p className="text-xs font-semibold text-white/50 mb-2">BUYER&apos;S DESCRIPTION</p>
                     <p className="text-[#7ca6ff] text-sm">{order.disputeDescription}</p>
                   </div>
                 </div>
@@ -811,7 +811,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
             {order.buyerRating && !reviewSubmitted && (
               <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-                <p className="text-xs font-semibold text-white/50 mb-2">BUYER'S RATING</p>
+                <p className="text-xs font-semibold text-white/50 mb-2">BUYER&apos;S RATING</p>
                 <div className="flex items-center gap-2 mb-2">
                   {[...Array(5)].map((_, i) => (
                     <Star
@@ -842,6 +842,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
         {/* Show rating modal */}
         {showRatingModal && <RatingModal onSubmit={handleRatingSubmit} />}
+    </div>
+  )
+}
+it} />}
     </div>
   )
 }

@@ -86,7 +86,7 @@ function RemoveListingModal({ isOpen, listing, onConfirm, onCancel }: any) {
           Remove Listing?
         </h2>
         <p className="text-white/60 mb-6">
-          This will immediately remove "{listing.title}" from the marketplace.
+          This will immediately remove &quot;{listing.title}&quot; from the marketplace.
           The seller will be notified.
         </p>
 
@@ -211,5 +211,8 @@ export default function ListingsPage() {
           onCancel={() => setModalState("none")}
         />
       </div>
+  );
+}
+v>
   );
 }
