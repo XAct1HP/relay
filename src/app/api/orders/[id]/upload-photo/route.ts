@@ -41,7 +41,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.challenge_code !== challengeCode) {
+    if (order.challenge_code?.toUpperCase() !== challengeCode?.toUpperCase()) {
       return NextResponse.json({ error: 'Invalid challenge code' }, { status: 403 })
     }
 

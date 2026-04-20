@@ -55,7 +55,7 @@ export async function POST(
         )
       }
 
-      if (order.challenge_code !== challengeCode) {
+      if (order.challenge_code?.toUpperCase() !== challengeCode?.toUpperCase()) {
         return NextResponse.json({ error: 'Invalid challenge code' }, { status: 403 })
       }
 
