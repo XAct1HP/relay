@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
-import { createClient } from "@/lib/supabase"
 import {
   Camera,
   CheckCircle2,
@@ -108,32 +107,33 @@ export default function MobileAuthPage() {
   const totalSteps = AUTH_STEPS.length
   const completedCount = Object.keys(capturedPhotos).length
 
-  // ── Load order (minimal info, no auth required) ──
+  // ── Load order (via public API — no login required) ──
   useEffect(() => {
     async function loadOrder() {
       if (!orderId) return
 
-      const supabase = createClient()
-      const { data, error: fetchError } = await supabase
-        .from("orders")
-        .select("id, status, listing_id, listings(brand, model)")
-        .eq("id", orderId)
-        .single()
+      try {
+        const res = await fetch(`/api/orders/${orderId}/public-info`)
+        const data = await res.json()
 
-      if (fetchError || !data) {
-        setError("Order not found. Please check the link and try again.")
+        if (!res.ok || !data.id) {
+          setError("Order not found. Please check the link and try again.")
+          setPageState("error")
+          return
+        }
+
+        if (data.status !== "paid") {
+          setError("This order has already been authenticated or is not in the correct state.")
+          setPageState("error")
+          return
+        }
+
+        setOrder(data)
+        setPageState("verify")
+      } catch (err) {
+        setError("Could not load order. Please check your connection and try again.")
         setPageState("error")
-        return
       }
-
-      if (data.status !== "paid") {
-        setError("This order has already been authenticated or is not in the correct state.")
-        setPageState("error")
-        return
-      }
-
-      setOrder(data)
-      setPageState("verify")
     }
 
     loadOrder()
@@ -289,30 +289,35 @@ export default function MobileAuthPage() {
     }
   }
 
+  // ── Helper: upload file via server API (challenge-code auth) ──
+  const uploadFile = async (file: Blob, fileName: string): Promise<string> => {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("challengeCode", codeInput.trim())
+    formData.append("fileName", fileName)
+
+    const res = await fetch(`/api/orders/${orderId}/upload-photo`, {
+      method: "POST",
+      body: formData,
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || "Upload failed")
+    return data.url
+  }
+
   // ── Certificate upload ──
   const handleCertificateUpload = async (file: File) => {
     if (!order) return
     setCertificateUploading(true)
 
     try {
-      const supabase = createClient()
       const ext = file.name.split(".").pop() || "jpg"
-      const path = `${order.id}/checkcheck-certificate.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("order-photos")
-        .upload(path, file, { upsert: true })
-
-      if (uploadError) {
-        setError(`Failed to upload certificate: ${uploadError.message}`)
-        return
-      }
-
-      const { data: urlData } = supabase.storage.from("order-photos").getPublicUrl(path)
-      setCertificateUrl(urlData.publicUrl)
-    } catch (err) {
+      const url = await uploadFile(file, `checkcheck-certificate.${ext}`)
+      setCertificateUrl(url)
+    } catch (err: any) {
       console.error("Certificate upload failed:", err)
-      setError("Failed to upload certificate.")
+      setError(err.message || "Failed to upload certificate.")
     } finally {
       setCertificateUploading(false)
     }
@@ -326,7 +331,6 @@ export default function MobileAuthPage() {
     setUploadProgress(0)
 
     try {
-      const supabase = createClient()
       const urls: string[] = []
 
       for (let i = 0; i < AUTH_STEPS.length; i++) {
@@ -338,19 +342,8 @@ export default function MobileAuthPage() {
           return
         }
 
-        const path = `${order.id}/${step.id}.jpg`
-        const { error: uploadError } = await supabase.storage
-          .from("order-photos")
-          .upload(path, blob, { upsert: true, contentType: "image/jpeg" })
-
-        if (uploadError) {
-          setError(`Failed to upload ${step.label}: ${uploadError.message}`)
-          setPageState("certificate")
-          return
-        }
-
-        const { data: urlData } = supabase.storage.from("order-photos").getPublicUrl(path)
-        urls.push(urlData.publicUrl)
+        const url = await uploadFile(blob, `${step.id}.jpg`)
+        urls.push(url)
         setUploadProgress(Math.round(((i + 1) / AUTH_STEPS.length) * 100))
       }
 
