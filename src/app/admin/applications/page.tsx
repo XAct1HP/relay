@@ -143,7 +143,7 @@ export default function ApplicationsPage() {
                     key={app.id}
                     app={{
                       id: app.id,
-                      name: app.profiles?.display_name || 'Unknown',
+                      name: app.profiles?.full_name || app.profiles?.display_name || app.profiles?.username || 'Unknown',
                       email: app.profiles?.email || 'N/A',
                       date: new Date(app.created_at).toLocaleDateString(),
                       status: app.status,

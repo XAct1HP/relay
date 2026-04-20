@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,7 +12,7 @@ export async function PATCH(
 
     const cookieStore = await cookies()
 
-    // Anon client for auth verification
+    // Anon client — only used to verify the caller is an admin
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -33,7 +34,7 @@ export async function PATCH(
       }
     )
 
-    // Get current user and verify admin
+    // Verify the caller is an authenticated admin
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -61,26 +62,10 @@ export async function PATCH(
       )
     }
 
-    // Service role client to bypass RLS for cross-user updates
-    const supabaseAdmin = createServerClient(
+    // Service role client — bypasses RLS so we can update another user's profile
+    const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Handle SSR context
-            }
-          },
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
     // Get application
@@ -91,6 +76,7 @@ export async function PATCH(
       .single()
 
     if (fetchError || !application) {
+      console.error('Fetch error:', fetchError)
       return NextResponse.json(
         { error: 'Application not found' },
         { status: 404 }
@@ -98,7 +84,7 @@ export async function PATCH(
     }
 
     if (action === 'approve') {
-      // Update application status (only columns that exist in the schema)
+      // 1. Update application status
       const { data: updatedApplication, error: updateError } = await supabaseAdmin
         .from('seller_applications')
         .update({
@@ -117,7 +103,7 @@ export async function PATCH(
         )
       }
 
-      // Update user profile to seller role and mark application as approved
+      // 2. Update user profile — role to seller, application status to approved
       const { error: updateUserError } = await supabaseAdmin
         .from('profiles')
         .update({
@@ -137,10 +123,9 @@ export async function PATCH(
 
       return NextResponse.json(updatedApplication)
     } else if (action === 'reject') {
-      // Increment rejection count
       const rejectionCount = (application.rejection_count || 0) + 1
 
-      // Update application status — 'rejected' is the only valid reject status in the schema constraint
+      // 1. Update application status
       const { data: updatedApplication, error: updateError } = await supabaseAdmin
         .from('seller_applications')
         .update({
@@ -160,19 +145,14 @@ export async function PATCH(
         )
       }
 
-      // Update profile application status
-      // Use 'rejected_final' on profile if max rejections reached (profile column allows it)
+      // 2. Update profile application status
       const isFinalRejection = rejectionCount >= 2
-      const { error: profileError } = await supabaseAdmin
+      await supabaseAdmin
         .from('profiles')
         .update({
           seller_application_status: isFinalRejection ? 'rejected_final' : 'rejected',
         })
         .eq('id', application.user_id)
-
-      if (profileError) {
-        console.error('Profile status update error:', profileError)
-      }
 
       return NextResponse.json(updatedApplication)
     }

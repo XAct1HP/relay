@@ -329,7 +329,7 @@ export default function ApplicationDetailPage() {
       {/* Application Info */}
       <div className="relay-card p-5">
         <div className="mb-6">
-          <p className="text-[#f5f7fb] text-2xl font-bold">{app.profiles?.display_name || 'Unknown'}</p>
+          <p className="text-[#f5f7fb] text-2xl font-bold">{app.profiles?.full_name || app.profiles?.display_name || app.profiles?.username || 'Unknown'}</p>
           <p className="text-white/60 text-sm mt-1">{app.profiles?.email || 'N/A'}</p>
         </div>
 
