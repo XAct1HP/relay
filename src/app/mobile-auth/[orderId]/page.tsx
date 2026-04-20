@@ -384,10 +384,10 @@ export default function MobileAuthPage() {
   // ════════════════════════════════════
   if (pageState === "loading") {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-[#0a0a0f] flex items-center justify-center px-5">
         <div className="text-center">
           <Loader2 className="w-10 h-10 animate-spin text-[#5f8fff] mx-auto mb-4" />
-          <p className="text-white/50">Loading...</p>
+          <p className="text-white/50 text-sm">Loading...</p>
         </div>
       </div>
     )
@@ -398,11 +398,13 @@ export default function MobileAuthPage() {
   // ════════════════════════════════════
   if (pageState === "error") {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
-        <div className="text-center max-w-sm">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h1 className="text-lg font-semibold text-[#f5f7fb] mb-2">Something went wrong</h1>
-          <p className="text-sm text-white/50 mb-6">{error}</p>
+      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-20 pb-8">
+        <div className="text-center max-w-sm mx-auto">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-red-400" />
+          </div>
+          <h1 className="text-xl font-semibold text-[#f5f7fb] mb-3">Something went wrong</h1>
+          <p className="text-sm text-white/50 leading-relaxed">{error}</p>
         </div>
       </div>
     )
@@ -412,68 +414,76 @@ export default function MobileAuthPage() {
   // RENDER: Challenge Code Verification
   // ════════════════════════════════════
   if (pageState === "verify") {
-    const listing = order?.listings
+    const listing = order?.listing
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
-        <div className="max-w-sm w-full space-y-6">
+      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-16 pb-8 overflow-y-auto">
+        <div className="max-w-sm w-full mx-auto">
           {/* Header */}
-          <div className="text-center">
-            <Lock className="w-10 h-10 text-[#5f8fff] mx-auto mb-3" />
-            <h1 className="text-xl font-bold text-[#f5f7fb]">Enter Challenge Code</h1>
-            <p className="text-sm text-white/50 mt-2">
-              Enter the challenge code shown on your order page to continue.
-            </p>
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-[#5f8fff]/10 border border-[#5f8fff]/20 flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-7 h-7 text-[#5f8fff]" />
+            </div>
+            <h1 className="text-2xl font-bold text-[#f5f7fb]">Relay Authentication</h1>
             {listing && (
-              <p className="text-xs text-white/30 mt-2">
+              <p className="text-sm text-white/40 mt-2">
                 {listing.brand} {listing.model}
               </p>
             )}
+            <p className="text-sm text-white/50 mt-3 leading-relaxed">
+              Enter the challenge code from your order page to verify your identity.
+            </p>
           </div>
 
           {/* Code Input */}
-          <div className="space-y-3">
+          <div className="space-y-4 mb-6">
+            <label className="block text-xs font-medium text-white/40 uppercase tracking-wider text-center">
+              Challenge Code
+            </label>
             <input
               type="text"
+              inputMode="text"
               value={codeInput}
               onChange={(e) => {
                 setCodeInput(e.target.value.toUpperCase())
                 setCodeError(null)
               }}
-              placeholder="Enter code..."
-              autoFocus
+              placeholder="ABC123"
               autoComplete="off"
-              className="w-full text-center text-2xl font-mono font-bold tracking-[0.3em] bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-[#f5f7fb] placeholder:text-white/20 focus:outline-none focus:border-[#5f8fff]/50 focus:ring-1 focus:ring-[#5f8fff]/30 transition-all"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              className="w-full text-center text-3xl font-mono font-bold tracking-[0.35em] bg-white/5 border-2 border-white/10 rounded-2xl px-4 py-5 text-[#f5f7fb] placeholder:text-white/15 focus:outline-none focus:border-[#5f8fff]/60 focus:bg-white/[0.07] transition-all"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleVerifyCode()
               }}
             />
 
             {codeError && (
-              <p className="text-sm text-red-400 text-center">{codeError}</p>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-center">
+                <p className="text-sm text-red-400">{codeError}</p>
+              </div>
             )}
-
-            <button
-              onClick={handleVerifyCode}
-              disabled={verifying || !codeInput.trim()}
-              className="relay-button-primary w-full py-4 text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {verifying ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                <>
-                  <Shield className="w-5 h-5" />
-                  Continue
-                </>
-              )}
-            </button>
           </div>
 
+          {/* Continue button */}
+          <button
+            onClick={handleVerifyCode}
+            disabled={verifying || !codeInput.trim()}
+            className="w-full rounded-2xl bg-white px-5 py-4 text-base font-semibold text-black flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40 disabled:active:scale-100"
+          >
+            {verifying ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              "Continue"
+            )}
+          </button>
+
           {/* Help text */}
-          <p className="text-xs text-white/30 text-center">
-            The challenge code is displayed on the order details page on your computer.
+          <p className="text-xs text-white/25 text-center mt-6 leading-relaxed">
+            Open the order on your computer and look for the challenge code in the authentication section.
           </p>
         </div>
       </div>
@@ -485,12 +495,14 @@ export default function MobileAuthPage() {
   // ════════════════════════════════════
   if (pageState === "done") {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
-        <div className="text-center max-w-sm">
-          <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-[#f5f7fb] mb-2">Authentication Submitted!</h1>
-          <p className="text-sm text-white/50 mb-6">
-            Your photos have been uploaded. You can now go back to your computer to generate the shipping label.
+      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-20 pb-8">
+        <div className="text-center max-w-sm mx-auto">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-5">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#f5f7fb] mb-3">Authentication Submitted!</h1>
+          <p className="text-sm text-white/50 leading-relaxed">
+            Your photos have been uploaded successfully. You can now return to your computer to generate the shipping label.
           </p>
         </div>
       </div>
@@ -501,42 +513,43 @@ export default function MobileAuthPage() {
   // RENDER: Ready (Start screen)
   // ════════════════════════════════════
   if (pageState === "ready") {
-    const listing = order?.listings
+    const listing = order?.listing
     return (
-      <div className="min-h-screen bg-[#0a0a0f] p-6">
-        <div className="max-w-md mx-auto space-y-6">
+      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-10 pb-8 overflow-y-auto">
+        <div className="max-w-sm w-full mx-auto space-y-5">
           {/* Header */}
-          <div className="text-center pt-4">
-            <Shield className="w-10 h-10 text-[#5f8fff] mx-auto mb-3" />
-            <h1 className="text-xl font-bold text-[#f5f7fb]">Authenticate Item</h1>
-            <p className="text-sm text-white/50 mt-1">
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#5f8fff]/10 border border-[#5f8fff]/20 flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-7 h-7 text-[#5f8fff]" />
+            </div>
+            <h1 className="text-2xl font-bold text-[#f5f7fb]">Authenticate Item</h1>
+            <p className="text-sm text-white/40 mt-1">
               {listing ? `${listing.brand} ${listing.model}` : `Order #${orderId.slice(0, 8).toUpperCase()}`}
             </p>
           </div>
 
           {/* Instructions */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-3">
+          <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-3">
             <h2 className="text-sm font-semibold text-[#f5f7fb]">You&apos;ll take {totalSteps} photos:</h2>
-            <ol className="text-sm text-white/60 space-y-2">
+            <ol className="text-sm text-white/60 space-y-2.5">
               {AUTH_STEPS.map((step, i) => (
-                <li key={step.id} className="flex gap-2">
-                  <span className="text-[#5f8fff] font-mono text-xs mt-0.5">{i + 1}.</span>
-                  <span>
-                    <span className="text-[#f5f7fb] font-medium">{step.label}</span>
-                    {" — "}{step.instruction}
+                <li key={step.id} className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-[#5f8fff]/10 text-[#5f8fff] text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {i + 1}
                   </span>
+                  <span className="text-[#f5f7fb]/80 text-sm leading-snug">{step.label}</span>
                 </li>
               ))}
             </ol>
           </div>
 
           {/* Important notes */}
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-            <p className="text-sm text-amber-300 font-medium mb-1">Important</p>
-            <ul className="text-xs text-amber-200/70 space-y-1">
-              <li>All photos must be taken live — no uploads allowed.</li>
-              <li>The CheckCheck certificate must be printed and placed inside the shipment box.</li>
-              <li>Make sure the challenge code is clearly visible when required.</li>
+          <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4">
+            <p className="text-sm text-amber-300 font-semibold mb-2">Before you start</p>
+            <ul className="text-xs text-amber-200/60 space-y-1.5 leading-relaxed">
+              <li>All photos are taken live with your camera.</li>
+              <li>Have the challenge code written on paper nearby.</li>
+              <li>Print your CheckCheck certificate for the shipment photo.</li>
             </ul>
           </div>
 
@@ -546,7 +559,7 @@ export default function MobileAuthPage() {
               setCurrentStepIndex(0)
               setPageState("capturing")
             }}
-            className="relay-button-primary w-full py-4 text-base flex items-center justify-center gap-2"
+            className="w-full rounded-2xl bg-white px-5 py-4 text-base font-semibold text-black flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
           >
             <Camera className="w-5 h-5" />
             Start Taking Photos
@@ -696,8 +709,8 @@ export default function MobileAuthPage() {
     const allPhotosTaken = Object.keys(capturedPhotos).length >= totalSteps
 
     return (
-      <div className="min-h-screen bg-[#0a0a0f] p-6">
-        <div className="max-w-md mx-auto space-y-6">
+      <div className="min-h-[100dvh] bg-[#0a0a0f] px-5 pt-8 pb-8 overflow-y-auto">
+        <div className="max-w-sm w-full mx-auto space-y-5">
           {/* Header */}
           <div className="text-center pt-4">
             <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
