@@ -12,7 +12,9 @@ interface Application {
   status: "pending" | "approved" | "rejected";
   created_at: string;
   profiles: {
+    full_name: string;
     display_name: string;
+    username: string;
     email: string;
   };
 }
