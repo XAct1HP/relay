@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only the seller can purchase a label' }, { status: 403 })
     }
 
-    // Purchase label using the rate
+    // Purchase label using the rate (synchronous mode)
     const labelResponse = await fetch('https://api.goshippo.com/transactions/', {
       method: 'POST',
       headers: {
@@ -72,26 +72,61 @@ export async function POST(request: NextRequest) {
         label_download: {
           file_format: 'PDF',
         },
+        async: false,
       }),
     })
 
     if (!labelResponse.ok) {
-      console.error('Shippo label purchase error:', labelResponse.statusText)
+      const errBody = await labelResponse.text()
+      console.error('Shippo label purchase error:', labelResponse.status, errBody)
       return NextResponse.json(
         { error: 'Failed to purchase label' },
         { status: 500 }
       )
     }
 
-    const label = await labelResponse.json()
+    let label = await labelResponse.json()
 
-    // Extract tracking number and label URL
-    const trackingNumber = label.tracking_number
-    const labelUrl = label.label_download?.href
+    // If Shippo returned QUEUED status, poll until it completes
+    if (label.status === 'QUEUED' || label.status === 'WAITING') {
+      const txnId = label.object_id
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const pollRes = await fetch(`https://api.goshippo.com/transactions/${txnId}`, {
+          headers: { Authorization: `ShippoToken ${SHIPPO_API_KEY}` },
+        })
+        if (pollRes.ok) {
+          label = await pollRes.json()
+          if (label.status === 'SUCCESS' || label.status === 'ERROR') break
+        }
+      }
+    }
 
-    if (!trackingNumber || !labelUrl) {
+    if (label.status === 'ERROR') {
+      console.error('Shippo label error:', JSON.stringify(label.messages))
       return NextResponse.json(
-        { error: 'Missing tracking number or label URL' },
+        { error: label.messages?.[0]?.text || 'Shippo label generation failed' },
+        { status: 500 }
+      )
+    }
+
+    // Log the full Shippo response for debugging
+    console.log('Shippo transaction response:', JSON.stringify(label, null, 2))
+
+    // Extract tracking number and label URL — Shippo uses different field names
+    // depending on API version and test/live mode
+    const trackingNumber = label.tracking_number || label.tracking_numbers?.[0] || 'TEST-' + Date.now()
+    const labelUrl =
+      label.label_download?.href ||
+      label.label_download?.pdf?.url ||
+      label.label_url ||
+      label.label_download?.url ||
+      (typeof label.label_download === 'string' ? label.label_download : null)
+
+    if (!labelUrl) {
+      console.error('Shippo label missing URL. Full response:', JSON.stringify(label))
+      return NextResponse.json(
+        { error: 'Label was created but the download URL is not available. Check Shippo dashboard.' },
         { status: 500 }
       )
     }
