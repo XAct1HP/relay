@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase'
-import { Clock, CheckCircle, XCircle } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, Upload } from 'lucide-react'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -228,7 +228,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Seller Application Status */}
-        {sellerApplicationStatus && (
+        {sellerApplicationStatus ? (
           <div className={`backdrop-blur-xl rounded-[1.5rem] border p-8 mb-6 ${
             sellerApplicationStatus === 'approved'
               ? 'bg-green-500/[0.06] border-green-500/20'
@@ -257,8 +257,32 @@ export default function SettingsPage() {
             <p className="text-white/50 text-sm">
               {sellerApplicationStatus === 'pending' && 'Your seller application is being reviewed by our team. You will gain access to seller features once approved.'}
               {sellerApplicationStatus === 'approved' && 'Your seller application has been approved! You now have access to all seller features.'}
-              {sellerApplicationStatus === 'rejected' && 'Your seller application was not approved. You may reapply through the onboarding process.'}
+              {sellerApplicationStatus === 'rejected' && 'Your seller application was not approved. You may reapply below.'}
             </p>
+            {sellerApplicationStatus === 'rejected' && (
+              <button
+                onClick={() => router.push('/onboarding')}
+                className="mt-4 px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors"
+              >
+                Reapply as Seller
+              </button>
+            )}
+          </div>
+        ) : currentUser?.role === 'buyer' && (
+          <div className="bg-[#5f8fff]/[0.06] backdrop-blur-xl rounded-[1.5rem] border border-[#5f8fff]/20 p-8 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-3">
+              <Upload size={22} className="text-[#5f8fff]" />
+              Become a Seller
+            </h2>
+            <p className="text-white/50 text-sm mb-4">
+              Want to start selling on Relay? Apply to become a verified seller and get access to listing tools, order management, and payouts.
+            </p>
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors"
+            >
+              Apply to Sell
+            </button>
           </div>
         )}
 

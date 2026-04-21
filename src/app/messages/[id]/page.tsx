@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { Send, Search, Tag, DollarSign, Check, X, MoreVertical, ArrowLeft } from "lucide-react";
@@ -19,7 +19,9 @@ interface Message {
     offerPrice: number;
     size: string;
     listingName: string;
+    listingId: string;
     status: "pending" | "accepted" | "declined";
+    messageId: string;
   };
 }
 
@@ -51,16 +53,22 @@ function OfferCard({
   offer,
   isBuyer,
   isSender,
+  onAccept,
+  onDecline,
 }: {
   offer: {
     originalPrice: number;
     offerPrice: number;
     size: string;
     listingName: string;
+    listingId: string;
     status: "pending" | "accepted" | "declined";
+    messageId: string;
   };
   isBuyer: boolean;
   isSender: boolean;
+  onAccept?: () => void;
+  onDecline?: () => void;
 }) {
   return (
     <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-sm">
@@ -108,11 +116,17 @@ function OfferCard({
         </div>
       ) : (
         <div className="flex gap-2">
-          <button className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+          <button
+            onClick={onAccept}
+            className="flex-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+          >
             <Check className="w-3.5 h-3.5" />
             Accept
           </button>
-          <button className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+          <button
+            onClick={onDecline}
+            className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+          >
             <X className="w-3.5 h-3.5" />
             Decline
           </button>
@@ -142,12 +156,101 @@ function MessageCircle({ className }: { className: string }) {
 
 export default function ConversationPage() {
   const params = useParams();
+  const router = useRouter();
   const conversationId = params.id as string;
   const { currentUser } = useAuth();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const handleAcceptOffer = async (offer: Message["offer"]) => {
+    if (!offer || !currentUser?.id) return;
+    const supabase = createClient();
+
+    try {
+      // Update the message status
+      await supabase
+        .from("messages")
+        .update({ custom_offer_status: "accepted" })
+        .eq("id", offer.messageId);
+
+      // Update the custom_offers table
+      await supabase
+        .from("custom_offers")
+        .update({ status: "accepted" })
+        .eq("listing_id", offer.listingId)
+        .eq("offer_price", offer.offerPrice)
+        .eq("size", offer.size)
+        .eq("status", "pending");
+
+      // Send a system message
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: currentUser.id,
+        content: `Offer accepted: $${offer.offerPrice.toFixed(2)} for ${offer.listingName} (Size ${offer.size})`,
+        message_type: "offer_accepted",
+      });
+
+      // Redirect buyer to checkout with custom offer price
+      const params = new URLSearchParams({
+        listing: offer.listingId,
+        size: offer.size,
+        price: offer.offerPrice.toString(),
+        customOffer: "true",
+      });
+      router.push(`/checkout?${params.toString()}`);
+    } catch (error) {
+      console.error("Error accepting offer:", error);
+      alert("Failed to accept offer. Please try again.");
+    }
+  };
+
+  const handleDeclineOffer = async (offer: Message["offer"]) => {
+    if (!offer || !currentUser?.id) return;
+    const supabase = createClient();
+
+    try {
+      // Update the message status
+      await supabase
+        .from("messages")
+        .update({ custom_offer_status: "declined" })
+        .eq("id", offer.messageId);
+
+      // Update the custom_offers table
+      await supabase
+        .from("custom_offers")
+        .update({ status: "declined" })
+        .eq("listing_id", offer.listingId)
+        .eq("offer_price", offer.offerPrice)
+        .eq("size", offer.size)
+        .eq("status", "pending");
+
+      // Send a system message
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: currentUser.id,
+        content: `Offer declined: $${offer.offerPrice.toFixed(2)} for ${offer.listingName}`,
+        message_type: "offer_declined",
+      });
+
+      // Update local state
+      setConversation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: prev.messages.map((m) =>
+            m.offer?.messageId === offer.messageId
+              ? { ...m, offer: { ...m.offer!, status: "declined" as const } }
+              : m
+          ),
+        };
+      });
+    } catch (error) {
+      console.error("Error declining offer:", error);
+      alert("Failed to decline offer. Please try again.");
+    }
+  };
 
   useEffect(() => {
     async function loadConversation() {
@@ -165,22 +268,64 @@ export default function ConversationPage() {
         return;
       }
 
-      // Fetch messages for this conversation with realtime subscription
+      // Fetch messages for this conversation
       const { data: messagesData } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true });
 
+      // Fetch custom offers for this conversation to get listing details
+      const { data: customOffers } = await supabase
+        .from("custom_offers")
+        .select("*, listings(id, brand, model, nickname)")
+        .eq("conversation_id", conversationId);
+
+      const offersMap = new Map<string, any>();
+      (customOffers || []).forEach((co: any) => {
+        offersMap.set(co.id, co);
+      });
+
       // Convert messages to UI format
-      const messages: Message[] = (messagesData || []).map((msg: any) => ({
-        id: msg.id,
-        sender: msg.sender_id === currentUser?.id ? "user" : "other",
-        content: msg.content || "",
-        timestamp: new Date(msg.created_at),
-        type: msg.type || "text",
-        offer: msg.offer,
-      }));
+      const messages: Message[] = (messagesData || []).map((msg: any) => {
+        const isOffer = msg.message_type === "custom_offer";
+        let offer: Message["offer"] | undefined;
+
+        if (isOffer) {
+          // Find the matching custom offer for listing details
+          const matchingOffer = Array.from(offersMap.values()).find(
+            (co: any) =>
+              co.conversation_id === conversationId &&
+              co.sender_id === msg.sender_id &&
+              co.offer_price === msg.custom_offer_price &&
+              co.size === msg.custom_offer_size
+          );
+
+          const listing = matchingOffer?.listings;
+          const listingName = listing
+            ? `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}`
+            : msg.content?.replace("Custom offer: ", "") || "Custom Offer";
+
+          offer = {
+            originalPrice: matchingOffer?.original_price || 0,
+            offerPrice: msg.custom_offer_price || 0,
+            size: msg.custom_offer_size || "",
+            listingName,
+            listingId: matchingOffer?.listing_id || "",
+            status: msg.custom_offer_status || "pending",
+            messageId: msg.id,
+          };
+        }
+
+        return {
+          id: msg.id,
+          sender: msg.sender_id === currentUser?.id ? "user" : "other",
+          content: msg.content || "",
+          timestamp: new Date(msg.created_at),
+          type: isOffer ? "offer" : "text",
+          offer,
+        };
+      });
 
       // Get other user info
       const otherUserId = convData.user1_id === currentUser?.id ? convData.user2_id : convData.user1_id;
@@ -331,6 +476,8 @@ export default function ConversationPage() {
                       offer={msg.offer}
                       isBuyer={msg.sender !== "user"}
                       isSender={msg.sender === "user"}
+                      onAccept={() => handleAcceptOffer(msg.offer)}
+                      onDecline={() => handleDeclineOffer(msg.offer)}
                     />
                   </div>
                 ) : msg.content ? (

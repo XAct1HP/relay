@@ -17,15 +17,15 @@ export function Navbar() {
     return pathname.startsWith(path) && path !== "/";
   };
 
-  const navigationLinks = [
-    { href: "/marketplace", label: "Marketplace" },
-    ...(user?.role === "buyer" ? [{ href: "/feed", label: "Feed" }] : []),
-    ...(user?.role === "seller"
-      ? [{ href: "/sell", label: "Sell" }]
-      : []),
-    { href: "/messages", label: "Messages" },
-    { href: "/orders", label: "Orders" },
-  ];
+  const navigationLinks = user
+    ? [
+        { href: "/marketplace", label: "Marketplace" },
+        ...(user.role === "buyer" ? [{ href: "/feed", label: "Feed" }] : []),
+        ...(user.role === "seller" ? [{ href: "/sell", label: "Sell" }] : []),
+        { href: "/messages", label: "Messages" },
+        { href: "/orders", label: "Orders" },
+      ]
+    : [];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-[72px] bg-relay-bg/80 backdrop-blur-xl border-b border-white/10">

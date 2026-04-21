@@ -50,12 +50,32 @@ export async function POST(request: NextRequest) {
     // Fetch listing and seller info
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id, seller_id, brand, model, images')
+      .select('id, seller_id, brand, model, images, sizes, status')
       .eq('id', listingId)
       .single()
 
     if (listingError || !listing) {
       return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
+    }
+
+    // Check listing is still active
+    if (listing.status !== 'active') {
+      return NextResponse.json(
+        { error: 'This listing is no longer available' },
+        { status: 400 }
+      )
+    }
+
+    // Check the requested size still has stock
+    const sizes = listing.sizes as any[]
+    if (Array.isArray(sizes)) {
+      const sizeEntry = sizes.find((s: any) => String(s.size) === String(size))
+      if (!sizeEntry || (sizeEntry.quantity || 0) <= 0) {
+        return NextResponse.json(
+          { error: 'This size is no longer available' },
+          { status: 400 }
+        )
+      }
     }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []

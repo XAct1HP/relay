@@ -102,6 +102,7 @@ export function CustomOfferModal({
           size: selectedSize,
           original_price: originalPrice,
           offer_price: offerPriceNum,
+          seller_earnings: Math.max(0, sellerEarnings),
           status: "pending",
           expires_at: expiresAt,
         })

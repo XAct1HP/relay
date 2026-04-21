@@ -138,7 +138,26 @@ export default function ListingsPage() {
     setModalState("remove");
   };
 
-  const handleConfirmRemove = () => {
+  const handleConfirmRemove = async () => {
+    if (!selectedListing) return;
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("listings")
+      .update({ status: "removed" })
+      .eq("id", selectedListing.id);
+
+    if (error) {
+      console.error("Failed to remove listing:", error);
+      alert("Failed to remove listing. Please try again.");
+    } else {
+      setListings((prev) =>
+        prev.map((l) =>
+          l.id === selectedListing.id ? { ...l, status: "removed" } : l
+        )
+      );
+    }
+
     setModalState("none");
     setSelectedListing(null);
   };
@@ -174,26 +193,28 @@ export default function ListingsPage() {
           <div className="relay-card overflow-hidden p-0">
             <div className="divide-y divide-white/5">
               {filteredListings.length > 0 ? (
-                filteredListings.map((listing) => (
+                filteredListings.map((listing: any) => {
+                  const images = listing.images as any[];
+                  const sizes = listing.sizes as any[];
+                  const minPrice = Array.isArray(sizes) && sizes.length > 0
+                    ? Math.min(...sizes.map((s: any) => s.price || 0))
+                    : 0;
+                  return (
                   <ListingRow
                     key={listing.id}
                     listing={{
                       id: listing.id,
-                      image: listing.image_url,
+                      image: Array.isArray(images) ? images[0] : listing.image_url || '/placeholder-shoe.png',
                       title: `${listing.brand} ${listing.model}`,
-                      seller: listing.profiles?.display_name || 'Unknown',
+                      seller: listing.profiles?.full_name || listing.profiles?.display_name || 'Unknown',
                       date: new Date(listing.created_at).toLocaleDateString(),
-                      price: `$${listing.price}`,
+                      price: `$${minPrice.toFixed(2)}`,
                       status: listing.status,
-                      image_url: listing.image_url,
-                      brand: listing.brand,
-                      model: listing.model,
-                      profiles: listing.profiles,
-                      created_at: listing.created_at,
                     }}
                     onRemoveClick={handleRemoveClick}
                   />
-                ))
+                  );
+                })
               ) : (
                 <div className="py-12 text-center">
                   <p className="text-white/40">No listings found</p>

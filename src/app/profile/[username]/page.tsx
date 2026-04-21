@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import useAuth from '@/hooks/useAuth';
 import { Star, MessageCircle, Share2, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
 
 interface Tab {
   id: string;
@@ -369,9 +370,10 @@ export default function SellerProfilePage({ params }: { params: { username: stri
             {listings.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {listings.map((listing) => (
-                  <div
+                  <Link
                     key={listing.id}
-                    className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:bg-white/[0.08] transition-colors group cursor-pointer"
+                    href={`/listing/${listing.id}`}
+                    className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:bg-white/[0.08] transition-colors group cursor-pointer block"
                   >
                     <div className="h-48 w-full relative overflow-hidden">
                       {listing.images?.[0] ? (
@@ -389,9 +391,9 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                         />
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-relay-bg/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                        <button className="w-full text-relay-bg font-semibold py-2 rounded-lg transition-colors" style={{ backgroundColor: theme.accent }}>
+                        <span className="w-full text-relay-bg font-semibold py-2 rounded-lg transition-colors text-center block" style={{ backgroundColor: theme.accent }}>
                           View Details
-                        </button>
+                        </span>
                       </div>
                     </div>
                     <div className="p-4">
@@ -407,7 +409,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (

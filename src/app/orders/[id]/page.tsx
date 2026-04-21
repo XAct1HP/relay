@@ -480,7 +480,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       platformFee: data.platform_fee || 0,
       stripeFee: data.stripe_fee || 0,
       sellerEarnings: data.seller_earnings || 0,
-      totalPrice: (data.price || 0) + (data.shipping_cost || 0) + (data.platform_fee || 0) + (data.stripe_fee || 0),
+      totalPrice: (data.price || 0) + (data.shipping_cost || 0),
       buyerShippingAddress: data.buyer_shipping_address || null,
       sellerName: sellerProfile?.full_name || sellerProfile?.display_name || sellerProfile?.username || "Unknown Seller",
       sellerProfileUrl: `/profile/${sellerProfile?.username || ""}`,
@@ -904,14 +904,18 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                 <span>Shipping</span>
                 <span>${order.shippingCost.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-[#7ca6ff]">
-                <span>Platform Fee</span>
-                <span>${order.platformFee.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-[#7ca6ff]">
-                <span>Stripe Fee</span>
-                <span>${order.stripeFee.toFixed(2)}</span>
-              </div>
+              {order.userRole === "seller" && (
+                <>
+                  <div className="flex justify-between text-[#7ca6ff]">
+                    <span>Platform Fee</span>
+                    <span>-${order.platformFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#7ca6ff]">
+                    <span>Stripe Fee</span>
+                    <span>-${order.stripeFee.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               <div className="border-t border-white/10 pt-2 flex justify-between font-bold text-[#f5f7fb]">
                 <span>{order.userRole === "buyer" ? "Total Paid" : "Your Earnings"}</span>
                 <span>
@@ -1152,7 +1156,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             </div>
           </div>
 
-          {order.shippingDeadline && (
+          {order.userRole === "seller" && order.shippingDeadline && (
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
               <p className="text-xs text-amber-300">
                 Ship by <span className="font-semibold">{order.shippingDeadline}</span>

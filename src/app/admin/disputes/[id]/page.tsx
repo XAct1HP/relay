@@ -118,7 +118,6 @@ export default function DisputeDetailPage() {
         .from("orders")
         .select("*, listing:listings(*), buyer:profiles!orders_buyer_id_fkey(*), seller:profiles!orders_seller_id_fkey(*)")
         .eq("id", disputeId)
-        .eq("status", "disputed")
         .single();
 
       setDispute(data);
@@ -214,11 +213,11 @@ export default function DisputeDetailPage() {
             <div className="flex gap-6">
               <div>
                 <p className="text-white/60 text-sm mb-1">Buyer</p>
-                <p className="text-[#f5f7fb] font-medium">{dispute.buyer?.display_name || 'Unknown'}</p>
+                <p className="text-[#f5f7fb] font-medium">{dispute.buyer?.full_name || dispute.buyer?.display_name || 'Unknown'}</p>
               </div>
               <div>
                 <p className="text-white/60 text-sm mb-1">Seller</p>
-                <p className="text-[#f5f7fb] font-medium">{dispute.seller?.display_name || 'Unknown'}</p>
+                <p className="text-[#f5f7fb] font-medium">{dispute.seller?.full_name || dispute.seller?.display_name || 'Unknown'}</p>
               </div>
               <div>
                 <p className="text-white/60 text-sm mb-1">Order Total</p>
@@ -236,7 +235,7 @@ export default function DisputeDetailPage() {
           <div className="relay-card p-5 border-l-4 border-l-red-500">
             <h3 className="text-lg font-semibold text-[#f5f7fb] mb-4 flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-400" />
-              Dispute Details
+              Buyer&apos;s Claim
             </h3>
 
             <div className="space-y-4">
@@ -247,6 +246,33 @@ export default function DisputeDetailPage() {
                 </p>
               </div>
 
+              {dispute.dispute_text_buyer && (
+                <div>
+                  <p className="text-white/60 text-sm mb-1">Description</p>
+                  <p className="text-[#f5f7fb] text-sm leading-relaxed bg-white/5 border border-white/10 rounded-lg p-3">
+                    {dispute.dispute_text_buyer}
+                  </p>
+                </div>
+              )}
+
+              {dispute.dispute_evidence_buyer && dispute.dispute_evidence_buyer.length > 0 && (
+                <div>
+                  <p className="text-white/60 text-sm mb-2 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    Buyer&apos;s Evidence ({dispute.dispute_evidence_buyer.length} photo{dispute.dispute_evidence_buyer.length > 1 ? 's' : ''})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {dispute.dispute_evidence_buyer.map((url: string, i: number) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                        <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative">
+                          <Image src={url} alt={`Buyer evidence ${i + 1}`} fill className="object-cover" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 text-white/40 text-sm">
                 <Clock className="w-4 h-4" />
                 {new Date(dispute.created_at).toLocaleString()}
@@ -254,19 +280,58 @@ export default function DisputeDetailPage() {
             </div>
           </div>
 
-          {/* Status Info */}
+          {/* Seller's Response */}
           <div className="relay-card p-5 border-l-4 border-l-blue-500">
             <h3 className="text-lg font-semibold text-[#f5f7fb] mb-4 flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-blue-400" />
-              Status Information
+              Seller&apos;s Response
             </h3>
 
             <div className="space-y-4">
+              {dispute.dispute_text_seller ? (
+                <>
+                  <div>
+                    <p className="text-white/60 text-sm mb-1">Response</p>
+                    <p className="text-[#f5f7fb] text-sm leading-relaxed bg-white/5 border border-white/10 rounded-lg p-3">
+                      {dispute.dispute_text_seller}
+                    </p>
+                  </div>
+
+                  {dispute.dispute_evidence_seller && dispute.dispute_evidence_seller.length > 0 && (
+                    <div>
+                      <p className="text-white/60 text-sm mb-2 flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4" />
+                        Seller&apos;s Evidence ({dispute.dispute_evidence_seller.length} photo{dispute.dispute_evidence_seller.length > 1 ? 's' : ''})
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {dispute.dispute_evidence_seller.map((url: string, i: number) => (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                            <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative">
+                              <Image src={url} alt={`Seller evidence ${i + 1}`} fill className="object-cover" />
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                  <p className="text-white/40 text-sm italic">
+                    Seller has not submitted a response yet.
+                  </p>
+                </div>
+              )}
+
               <div>
-                <p className="text-white/60 text-sm mb-2">Current Status</p>
-                <p className="text-white/70 text-sm leading-relaxed">
+                <p className="text-white/60 text-sm mb-1">Current Status</p>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${
+                  dispute.status === 'disputed'
+                    ? 'bg-red-500/20 text-red-300'
+                    : 'bg-green-500/20 text-green-300'
+                }`}>
                   {dispute.status === 'disputed' ? 'Open' : 'Resolved'}
-                </p>
+                </span>
               </div>
             </div>
           </div>

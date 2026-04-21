@@ -15,6 +15,10 @@ import {
   TrendingUp,
   ExternalLink,
   ShoppingCart,
+  Flag,
+  Lock,
+  Shield,
+  List,
 } from "lucide-react";
 import {
   AreaChart,
@@ -39,6 +43,8 @@ interface MetricsData {
   pendingApplications: Array<any>;
   activeDisputes: Array<any>;
   pendingReturns: number;
+  flaggedSellers: number;
+  bannedUsers: number;
 }
 
 function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
@@ -228,6 +234,8 @@ export default function AdminPage() {
     pendingApplications: [],
     activeDisputes: [],
     pendingReturns: 0,
+    flaggedSellers: 0,
+    bannedUsers: 0,
   });
 
   useEffect(() => {
@@ -255,7 +263,7 @@ export default function AdminPage() {
       // Get active disputes
       const { data: disputes } = await supabase
         .from("orders")
-        .select("*, listings(*), profiles!orders_buyer_id_fkey(*), profiles!orders_seller_id_fkey(*)")
+        .select("*, listings(*), buyer:profiles!orders_buyer_id_fkey(*), seller:profiles!orders_seller_id_fkey(*)")
         .eq("status", "disputed")
         .limit(3);
 
@@ -264,6 +272,18 @@ export default function AdminPage() {
         .from("orders")
         .select("*", { count: "exact", head: true })
         .in("status", ["return_pending", "return_shipped"]);
+
+      // Get flagged sellers (dispute_flags_count > 0)
+      const { count: flaggedCount } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .gt("dispute_flags_count", 0);
+
+      // Get banned users
+      const { count: bannedCount } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("is_banned", true);
 
       setMetrics({
         gmvData: [], // Chart data would require more complex aggregation
@@ -275,6 +295,8 @@ export default function AdminPage() {
         pendingApplications: apps || [],
         activeDisputes: disputes || [],
         pendingReturns: returnsCount || 0,
+        flaggedSellers: flaggedCount || 0,
+        bannedUsers: bannedCount || 0,
       });
 
       setLoading(false);
@@ -402,7 +424,7 @@ export default function AdminPage() {
                 key={app.id}
                 app={{
                   id: app.id,
-                  name: app.profiles?.display_name || 'Unknown',
+                  name: app.profiles?.full_name || app.profiles?.display_name || 'Unknown',
                   email: app.profiles?.email || 'N/A',
                   date: new Date(app.created_at).toLocaleDateString(),
                 }}
@@ -415,23 +437,19 @@ export default function AdminPage() {
             count={metrics.activeDisputes.length}
             viewAllLink="/admin/disputes"
           >
-            {metrics.activeDisputes.map((dispute) => {
-              const buyer = dispute.profiles?.find((p: any) => p.id === dispute.buyer_id);
-              const seller = dispute.profiles?.find((p: any) => p.id === dispute.seller_id);
-              return (
+            {metrics.activeDisputes.map((dispute) => (
                 <DisputeRow
                   key={dispute.id}
                   dispute={{
                     id: dispute.id,
-                    orderId: dispute.id,
+                    orderId: dispute.id.slice(0, 8) + '...',
                     reason: dispute.dispute_reason || 'Disputed',
-                    buyer: buyer?.display_name || 'Unknown',
-                    seller: seller?.display_name || 'Unknown',
+                    buyer: dispute.buyer?.full_name || dispute.buyer?.display_name || 'Unknown',
+                    seller: dispute.seller?.full_name || dispute.seller?.display_name || 'Unknown',
                     date: new Date(dispute.created_at).toLocaleDateString(),
                   }}
                 />
-              );
-            })}
+              ))}
           </ActionCard>
 
           <ActionCard
@@ -447,6 +465,75 @@ export default function AdminPage() {
               <div className="text-white/40 text-sm py-2">No pending returns</div>
             )}
           </ActionCard>
+        </div>
+
+        {/* Moderation Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-[#f5f7fb]">Moderation</h2>
+
+          {/* Flagged Sellers Alert */}
+          {metrics.flaggedSellers > 0 && (
+            <Link href="/admin/users?filter=flagged">
+              <div className="relay-card p-4 border border-red-500/30 bg-red-500/5 cursor-pointer hover:bg-red-500/10 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-red-500/20 rounded-lg">
+                    <Flag className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-red-300 font-semibold">
+                      {metrics.flaggedSellers} seller{metrics.flaggedSellers > 1 ? 's' : ''} flagged for dispute losses
+                    </p>
+                    <p className="text-white/40 text-sm">Click to review and take action</p>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* User Moderation */}
+            <Link href="/admin/users">
+              <div className="relay-card p-5 hover:bg-white/[0.04] transition-colors cursor-pointer group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-[#5f8fff]/20 rounded-lg">
+                    <Shield className="w-5 h-5 text-[#5f8fff]" />
+                  </div>
+                  <h3 className="text-[#f5f7fb] font-semibold group-hover:text-[#7ca6ff] transition-colors">User Management</h3>
+                </div>
+                <p className="text-white/40 text-sm mb-3">Manage users, review flagged sellers, ban/unban accounts</p>
+                <div className="flex items-center gap-3 text-xs">
+                  {metrics.flaggedSellers > 0 && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-300 rounded-full font-semibold">
+                      <Flag className="w-3 h-3" />
+                      {metrics.flaggedSellers} flagged
+                    </span>
+                  )}
+                  {metrics.bannedUsers > 0 && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-orange-500/20 text-orange-300 rounded-full font-semibold">
+                      <Lock className="w-3 h-3" />
+                      {metrics.bannedUsers} banned
+                    </span>
+                  )}
+                </div>
+              </div>
+            </Link>
+
+            {/* Listing Moderation */}
+            <Link href="/admin/listings">
+              <div className="relay-card p-5 hover:bg-white/[0.04] transition-colors cursor-pointer group">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-[#5f8fff]/20 rounded-lg">
+                    <List className="w-5 h-5 text-[#5f8fff]" />
+                  </div>
+                  <h3 className="text-[#f5f7fb] font-semibold group-hover:text-[#7ca6ff] transition-colors">Listing Moderation</h3>
+                </div>
+                <p className="text-white/40 text-sm mb-3">Review, search, and remove listings from the marketplace</p>
+                <span className="text-xs px-2 py-1 bg-[#5f8fff]/20 text-[#7ca6ff] rounded-full font-semibold">
+                  {metrics.activeListings} active listings
+                </span>
+              </div>
+            </Link>
+          </div>
         </div>
 
         {/* Recent Activity Feed */}

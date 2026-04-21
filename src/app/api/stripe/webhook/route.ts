@@ -109,28 +109,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
 
-      // Decrement listing size quantity directly
+      // Decrement listing size quantity and check for sold out
       const { data: listing, error: listingFetchError } = await supabase
         .from('listings')
-        .select('sizes')
+        .select('sizes, status')
         .eq('id', listingId)
         .single()
 
       if (listingFetchError || !listing) {
         console.error('Failed to fetch listing for quantity update:', listingFetchError)
       } else {
-        const sizes = listing.sizes as Record<string, any>
-        if (sizes && sizes[size] !== undefined) {
-          const currentQty = typeof sizes[size] === 'number' ? sizes[size] : (sizes[size]?.quantity ?? 0)
-          if (typeof sizes[size] === 'number') {
-            sizes[size] = Math.max(0, currentQty - 1)
-          } else if (sizes[size] && typeof sizes[size] === 'object') {
-            sizes[size] = { ...sizes[size], quantity: Math.max(0, currentQty - 1) }
+        const sizes = listing.sizes as any[]
+        if (Array.isArray(sizes)) {
+          const updatedSizes = sizes.map((s: any) => {
+            if (String(s.size) === String(size)) {
+              return { ...s, quantity: Math.max(0, (s.quantity || 0) - 1) }
+            }
+            return s
+          })
+
+          // Check if all sizes are depleted
+          const totalRemaining = updatedSizes.reduce(
+            (sum: number, s: any) => sum + (s.quantity || 0),
+            0
+          )
+
+          const updatePayload: any = { sizes: updatedSizes }
+          if (totalRemaining <= 0) {
+            updatePayload.status = 'sold_out'
           }
 
           const { error: updateError } = await supabase
             .from('listings')
-            .update({ sizes })
+            .update(updatePayload)
             .eq('id', listingId)
 
           if (updateError) {
