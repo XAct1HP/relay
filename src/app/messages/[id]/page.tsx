@@ -186,56 +186,58 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
 
   const handleAcceptOffer = async (offer: Message["offer"]) => {
-    if (!offer || !currentUser?.id) return;
+    console.log("[ACCEPT] called with offer:", JSON.stringify(offer));
+    console.log("[ACCEPT] currentUser:", currentUser?.id);
+    if (!offer || !currentUser?.id) {
+      console.log("[ACCEPT] bailing — offer or user missing");
+      return;
+    }
 
+    // 1. Optimistic UI update FIRST — card switches to "Accepted" + "Go to Checkout" instantly
+    setConversation((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: prev.messages.map((m) =>
+          m.offer?.messageId === offer.messageId
+            ? { ...m, offer: { ...m.offer!, status: "accepted" as const } }
+            : m
+        ),
+      };
+    });
+    console.log("[ACCEPT] local state updated");
+
+    // 2. Then update DB in the background
     try {
       const supabase = createClient();
 
-      // Update the message status
       const { error: msgErr } = await supabase
         .from("messages")
         .update({ custom_offer_status: "accepted" })
         .eq("id", offer.messageId);
+      console.log("[ACCEPT] message update result:", msgErr ? msgErr.message : "ok");
 
-      if (msgErr) {
-        console.error("Message update error:", msgErr);
-      }
-
-      // Update the custom_offers record
       if (offer.customOfferId) {
-        await supabase
+        const { error: offerErr } = await supabase
           .from("custom_offers")
           .update({ status: "accepted" })
           .eq("id", offer.customOfferId);
+        console.log("[ACCEPT] custom_offers update result:", offerErr ? offerErr.message : "ok");
       }
-
-      // Update local state so the card immediately shows "Accepted" + "Go to Checkout"
-      setConversation((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          messages: prev.messages.map((m) =>
-            m.offer?.messageId === offer.messageId
-              ? { ...m, offer: { ...m.offer!, status: "accepted" as const } }
-              : m
-          ),
-        };
-      });
     } catch (error) {
-      console.error("Error accepting offer:", error);
-      alert("Failed to accept offer. Please try again.");
+      console.error("[ACCEPT] DB error:", error);
     }
   };
 
   const handleGoToCheckout = (offer: Message["offer"]) => {
+    console.log("[CHECKOUT] called with offer:", JSON.stringify(offer));
     if (!offer) return;
-    const checkoutParams = new URLSearchParams({
-      listing: offer.listingId,
-      size: offer.size,
-      price: offer.offerPrice.toString(),
-      customOffer: offer.customOfferId || "true",
-    });
-    router.push(`/checkout?${checkoutParams.toString()}`);
+
+    const url = `/checkout?listing=${encodeURIComponent(offer.listingId)}&size=${encodeURIComponent(offer.size)}&price=${encodeURIComponent(offer.offerPrice.toString())}&customOffer=${encodeURIComponent(offer.customOfferId || "true")}`;
+    console.log("[CHECKOUT] navigating to:", url);
+
+    // Use window.location for guaranteed navigation
+    window.location.href = url;
   };
 
   const handleDeclineOffer = async (offer: Message["offer"]) => {
