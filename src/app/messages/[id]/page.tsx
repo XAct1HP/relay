@@ -186,6 +186,7 @@ export default function ConversationPage() {
       const res = await fetch("/api/offers/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           messageId: offer.messageId,
           action: "accept",
@@ -223,6 +224,7 @@ export default function ConversationPage() {
       const res = await fetch("/api/offers/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           messageId: offer.messageId,
           action: "decline",
