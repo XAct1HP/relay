@@ -578,3 +578,37 @@ export default function ConversationPage() {
     </div>
   );
 }
+
+      {/* Custom Offer Modal */}
+      {showOfferModal && (
+        <CustomOfferModal
+          onClose={() => setShowOfferModal(false)}
+          conversationId={conversation.id}
+          recipientName={conversation.name}
+          onOfferSent={(_convId: string, _offerMessage: any) => {
+            setShowOfferModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+ame="w-4 h-4" />
+            Send Custom Offer
+          </button>
+        </div>
+
+      {/* Custom Offer Modal */}
+      {showOfferModal && (
+        <CustomOfferModal
+          onClose={() => setShowOfferModal(false)}
+          conversationId={conversation.id}
+          recipientName={conversation.name}
+          onOfferSent={(_convId: string, _offerMessage: any) => {
+            setShowOfferModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}

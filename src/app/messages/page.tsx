@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Send,
   Search,
@@ -28,6 +29,8 @@ interface MessageData {
   // Client-side enrichment fields (not in DB)
   _offerListingName?: string;
   _offerOriginalPrice?: number;
+  _offerListingId?: string;
+  _offerCustomOfferId?: string;
 }
 
 interface ConversationData {
@@ -69,6 +72,7 @@ function OfferCard({
   isSender,
   onAccept,
   onDecline,
+  onGoToCheckout,
 }: {
   offer: {
     originalPrice: number;
@@ -80,7 +84,12 @@ function OfferCard({
   isSender: boolean;
   onAccept?: () => void;
   onDecline?: () => void;
+  onGoToCheckout?: () => void;
 }) {
+  const isPending = offer.status === "pending";
+  const isAccepted = offer.status === "accepted";
+  const isDeclined = offer.status === "declined";
+
   return (
     <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-sm">
       <div className="flex items-center gap-2 mb-3">
@@ -115,21 +124,13 @@ function OfferCard({
         </div>
       </div>
 
-      {offer.status === "accepted" ? (
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <Check className="w-4 h-4 text-green-400" />
-          <span className="text-green-400">Accepted</span>
-        </div>
-      ) : offer.status === "declined" ? (
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <X className="w-4 h-4 text-red-400" />
-          <span className="text-red-400">Declined</span>
-        </div>
-      ) : isSender ? (
+      {/* Pending — Accept/Decline for receiver, "Pending" for sender */}
+      {isPending && isSender && (
         <div className="flex items-center gap-2 text-xs font-semibold">
           <span className="text-relay-accent">Pending</span>
         </div>
-      ) : (
+      )}
+      {isPending && !isSender && (
         <div className="flex gap-2">
           <button
             onClick={onAccept}
@@ -145,6 +146,33 @@ function OfferCard({
             <X className="w-3.5 h-3.5" />
             Decline
           </button>
+        </div>
+      )}
+
+      {/* Accepted — show status + "Go to Checkout" for the buyer */}
+      {isAccepted && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <Check className="w-4 h-4 text-green-400" />
+            <span className="text-green-400">Accepted</span>
+          </div>
+          {!isSender && onGoToCheckout && (
+            <button
+              onClick={onGoToCheckout}
+              className="w-full bg-relay-accent-strong/20 hover:bg-relay-accent-strong/30 text-relay-accent py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Go to Checkout
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Declined */}
+      {isDeclined && (
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <X className="w-4 h-4 text-red-400" />
+          <span className="text-red-400">Declined</span>
         </div>
       )}
     </div>
@@ -243,6 +271,7 @@ function ChatArea({
   onSendMessage,
   onAcceptOffer,
   onDeclineOffer,
+  onGoToCheckout,
 }: {
   conversation: ConversationData | null;
   currentUserId: string;
@@ -251,6 +280,7 @@ function ChatArea({
   onSendMessage: (conversationId: string, content: string) => Promise<void>;
   onAcceptOffer: (messageId: string) => Promise<void>;
   onDeclineOffer: (messageId: string) => Promise<void>;
+  onGoToCheckout: (msg: MessageData) => void;
 }) {
   const [inputValue, setInputValue] = useState("");
   const [sending, setSending] = useState(false);
@@ -369,6 +399,7 @@ function ChatArea({
                     isSender={isUser}
                     onAccept={() => onAcceptOffer(msg.id)}
                     onDecline={() => onDeclineOffer(msg.id)}
+                    onGoToCheckout={() => onGoToCheckout(msg)}
                   />
                 </div>
               ) : msg.content ? (
@@ -430,6 +461,7 @@ function ChatArea({
 }
 
 export default function MessagesPage() {
+  const router = useRouter();
   const { currentUser } = useAuth();
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
@@ -464,7 +496,7 @@ export default function MessagesPage() {
               .from("profiles")
               .select("id, display_name, full_name, avatar_url, is_verified_seller")
               .eq("id", otherUserId)
-              .single();
+              .maybeSingle();
             otherUser = profile;
           }
 
@@ -503,6 +535,8 @@ export default function MessagesPage() {
                     ...msg,
                     _offerListingName: listingName,
                     _offerOriginalPrice: parseFloat(matchingOffer.original_price),
+                    _offerListingId: matchingOffer.listing_id,
+                    _offerCustomOfferId: matchingOffer.id,
                   };
                 }
                 return msg;
@@ -689,9 +723,19 @@ export default function MessagesPage() {
   };
 
   const updateOfferStatus = async (messageId: string, status: "accepted" | "declined") => {
+    // 1. Optimistic UI update FIRST so the card changes instantly
+    setConversations((prev) =>
+      prev.map((conv) => ({
+        ...conv,
+        messages: conv.messages.map((m) =>
+          m.id === messageId ? { ...m, custom_offer_status: status } : m
+        ),
+      }))
+    );
+
+    // 2. Then update DB in background
     const supabase = createClient();
 
-    // Find the message to get offer details for matching
     let targetMsg: MessageData | undefined;
     let targetConvId: string | undefined;
     for (const conv of conversations) {
@@ -705,39 +749,35 @@ export default function MessagesPage() {
 
     if (!targetMsg || !targetConvId) return;
 
-    // Try to update custom_offers table
-    // Note: RLS policy may restrict this to the sender only.
-    // If accept/decline fails, you'll need to add an RLS policy:
-    //   CREATE POLICY "Conversation participants can update offers" ON custom_offers
-    //   FOR UPDATE USING (
-    //     EXISTS (SELECT 1 FROM conversations WHERE id = conversation_id AND auth.uid() = ANY(participant_ids))
-    //   );
-    const { error: offerError } = await supabase
-      .from("custom_offers")
-      .update({ status })
-      .eq("conversation_id", targetConvId)
-      .eq("size", targetMsg.custom_offer_size || "")
-      .eq("offer_price", targetMsg.custom_offer_price || 0);
-
-    if (offerError) {
-      console.error(`Error ${status} offer in custom_offers:`, offerError);
-    }
-
-    // Also try to update the message status
-    await supabase
+    // Update the message status
+    const { error: msgError } = await supabase
       .from("messages")
       .update({ custom_offer_status: status })
       .eq("id", messageId);
 
-    // Update local state regardless so the UI reflects the change
-    setConversations((prev) =>
-      prev.map((conv) => ({
-        ...conv,
-        messages: conv.messages.map((m) =>
-          m.id === messageId ? { ...m, custom_offer_status: status } : m
-        ),
-      }))
-    );
+    if (msgError) {
+      console.error(`Message update error:`, msgError);
+    }
+
+    // Update custom_offers table
+    if (targetMsg._offerCustomOfferId) {
+      const { error: offerError } = await supabase
+        .from("custom_offers")
+        .update({ status })
+        .eq("id", targetMsg._offerCustomOfferId);
+
+      if (offerError) {
+        console.error(`Custom offers update error:`, offerError);
+      }
+    } else {
+      // Fallback: match by conversation + size + price
+      await supabase
+        .from("custom_offers")
+        .update({ status })
+        .eq("conversation_id", targetConvId)
+        .eq("size", targetMsg.custom_offer_size || "")
+        .eq("offer_price", targetMsg.custom_offer_price || 0);
+    }
   };
 
   const handleAcceptOffer = async (messageId: string) => {
@@ -746,6 +786,15 @@ export default function MessagesPage() {
 
   const handleDeclineOffer = async (messageId: string) => {
     await updateOfferStatus(messageId, "declined");
+  };
+
+  const handleGoToCheckout = (msg: MessageData) => {
+    if (!msg._offerListingId) {
+      alert("Could not find listing details for this offer.");
+      return;
+    }
+    const url = `/checkout?listing=${encodeURIComponent(msg._offerListingId)}&size=${encodeURIComponent(msg.custom_offer_size || "")}&price=${encodeURIComponent(String(msg.custom_offer_price || 0))}&customOffer=${encodeURIComponent(msg._offerCustomOfferId || "true")}`;
+    window.location.href = url;
   };
 
   const handleOfferSent = (conversationId: string, offerMessage: MessageData) => {
@@ -795,6 +844,119 @@ export default function MessagesPage() {
             onSendMessage={handleSendMessage}
             onAcceptOffer={handleAcceptOffer}
             onDeclineOffer={handleDeclineOffer}
+            onGoToCheckout={handleGoToCheckout}
+          />
+        </div>
+      ) : (
+        <div className="relay-card p-12 text-center">
+          <MessageCircle className="w-16 h-16 text-white/20 mx-auto mb-4" />
+          <p className="text-relay-text mb-2">No conversations yet</p>
+          <p className="text-relay-muted text-sm">
+            Start messaging with buyers or sellers
+          </p>
+        </div>
+      )}
+
+      {showOfferModal && currentConv && (
+        <CustomOfferModal
+          onClose={() => setShowOfferModal(false)}
+          conversationId={currentConv.id}
+          recipientName={
+            currentConv.otherUser?.display_name ||
+            currentConv.otherUser?.full_name ||
+            "this buyer"
+          }
+          onOfferSent={handleOfferSent}
+        />
+      )}
+    </div>
+  );
+}
+
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="relay-eyebrow text-relay-accent mb-2">INBOX</p>
+        <h1 className="relay-title">Messages</h1>
+      </div>
+
+      {conversations.length > 0 ? (
+        <div className="relay-card p-0 flex h-[calc(100vh-300px)] overflow-hidden">
+          <ConversationList
+            conversations={conversations}
+            selectedId={selectedConversation}
+            onSelect={setSelectedConversation}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+          />
+
+          <ChatArea
+            conversation={currentConv}
+            currentUserId={currentUser?.id || ""}
+            isSeller={isSeller}
+            onShowOfferModal={() => setShowOfferModal(true)}
+            onSendMessage={handleSendMessage}
+            onAcceptOffer={handleAcceptOffer}
+            onDeclineOffer={handleDeclineOffer}
+            onGoToCheckout={handleGoToCheckout}
+          />
+        </div>
+      ) : (
+        <div className="relay-card p-12 text-center">
+          <MessageCircle className="w-16 h-16 text-white/20 mx-auto mb-4" />
+          <p className="text-relay-text mb-2">No conversations yet</p>
+          <p className="text-relay-muted text-sm">
+            Start messaging with buyers or sellers
+          </p>
+        </div>
+      )}
+
+      {showOfferModal && currentConv && (
+        <CustomOfferModal
+          onClose={() => setShowOfferModal(false)}
+          conversationId={currentConv.id}
+          recipientName={
+            currentConv.otherUser?.display_name ||
+            currentConv.otherUser?.full_name ||
+            "this buyer"
+          }
+          onOfferSent={handleOfferSent}
+        />
+      )}
+    </div>
+  );
+}
+r">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="relay-eyebrow text-relay-accent mb-2">INBOX</p>
+        <h1 className="relay-title">Messages</h1>
+      </div>
+
+      {conversations.length > 0 ? (
+        <div className="relay-card p-0 flex h-[calc(100vh-300px)] overflow-hidden">
+          <ConversationList
+            conversations={conversations}
+            selectedId={selectedConversation}
+            onSelect={setSelectedConversation}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+          />
+
+          <ChatArea
+            conversation={currentConv}
+            currentUserId={currentUser?.id || ""}
+            isSeller={isSeller}
+            onShowOfferModal={() => setShowOfferModal(true)}
+            onSendMessage={handleSendMessage}
+            onAcceptOffer={handleAcceptOffer}
+            onDeclineOffer={handleDeclineOffer}
+            onGoToCheckout={handleGoToCheckout}
           />
         </div>
       ) : (
