@@ -90,6 +90,7 @@ export function getOrderStatusLabel(status: string): string {
     cancelled: 'Cancelled',
     refund_pending: 'Refund Pending',
     refunded: 'Refunded',
+    payout_failed: 'Payout Failed',
   };
 
   return labels[status] || status;
@@ -112,6 +113,7 @@ export function getOrderStatusColor(status: string): string {
     cancelled: 'bg-gray-100 text-gray-800 border-gray-300',
     refund_pending: 'bg-amber-100 text-amber-800 border-amber-300',
     refunded: 'bg-gray-100 text-gray-800 border-gray-300',
+    payout_failed: 'bg-red-100 text-red-800 border-red-300',
   };
 
   return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';

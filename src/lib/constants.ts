@@ -179,6 +179,11 @@ export const ORDER_STATUSES = {
     description: 'Refund completed',
     color: 'gray',
   },
+  payout_failed: {
+    label: 'Payout Failed',
+    description: 'Seller payout failed — needs admin attention',
+    color: 'red',
+  },
 } as const;
 
 /**

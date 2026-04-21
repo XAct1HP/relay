@@ -171,7 +171,7 @@ CREATE TABLE orders (
     CHECK (status IN (
       'pending_payment', 'paid', 'auth_submitted', 'label_created', 'shipped',
       'delivered', 'review_window', 'completed', 'disputed', 'cancelled',
-      'refund_pending', 'refunded'
+      'refund_pending', 'refunded', 'payout_failed'
     )),
   stripe_payment_intent_id TEXT,
   stripe_transfer_id TEXT,
@@ -192,6 +192,9 @@ CREATE TABLE orders (
   review_comment TEXT,
   shipping_deadline TIMESTAMPTZ,
   review_deadline TIMESTAMPTZ,
+  shipped_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  admin_notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

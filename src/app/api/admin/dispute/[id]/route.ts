@@ -55,7 +55,7 @@ export async function PATCH(
     // Fetch the order directly
     const { data: order, error: fetchError } = await supabase
       .from('orders')
-      .select('id, buyer_id, seller_id, price, seller_earnings, stripe_payment_intent_id, status')
+      .select('id, buyer_id, seller_id, price, seller_earnings, stripe_payment_intent_id, stripe_transfer_id, status')
       .eq('id', orderId)
       .single()
 
@@ -107,26 +107,40 @@ export async function PATCH(
         )
       }
     } else if (ruling === 'seller') {
-      // Transfer earnings to seller
-      const { data: sellerProfile } = await supabase
-        .from('profiles')
-        .select('stripe_account_id')
-        .eq('id', order.seller_id)
-        .single()
+      // Transfer earnings to seller (with idempotency check)
+      let transferId = order.stripe_transfer_id
+      if (!transferId) {
+        const { data: sellerProfile } = await supabase
+          .from('profiles')
+          .select('stripe_account_id')
+          .eq('id', order.seller_id)
+          .single()
 
-      if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
-        try {
-          await stripe.transfers.create({
-            amount: Math.round(order.seller_earnings * 100),
-            currency: 'usd',
-            destination: sellerProfile.stripe_account_id,
-            metadata: {
-              orderId: order.id,
-            },
-          })
-        } catch (err) {
-          console.error('Stripe transfer error:', err)
-          // Don't fail the request
+        if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
+          try {
+            const transfer = await stripe.transfers.create({
+              amount: Math.round(order.seller_earnings * 100),
+              currency: 'usd',
+              destination: sellerProfile.stripe_account_id,
+              metadata: {
+                orderId: order.id,
+              },
+            }, {
+              idempotencyKey: `dispute-seller-${orderId}`,
+            })
+            transferId = transfer.id
+          } catch (err) {
+            console.error('Stripe transfer error:', err)
+            return NextResponse.json(
+              { error: 'Failed to transfer funds to seller' },
+              { status: 500 }
+            )
+          }
+        } else if (!sellerProfile?.stripe_account_id) {
+          return NextResponse.json(
+            { error: 'Seller has no Stripe Connect account. Cannot complete payout.' },
+            { status: 400 }
+          )
         }
       }
 
@@ -136,6 +150,7 @@ export async function PATCH(
         .update({
           status: 'completed',
           dispute_ruling: 'seller',
+          stripe_transfer_id: transferId,
           admin_notes: adminNotes || null,
         })
         .eq('id', orderId)

@@ -57,7 +57,7 @@ export async function POST(
     // Get order details
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, buyer_id, seller_id, seller_earnings, status')
+      .select('id, buyer_id, seller_id, seller_earnings, status, stripe_transfer_id')
       .eq('id', orderId)
       .single()
 
@@ -75,6 +75,14 @@ export async function POST(
       return NextResponse.json(
         { error: 'Only buyer can complete order' },
         { status: 403 }
+      )
+    }
+
+    // Only delivered orders can be completed by buyer
+    if (!['delivered', 'review_window'].includes(order.status)) {
+      return NextResponse.json(
+        { error: 'Order must be delivered before it can be completed' },
+        { status: 400 }
       )
     }
 
@@ -106,28 +114,59 @@ export async function POST(
       .eq('id', order.seller_id)
       .single()
 
-    // Create Stripe transfer to seller
-    if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
+    // Create Stripe transfer to seller (with idempotency check)
+    let transferId = order.stripe_transfer_id
+    if (!transferId && sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
       try {
-        await stripe.transfers.create({
+        const transfer = await stripe.transfers.create({
           amount: Math.round(order.seller_earnings * 100),
           currency: 'usd',
           destination: sellerProfile.stripe_account_id,
           metadata: {
             orderId,
           },
+        }, {
+          idempotencyKey: `order-complete-${orderId}`,
         })
+        transferId = transfer.id
       } catch (err) {
         console.error('Stripe transfer error:', err)
-        // Don't fail the request if transfer fails, seller will need manual resolution
+        // Mark order as payout_failed so it's visible and actionable
+        await supabase
+          .from('orders')
+          .update({
+            status: 'payout_failed',
+            review_rating: rating,
+            review_comment: comment || null,
+          })
+          .eq('id', orderId)
+        return NextResponse.json(
+          { error: 'Payout to seller failed. Our team has been notified and will resolve this.' },
+          { status: 500 }
+        )
       }
+    } else if (!sellerProfile?.stripe_account_id) {
+      console.error(`Seller ${order.seller_id} has no Stripe Connect account for order ${orderId}`)
+      await supabase
+        .from('orders')
+        .update({
+          status: 'payout_failed',
+          review_rating: rating,
+          review_comment: comment || null,
+        })
+        .eq('id', orderId)
+      return NextResponse.json(
+        { error: 'Seller payout account not set up. Our team has been notified.' },
+        { status: 500 }
+      )
     }
 
-    // Update order status and store review data on the order
+    // Update order status, store review data and transfer ID
     const { error: updateError } = await supabase
       .from('orders')
       .update({
         status: 'completed',
+        stripe_transfer_id: transferId,
         review_rating: rating,
         review_comment: comment || null,
       })
