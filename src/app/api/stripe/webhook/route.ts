@@ -160,6 +160,24 @@ export async function POST(request: NextRequest) {
         if (offerError) {
           console.error('Offer update error:', offerError)
         }
+
+        // Also update the corresponding message status so the chat UI reflects it
+        const { data: offerRow } = await supabase
+          .from('custom_offers')
+          .select('conversation_id, sender_id, offer_price, size')
+          .eq('id', customOfferId)
+          .single()
+
+        if (offerRow) {
+          await supabase
+            .from('messages')
+            .update({ custom_offer_status: 'accepted' })
+            .eq('conversation_id', offerRow.conversation_id)
+            .eq('sender_id', offerRow.sender_id)
+            .eq('custom_offer_price', offerRow.offer_price)
+            .eq('custom_offer_size', offerRow.size)
+            .eq('message_type', 'custom_offer')
+        }
       }
     }
 

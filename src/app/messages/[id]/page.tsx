@@ -20,6 +20,7 @@ interface Message {
     size: string;
     listingName: string;
     listingId: string;
+    customOfferId: string;
     status: "pending" | "accepted" | "declined";
     messageId: string;
   };
@@ -62,6 +63,7 @@ function OfferCard({
     size: string;
     listingName: string;
     listingId: string;
+    customOfferId: string;
     status: "pending" | "accepted" | "declined";
     messageId: string;
   };
@@ -179,42 +181,23 @@ export default function ConversationPage() {
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const handleAcceptOffer = async (offer: Message["offer"]) => {
+  const handleAcceptOffer = (offer: Message["offer"]) => {
     if (!offer || !currentUser?.id) return;
 
-    try {
-      const res = await fetch("/api/offers/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          messageId: offer.messageId,
-          action: "accept",
-          conversationId,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to accept offer");
-      }
-
-      // Redirect buyer to checkout with custom offer price
-      const listingId = data.listingId || offer.listingId;
-      const size = data.size || offer.size;
-      const price = data.offerPrice || offer.offerPrice;
-
-      const checkoutParams = new URLSearchParams({
-        listing: listingId,
-        size: size,
-        price: price.toString(),
-        customOffer: "true",
-      });
-      router.push(`/checkout?${checkoutParams.toString()}`);
-    } catch (error) {
-      console.error("Error accepting offer:", error);
-      alert("Failed to accept offer. Please try again.");
+    if (!offer.listingId) {
+      alert("Could not find listing details for this offer. Please try again.");
+      return;
     }
+
+    // Navigate directly to checkout — same flow as "Buy Now" button.
+    // Pass the custom offer ID so the Stripe webhook marks it accepted after payment.
+    const checkoutParams = new URLSearchParams({
+      listing: offer.listingId,
+      size: offer.size,
+      price: offer.offerPrice.toString(),
+      customOffer: offer.customOfferId,
+    });
+    router.push(`/checkout?${checkoutParams.toString()}`);
   };
 
   const handleDeclineOffer = async (offer: Message["offer"]) => {
@@ -256,6 +239,8 @@ export default function ConversationPage() {
   };
 
   useEffect(() => {
+    if (!currentUser?.id) return;
+
     async function loadConversation() {
       const supabase = createClient();
 
@@ -315,6 +300,7 @@ export default function ConversationPage() {
             size: msg.custom_offer_size || "",
             listingName,
             listingId: matchingOffer?.listing_id || "",
+            customOfferId: matchingOffer?.id || "",
             status: msg.custom_offer_status || "pending",
             messageId: msg.id,
           };
@@ -339,7 +325,7 @@ export default function ConversationPage() {
           .from("profiles")
           .select("id, display_name, full_name, avatar_url, is_verified_seller")
           .eq("id", otherUserId)
-          .single();
+          .maybeSingle();
         otherUserData = data;
       }
 
