@@ -166,40 +166,35 @@ export default function ConversationPage() {
 
   const handleAcceptOffer = async (offer: Message["offer"]) => {
     if (!offer || !currentUser?.id) return;
-    const supabase = createClient();
 
     try {
-      // Update the message status
-      await supabase
-        .from("messages")
-        .update({ custom_offer_status: "accepted" })
-        .eq("id", offer.messageId);
-
-      // Update the custom_offers table
-      await supabase
-        .from("custom_offers")
-        .update({ status: "accepted" })
-        .eq("listing_id", offer.listingId)
-        .eq("offer_price", offer.offerPrice)
-        .eq("size", offer.size)
-        .eq("status", "pending");
-
-      // Send a system message
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: currentUser.id,
-        content: `Offer accepted: $${offer.offerPrice.toFixed(2)} for ${offer.listingName} (Size ${offer.size})`,
-        message_type: "offer_accepted",
+      const res = await fetch("/api/offers/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: offer.messageId,
+          action: "accept",
+          conversationId,
+        }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to accept offer");
+      }
 
       // Redirect buyer to checkout with custom offer price
-      const params = new URLSearchParams({
-        listing: offer.listingId,
-        size: offer.size,
-        price: offer.offerPrice.toString(),
+      const listingId = data.listingId || offer.listingId;
+      const size = data.size || offer.size;
+      const price = data.offerPrice || offer.offerPrice;
+
+      const checkoutParams = new URLSearchParams({
+        listing: listingId,
+        size: size,
+        price: price.toString(),
         customOffer: "true",
       });
-      router.push(`/checkout?${params.toString()}`);
+      router.push(`/checkout?${checkoutParams.toString()}`);
     } catch (error) {
       console.error("Error accepting offer:", error);
       alert("Failed to accept offer. Please try again.");
@@ -208,31 +203,22 @@ export default function ConversationPage() {
 
   const handleDeclineOffer = async (offer: Message["offer"]) => {
     if (!offer || !currentUser?.id) return;
-    const supabase = createClient();
 
     try {
-      // Update the message status
-      await supabase
-        .from("messages")
-        .update({ custom_offer_status: "declined" })
-        .eq("id", offer.messageId);
-
-      // Update the custom_offers table
-      await supabase
-        .from("custom_offers")
-        .update({ status: "declined" })
-        .eq("listing_id", offer.listingId)
-        .eq("offer_price", offer.offerPrice)
-        .eq("size", offer.size)
-        .eq("status", "pending");
-
-      // Send a system message
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: currentUser.id,
-        content: `Offer declined: $${offer.offerPrice.toFixed(2)} for ${offer.listingName}`,
-        message_type: "offer_declined",
+      const res = await fetch("/api/offers/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: offer.messageId,
+          action: "decline",
+          conversationId,
+        }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to decline offer");
+      }
 
       // Update local state
       setConversation((prev) => {
