@@ -114,7 +114,7 @@ function OfferCard({
             <span className="text-relay-accent">Pending</span>
           )}
         </div>
-      ) : (
+      ) : offer.status === "pending" ? (
         <div className="flex gap-2">
           <button
             onClick={onAccept}
@@ -130,6 +130,21 @@ function OfferCard({
             <X className="w-3.5 h-3.5" />
             Decline
           </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          {offer.status === "accepted" && (
+            <>
+              <Check className="w-4 h-4 text-green-400" />
+              <span className="text-green-400">Accepted</span>
+            </>
+          )}
+          {offer.status === "declined" && (
+            <>
+              <X className="w-4 h-4 text-red-400" />
+              <span className="text-red-400">Declined</span>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -313,19 +328,24 @@ export default function ConversationPage() {
         };
       });
 
-      // Get other user info
-      const otherUserId = convData.user1_id === currentUser?.id ? convData.user2_id : convData.user1_id;
-      const { data: otherUserData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", otherUserId)
-        .single();
+      // Get other user info — conversations use participant_ids array
+      const participantIds: string[] = convData.participant_ids || [];
+      const otherUserId = participantIds.find((pid: string) => pid !== currentUser?.id);
+      let otherUserData: any = null;
+      if (otherUserId) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, display_name, full_name, avatar_url, is_verified_seller")
+          .eq("id", otherUserId)
+          .single();
+        otherUserData = data;
+      }
 
       const conv: Conversation = {
         id: convData.id,
         name: otherUserData?.display_name || "Unknown",
         avatar: (otherUserData?.display_name || "U").substring(0, 2).toUpperCase(),
-        isVerified: otherUserData?.is_verified || false,
+        isVerified: otherUserData?.is_verified_seller || false,
         lastMessage: messagesData?.[messagesData.length - 1]?.content || "",
         time: messagesData?.length ? new Date(messagesData[messagesData.length - 1].created_at).toLocaleTimeString() : "",
         unread: convData.unread,
