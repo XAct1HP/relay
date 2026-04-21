@@ -52,10 +52,10 @@ function Avatar({ initials }: { initials: string }) {
 
 function OfferCard({
   offer,
-  isBuyer,
   isSender,
   onAccept,
   onDecline,
+  onGoToCheckout,
 }: {
   offer: {
     originalPrice: number;
@@ -67,11 +67,15 @@ function OfferCard({
     status: "pending" | "accepted" | "declined";
     messageId: string;
   };
-  isBuyer: boolean;
   isSender: boolean;
   onAccept?: () => void;
   onDecline?: () => void;
+  onGoToCheckout?: () => void;
 }) {
+  const isPending = offer.status === "pending";
+  const isAccepted = offer.status === "accepted";
+  const isDeclined = offer.status === "declined";
+
   return (
     <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-sm">
       <div className="flex items-center gap-2 mb-3">
@@ -98,25 +102,13 @@ function OfferCard({
         </div>
       </div>
 
-      {isSender ? (
+      {/* Pending — show Accept/Decline for receiver, "Pending" for sender */}
+      {isPending && isSender && (
         <div className="flex items-center gap-2 text-xs font-semibold">
-          {offer.status === "accepted" && (
-            <>
-              <Check className="w-4 h-4 text-green-400" />
-              <span className="text-green-400">Accepted</span>
-            </>
-          )}
-          {offer.status === "declined" && (
-            <>
-              <X className="w-4 h-4 text-red-400" />
-              <span className="text-red-400">Declined</span>
-            </>
-          )}
-          {offer.status === "pending" && (
-            <span className="text-relay-accent">Pending</span>
-          )}
+          <span className="text-relay-accent">Pending</span>
         </div>
-      ) : offer.status === "pending" ? (
+      )}
+      {isPending && !isSender && (
         <div className="flex gap-2">
           <button
             onClick={onAccept}
@@ -133,20 +125,32 @@ function OfferCard({
             Decline
           </button>
         </div>
-      ) : (
+      )}
+
+      {/* Accepted — show status + "Go to Checkout" for receiver */}
+      {isAccepted && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <Check className="w-4 h-4 text-green-400" />
+            <span className="text-green-400">Accepted</span>
+          </div>
+          {!isSender && onGoToCheckout && (
+            <button
+              onClick={onGoToCheckout}
+              className="w-full bg-relay-accent-strong/20 hover:bg-relay-accent-strong/30 text-relay-accent py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Go to Checkout
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Declined */}
+      {isDeclined && (
         <div className="flex items-center gap-2 text-xs font-semibold">
-          {offer.status === "accepted" && (
-            <>
-              <Check className="w-4 h-4 text-green-400" />
-              <span className="text-green-400">Accepted</span>
-            </>
-          )}
-          {offer.status === "declined" && (
-            <>
-              <X className="w-4 h-4 text-red-400" />
-              <span className="text-red-400">Declined</span>
-            </>
-          )}
+          <X className="w-4 h-4 text-red-400" />
+          <span className="text-red-400">Declined</span>
         </div>
       )}
     </div>
@@ -185,32 +189,53 @@ export default function ConversationPage() {
     if (!offer || !currentUser?.id) return;
 
     try {
-      // Fetch offer details from server (bypasses RLS so buyer can access seller's offer data)
-      const res = await fetch("/api/offers/accept", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messageId: offer.messageId }),
-      });
+      const supabase = createClient();
 
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Failed to accept offer. Please try again.");
-        return;
+      // Update the message status
+      const { error: msgErr } = await supabase
+        .from("messages")
+        .update({ custom_offer_status: "accepted" })
+        .eq("id", offer.messageId);
+
+      if (msgErr) {
+        console.error("Message update error:", msgErr);
       }
 
-      // Navigate to checkout — same flow as "Buy Now" button.
-      // The Stripe webhook marks the offer as accepted after payment completes.
-      const checkoutParams = new URLSearchParams({
-        listing: data.listingId,
-        size: data.size,
-        price: data.offerPrice.toString(),
-        customOffer: data.customOfferId,
+      // Update the custom_offers record
+      if (offer.customOfferId) {
+        await supabase
+          .from("custom_offers")
+          .update({ status: "accepted" })
+          .eq("id", offer.customOfferId);
+      }
+
+      // Update local state so the card immediately shows "Accepted" + "Go to Checkout"
+      setConversation((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          messages: prev.messages.map((m) =>
+            m.offer?.messageId === offer.messageId
+              ? { ...m, offer: { ...m.offer!, status: "accepted" as const } }
+              : m
+          ),
+        };
       });
-      router.push(`/checkout?${checkoutParams.toString()}`);
     } catch (error) {
       console.error("Error accepting offer:", error);
       alert("Failed to accept offer. Please try again.");
     }
+  };
+
+  const handleGoToCheckout = (offer: Message["offer"]) => {
+    if (!offer) return;
+    const checkoutParams = new URLSearchParams({
+      listing: offer.listingId,
+      size: offer.size,
+      price: offer.offerPrice.toString(),
+      customOffer: offer.customOfferId || "true",
+    });
+    router.push(`/checkout?${checkoutParams.toString()}`);
   };
 
   const handleDeclineOffer = async (offer: Message["offer"]) => {
@@ -481,10 +506,10 @@ export default function ConversationPage() {
                   >
                     <OfferCard
                       offer={msg.offer}
-                      isBuyer={msg.sender !== "user"}
                       isSender={msg.sender === "user"}
                       onAccept={() => handleAcceptOffer(msg.offer)}
                       onDecline={() => handleDeclineOffer(msg.offer)}
+                      onGoToCheckout={() => handleGoToCheckout(msg.offer)}
                     />
                   </div>
                 ) : msg.content ? (
