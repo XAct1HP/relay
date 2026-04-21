@@ -25,7 +25,7 @@ import {
   Loader2,
 } from "lucide-react"
 
-type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refunded"
+type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refund_pending" | "refunded" | "payout_failed"
 type UserRole = "buyer" | "seller"
 
 interface ShippingAddress {
@@ -95,7 +95,9 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ReactNode; 
   completed: { label: "Completed", icon: <CheckCircle2 className="w-4 h-4" />, color: "bg-emerald-500/20 text-emerald-300" },
   disputed: { label: "Disputed", icon: <AlertCircle className="w-4 h-4" />, color: "bg-red-500/20 text-red-300" },
   cancelled: { label: "Cancelled", icon: <AlertCircle className="w-4 h-4" />, color: "bg-gray-500/20 text-gray-300" },
+  refund_pending: { label: "Refund Pending", icon: <Clock className="w-4 h-4" />, color: "bg-amber-500/20 text-amber-300" },
   refunded: { label: "Refunded", icon: <AlertCircle className="w-4 h-4" />, color: "bg-gray-500/20 text-gray-300" },
+  payout_failed: { label: "Payout Failed", icon: <AlertCircle className="w-4 h-4" />, color: "bg-red-500/20 text-red-300" },
 }
 
 const AUTH_ANGLES = ["Front", "Back", "Medial Side", "Lateral Side", "Sole", "Size Tag", "With Challenge Code", "Packed Shipment"]

@@ -114,9 +114,42 @@ export async function POST(
       .eq('id', order.seller_id)
       .single()
 
+    // Validate payout prerequisites before attempting transfer
+    if (!sellerProfile?.stripe_account_id) {
+      console.error(`Seller ${order.seller_id} has no Stripe Connect account for order ${orderId}`)
+      await supabase
+        .from('orders')
+        .update({
+          status: 'payout_failed',
+          review_rating: rating,
+          review_comment: comment || null,
+        })
+        .eq('id', orderId)
+      return NextResponse.json(
+        { error: 'Seller payout account not set up. Our team has been notified.' },
+        { status: 500 }
+      )
+    }
+
+    if (!order.seller_earnings || order.seller_earnings <= 0) {
+      console.error(`Order ${orderId} has invalid seller_earnings: ${order.seller_earnings}`)
+      await supabase
+        .from('orders')
+        .update({
+          status: 'payout_failed',
+          review_rating: rating,
+          review_comment: comment || null,
+        })
+        .eq('id', orderId)
+      return NextResponse.json(
+        { error: 'Order has no valid payout amount. Our team has been notified.' },
+        { status: 500 }
+      )
+    }
+
     // Create Stripe transfer to seller (with idempotency check)
     let transferId = order.stripe_transfer_id
-    if (!transferId && sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
+    if (!transferId) {
       try {
         const transfer = await stripe.transfers.create({
           amount: Math.round(order.seller_earnings * 100),
@@ -145,20 +178,6 @@ export async function POST(
           { status: 500 }
         )
       }
-    } else if (!sellerProfile?.stripe_account_id) {
-      console.error(`Seller ${order.seller_id} has no Stripe Connect account for order ${orderId}`)
-      await supabase
-        .from('orders')
-        .update({
-          status: 'payout_failed',
-          review_rating: rating,
-          review_comment: comment || null,
-        })
-        .eq('id', orderId)
-      return NextResponse.json(
-        { error: 'Seller payout account not set up. Our team has been notified.' },
-        { status: 500 }
-      )
     }
 
     // Update order status, store review data and transfer ID

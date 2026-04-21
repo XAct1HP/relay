@@ -17,7 +17,9 @@ type OrderStatus =
   | "completed"
   | "disputed"
   | "cancelled"
+  | "refund_pending"
   | "refunded"
+  | "payout_failed"
 
 type FilterTab = "all" | "in_progress" | "completed" | "cancelled"
 
@@ -91,11 +93,23 @@ const statusConfig: Record<
     icon: <AlertCircle className="w-4 h-4" />,
     badge: "bg-gray-500/10 text-gray-300",
   },
+  refund_pending: {
+    label: "Refund Pending",
+    color: "bg-amber-500/20 text-amber-300",
+    icon: <Clock className="w-4 h-4" />,
+    badge: "bg-amber-500/10 text-amber-300",
+  },
   refunded: {
     label: "Refunded",
     color: "bg-gray-500/20 text-gray-300",
     icon: <AlertCircle className="w-4 h-4" />,
     badge: "bg-gray-500/10 text-gray-300",
+  },
+  payout_failed: {
+    label: "Payout Failed",
+    color: "bg-red-500/20 text-red-300",
+    icon: <AlertCircle className="w-4 h-4" />,
+    badge: "bg-red-500/10 text-red-300",
   },
 }
 
@@ -105,7 +119,7 @@ const isInProgress = (status: OrderStatus) =>
 const isCompleted = (status: OrderStatus) => status === "completed"
 
 const isCancelledOrRefunded = (status: OrderStatus) =>
-  status === "cancelled" || status === "refunded"
+  status === "cancelled" || status === "refunded" || status === "refund_pending" || status === "payout_failed"
 
 export default function OrdersPage() {
   const { currentUser } = useAuth()
