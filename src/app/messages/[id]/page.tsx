@@ -181,23 +181,36 @@ export default function ConversationPage() {
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const handleAcceptOffer = (offer: Message["offer"]) => {
+  const handleAcceptOffer = async (offer: Message["offer"]) => {
     if (!offer || !currentUser?.id) return;
 
-    if (!offer.listingId) {
-      alert("Could not find listing details for this offer. Please try again.");
-      return;
-    }
+    try {
+      // Fetch offer details from server (bypasses RLS so buyer can access seller's offer data)
+      const res = await fetch("/api/offers/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: offer.messageId }),
+      });
 
-    // Navigate directly to checkout — same flow as "Buy Now" button.
-    // Pass the custom offer ID so the Stripe webhook marks it accepted after payment.
-    const checkoutParams = new URLSearchParams({
-      listing: offer.listingId,
-      size: offer.size,
-      price: offer.offerPrice.toString(),
-      customOffer: offer.customOfferId,
-    });
-    router.push(`/checkout?${checkoutParams.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to accept offer. Please try again.");
+        return;
+      }
+
+      // Navigate to checkout — same flow as "Buy Now" button.
+      // The Stripe webhook marks the offer as accepted after payment completes.
+      const checkoutParams = new URLSearchParams({
+        listing: data.listingId,
+        size: data.size,
+        price: data.offerPrice.toString(),
+        customOffer: data.customOfferId,
+      });
+      router.push(`/checkout?${checkoutParams.toString()}`);
+    } catch (error) {
+      console.error("Error accepting offer:", error);
+      alert("Failed to accept offer. Please try again.");
+    }
   };
 
   const handleDeclineOffer = async (offer: Message["offer"]) => {
