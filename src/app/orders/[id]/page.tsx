@@ -25,7 +25,7 @@ import {
   Loader2,
 } from "lucide-react"
 
-type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refund_pending" | "refunded" | "payout_failed"
+type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refund_pending" | "refunded" | "payout_failed" | "return_pending" | "return_shipped" | "return_delivered"
 type UserRole = "buyer" | "seller"
 
 interface ShippingAddress {
@@ -71,6 +71,10 @@ interface OrderData {
   reviewComment?: string
   shippingDeadline?: string
   reviewDeadline?: string
+  returnLabelUrl?: string
+  returnTrackingNumber?: string
+  returnPackingSlipId?: string
+  returnStatus?: string
 }
 
 const statusStages = ["paid", "auth_submitted", "label_created", "shipped", "delivered", "review_window", "completed"] as const
@@ -98,6 +102,9 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ReactNode; 
   refund_pending: { label: "Refund Pending", icon: <Clock className="w-4 h-4" />, color: "bg-amber-500/20 text-amber-300" },
   refunded: { label: "Refunded", icon: <AlertCircle className="w-4 h-4" />, color: "bg-gray-500/20 text-gray-300" },
   payout_failed: { label: "Payout Failed", icon: <AlertCircle className="w-4 h-4" />, color: "bg-red-500/20 text-red-300" },
+  return_pending: { label: "Return Required", icon: <Package className="w-4 h-4" />, color: "bg-amber-500/20 text-amber-300" },
+  return_shipped: { label: "Return Shipped", icon: <Package className="w-4 h-4" />, color: "bg-cyan-500/20 text-cyan-300" },
+  return_delivered: { label: "Return Received", icon: <CheckCircle2 className="w-4 h-4" />, color: "bg-green-500/20 text-green-300" },
 }
 
 const AUTH_ANGLES = ["Front", "Back", "Medial Side", "Lateral Side", "Sole", "Size Tag", "With Challenge Code", "Packed Shipment"]
@@ -496,6 +503,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       reviewDeadline: data.review_deadline
         ? new Date(data.review_deadline).toLocaleDateString()
         : undefined,
+      returnLabelUrl: data.return_label_url || undefined,
+      returnTrackingNumber: data.return_tracking_number || undefined,
+      returnPackingSlipId: data.return_packing_slip_id || undefined,
+      returnStatus: data.return_status || undefined,
     }
 
     setOrder(orderData)
@@ -859,7 +870,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       {/* Progress Tracker */}
-      {!["completed", "disputed", "cancelled", "refunded"].includes(currentStatus) && (
+      {!["completed", "disputed", "cancelled", "refunded", "refund_pending", "payout_failed", "return_pending", "return_shipped", "return_delivered"].includes(currentStatus) && (
         <ProgressTracker currentStatus={currentStatus} />
       )}
 
@@ -1414,6 +1425,85 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             </>
           )}
         </>
+      )}
+
+      {/* ════════════════════════════════ */}
+      {/* STATUS: RETURN PENDING          */}
+      {/* ════════════════════════════════ */}
+      {(currentStatus === "return_pending" || currentStatus === "return_shipped") && (
+        <div className="relay-card p-6 mb-6 border border-amber-500/30 bg-amber-500/5">
+          <div className="flex items-center gap-3 mb-4">
+            <Package className="w-6 h-6 text-amber-400" />
+            <h2 className="text-lg font-bold text-amber-300">
+              {currentStatus === "return_pending" ? "Return Required" : "Return In Transit"}
+            </h2>
+          </div>
+
+          <p className="text-[#7ca6ff] text-sm mb-4">
+            The dispute was resolved in your favor. Please return the item using the prepaid shipping label below.
+            Your refund will be processed once we receive and verify the return.
+          </p>
+
+          {order.returnPackingSlipId && (
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
+              <p className="text-xs font-semibold text-white/50 mb-1">RETURN ID</p>
+              <p className="text-2xl font-mono font-bold text-[#f5f7fb] tracking-wider">
+                {order.returnPackingSlipId}
+              </p>
+            </div>
+          )}
+
+          <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
+            <p className="text-xs font-semibold text-white/50 mb-3">STEPS TO RETURN</p>
+            <ol className="space-y-2 text-sm text-[#7ca6ff]">
+              <li className="flex items-start gap-2">
+                <span className="text-[#5f8fff] font-bold mt-0.5">1.</span>
+                <span>Download and print the <strong className="text-[#f5f7fb]">packing slip</strong> below</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#5f8fff] font-bold mt-0.5">2.</span>
+                <span>Place the packing slip <strong className="text-[#f5f7fb]">inside the box</strong> with the item</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#5f8fff] font-bold mt-0.5">3.</span>
+                <span>Seal the package and attach the <strong className="text-[#f5f7fb]">return shipping label</strong></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#5f8fff] font-bold mt-0.5">4.</span>
+                <span>Drop off at any carrier pickup location shown on the label</span>
+              </li>
+            </ol>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            {order.returnLabelUrl && (
+              <a
+                href={order.returnLabelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relay-button-primary flex items-center justify-center gap-2 flex-1"
+              >
+                <Download className="w-4 h-4" />
+                Download Return Label
+              </a>
+            )}
+            <a
+              href={`/api/orders/${order.id}/packing-slip`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[#f5f7fb] font-medium hover:bg-white/10 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Download Packing Slip
+            </a>
+          </div>
+
+          {order.returnTrackingNumber && (
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <p className="text-xs text-white/50">Return tracking: <span className="font-mono text-[#f5f7fb]">{order.returnTrackingNumber}</span></p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ════════════════════════════════ */}

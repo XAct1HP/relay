@@ -69,7 +69,7 @@ export interface Order {
   platform_fee: number;
   stripe_fee: number;
   seller_earnings: number;
-  status: 'pending_payment' | 'paid' | 'auth_submitted' | 'label_created' | 'shipped' | 'delivered' | 'review_window' | 'completed' | 'disputed' | 'cancelled' | 'refund_pending' | 'refunded' | 'payout_failed';
+  status: 'pending_payment' | 'paid' | 'auth_submitted' | 'label_created' | 'shipped' | 'delivered' | 'review_window' | 'completed' | 'disputed' | 'cancelled' | 'refund_pending' | 'refunded' | 'payout_failed' | 'return_pending' | 'return_shipped' | 'return_delivered';
   stripe_payment_intent_id: string | null;
   shipping_label_url: string | null;
   tracking_number: string | null;

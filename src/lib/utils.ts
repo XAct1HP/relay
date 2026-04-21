@@ -91,6 +91,9 @@ export function getOrderStatusLabel(status: string): string {
     refund_pending: 'Refund Pending',
     refunded: 'Refunded',
     payout_failed: 'Payout Failed',
+    return_pending: 'Return Required',
+    return_shipped: 'Return Shipped',
+    return_delivered: 'Return Received',
   };
 
   return labels[status] || status;
@@ -114,6 +117,9 @@ export function getOrderStatusColor(status: string): string {
     refund_pending: 'bg-amber-100 text-amber-800 border-amber-300',
     refunded: 'bg-gray-100 text-gray-800 border-gray-300',
     payout_failed: 'bg-red-100 text-red-800 border-red-300',
+    return_pending: 'bg-amber-100 text-amber-800 border-amber-300',
+    return_shipped: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+    return_delivered: 'bg-green-100 text-green-800 border-green-300',
   };
 
   return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';

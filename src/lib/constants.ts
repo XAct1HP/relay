@@ -184,6 +184,21 @@ export const ORDER_STATUSES = {
     description: 'Seller payout failed — needs admin attention',
     color: 'red',
   },
+  return_pending: {
+    label: 'Return Required',
+    description: 'Buyer needs to ship the item back',
+    color: 'amber',
+  },
+  return_shipped: {
+    label: 'Return Shipped',
+    description: 'Return package is in transit',
+    color: 'cyan',
+  },
+  return_delivered: {
+    label: 'Return Received',
+    description: 'Return received, refund being processed',
+    color: 'green',
+  },
 } as const;
 
 /**

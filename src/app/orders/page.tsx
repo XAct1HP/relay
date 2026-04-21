@@ -20,6 +20,9 @@ type OrderStatus =
   | "refund_pending"
   | "refunded"
   | "payout_failed"
+  | "return_pending"
+  | "return_shipped"
+  | "return_delivered"
 
 type FilterTab = "all" | "in_progress" | "completed" | "cancelled"
 
@@ -111,12 +114,30 @@ const statusConfig: Record<
     icon: <AlertCircle className="w-4 h-4" />,
     badge: "bg-red-500/10 text-red-300",
   },
+  return_pending: {
+    label: "Return Required",
+    color: "bg-amber-500/20 text-amber-300",
+    icon: <Package className="w-4 h-4" />,
+    badge: "bg-amber-500/10 text-amber-300",
+  },
+  return_shipped: {
+    label: "Return Shipped",
+    color: "bg-cyan-500/20 text-cyan-300",
+    icon: <Package className="w-4 h-4" />,
+    badge: "bg-cyan-500/10 text-cyan-300",
+  },
+  return_delivered: {
+    label: "Return Received",
+    color: "bg-green-500/20 text-green-300",
+    icon: <CheckCircle2 className="w-4 h-4" />,
+    badge: "bg-green-500/10 text-green-300",
+  },
 }
 
 const isInProgress = (status: OrderStatus) =>
-  ["paid", "auth_submitted", "label_created", "shipped", "review_window"].includes(status)
+  ["paid", "auth_submitted", "label_created", "shipped", "review_window", "return_pending", "return_shipped"].includes(status)
 
-const isCompleted = (status: OrderStatus) => status === "completed"
+const isCompleted = (status: OrderStatus) => status === "completed" || status === "return_delivered"
 
 const isCancelledOrRefunded = (status: OrderStatus) =>
   status === "cancelled" || status === "refunded" || status === "refund_pending" || status === "payout_failed"

@@ -14,9 +14,7 @@ import {
   XCircle,
   TrendingUp,
   ExternalLink,
-  AlertTriangle,
   ShoppingCart,
-  FileText,
 } from "lucide-react";
 import {
   AreaChart,
@@ -40,6 +38,7 @@ interface MetricsData {
   activeListings: number;
   pendingApplications: Array<any>;
   activeDisputes: Array<any>;
+  pendingReturns: number;
 }
 
 function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
@@ -228,6 +227,7 @@ export default function AdminPage() {
     activeListings: 0,
     pendingApplications: [],
     activeDisputes: [],
+    pendingReturns: 0,
   });
 
   useEffect(() => {
@@ -259,6 +259,12 @@ export default function AdminPage() {
         .eq("status", "disputed")
         .limit(3);
 
+      // Get pending returns count
+      const { count: returnsCount } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["return_pending", "return_shipped"]);
+
       setMetrics({
         gmvData: [], // Chart data would require more complex aggregation
         ordersData: [],
@@ -268,6 +274,7 @@ export default function AdminPage() {
         activeListings: listings || 0,
         pendingApplications: apps || [],
         activeDisputes: disputes || [],
+        pendingReturns: returnsCount || 0,
       });
 
       setLoading(false);
@@ -427,27 +434,19 @@ export default function AdminPage() {
             })}
           </ActionCard>
 
-          <div className="relay-card p-6 flex flex-col space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-[#f5f7fb] mb-4">Shipping Issues & Flagged Content</h3>
-
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-white/70 mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" />
-                  Recent Issues
-                </h4>
-                <div className="text-white/40 text-sm">No shipping issues at this time</div>
+          <ActionCard
+            title="Pending Returns"
+            count={metrics.pendingReturns}
+            viewAllLink="/admin/returns"
+          >
+            {metrics.pendingReturns > 0 ? (
+              <div className="text-white/60 text-sm py-2">
+                {metrics.pendingReturns} return{metrics.pendingReturns > 1 ? 's' : ''} awaiting processing
               </div>
-
-              <div className="border-t border-white/5 pt-4">
-                <h4 className="text-sm font-medium text-white/70 mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Flagged Listings
-                </h4>
-                <div className="text-white/40 text-sm">No flagged listings</div>
-              </div>
-            </div>
-          </div>
+            ) : (
+              <div className="text-white/40 text-sm py-2">No pending returns</div>
+            )}
+          </ActionCard>
         </div>
 
         {/* Recent Activity Feed */}

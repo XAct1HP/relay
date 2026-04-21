@@ -21,6 +21,9 @@ CREATE TABLE profiles (
   shop_name TEXT,
   profile_theme TEXT DEFAULT 'default',
   bio TEXT,
+  is_banned BOOLEAN DEFAULT false,
+  ban_reason TEXT,
+  dispute_flags_count INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -171,7 +174,8 @@ CREATE TABLE orders (
     CHECK (status IN (
       'pending_payment', 'paid', 'auth_submitted', 'label_created', 'shipped',
       'delivered', 'review_window', 'completed', 'disputed', 'cancelled',
-      'refund_pending', 'refunded', 'payout_failed'
+      'refund_pending', 'refunded', 'payout_failed',
+      'return_pending', 'return_shipped', 'return_delivered'
     )),
   stripe_payment_intent_id TEXT,
   stripe_transfer_id TEXT,
@@ -195,6 +199,12 @@ CREATE TABLE orders (
   shipped_at TIMESTAMPTZ,
   delivered_at TIMESTAMPTZ,
   admin_notes TEXT,
+  return_label_url TEXT,
+  return_tracking_number TEXT,
+  return_packing_slip_id TEXT,
+  return_status TEXT CHECK (return_status IS NULL OR return_status IN ('pending', 'shipped', 'delivered')),
+  return_created_at TIMESTAMPTZ,
+  return_delivered_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
