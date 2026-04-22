@@ -143,6 +143,8 @@ export function CustomOfferModal({
           ...inserted,
           _offerListingName: selectedListing.name,
           _offerOriginalPrice: originalPrice,
+          _offerListingId: selectedListingId,
+          _offerCustomOfferId: offerData?.id,
         };
         onOfferSent(conversationId, enrichedMessage);
       }
