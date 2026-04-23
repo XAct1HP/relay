@@ -32,6 +32,7 @@ export function Sidebar() {
 
   const sellerLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/feed", label: "Feed", icon: Rss },
     { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
     { href: "/sell", label: "Sell", icon: Upload },
     { href: "/my-listings", label: "My Listings", icon: List },
@@ -150,6 +151,13 @@ export function Sidebar() {
               <LogOut size={16} />
               Sign Out
             </button>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
           )}
         </div>
       )}

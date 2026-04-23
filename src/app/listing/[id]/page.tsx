@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight,
-  Heart,
   ShoppingCart,
   MessageSquare,
   Star,
@@ -279,10 +278,6 @@ export default function ListingDetailPage({
                 </p>
               </div>
 
-              {/* Save Button */}
-              <button className="absolute top-4 right-4 p-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm border border-white/20 z-10">
-                <Heart size={20} className="text-white" />
-              </button>
             </div>
 
             {/* Thumbnail Strip */}

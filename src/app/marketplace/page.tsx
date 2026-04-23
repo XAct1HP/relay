@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Pagination } from "@/components/layout/Pagination";
-import { Search, Heart, BadgeCheck, ChevronDown, X } from "lucide-react";
+import { Search, BadgeCheck, ChevronDown, X } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { Listing } from "@/types";
 
@@ -323,16 +323,6 @@ export default function MarketplacePage() {
                         </span>
                       </div>
 
-                      {/* Heart/Save Icon */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm border border-white/20"
-                      >
-                        <Heart size={18} className="text-white" />
-                      </button>
                     </div>
 
                     {/* Content */}

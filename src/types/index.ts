@@ -15,6 +15,7 @@ export interface User {
   shop_name: string | null;
   profile_theme: string;
   bio: string | null;
+  followers_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -52,8 +53,20 @@ export interface Post {
   content: string;
   images: string[];
   likes_count: number;
+  is_rising_brand: boolean;
+  is_custom_brand: boolean;
+  related_listing_id: string | null;
   created_at: string;
   seller?: User;
+  related_listing?: Listing;
+}
+
+// Follow relationship
+export interface Follow {
+  id: string;
+  follower_id: string;
+  following_id: string;
+  created_at: string;
 }
 
 // Purchase order

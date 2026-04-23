@@ -8,6 +8,7 @@ import {
   Package,
   Settings,
   Plus,
+  Rss,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -21,11 +22,11 @@ export function MobileBottomBar() {
   };
 
   const links = [
+    { href: "/feed", icon: Rss, label: "Feed" },
     { href: "/marketplace", icon: ShoppingBag, label: "Shop" },
     { href: "/messages", icon: MessageSquare, label: "Messages" },
     { href: "/sell", icon: Plus, label: "Sell" },
     { href: "/orders", icon: Package, label: "Orders" },
-    { href: "/settings", icon: Settings, label: "Settings" },
   ];
 
   // Filter links based on user role

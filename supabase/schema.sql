@@ -21,6 +21,7 @@ CREATE TABLE profiles (
   shop_name TEXT,
   profile_theme TEXT DEFAULT 'default',
   bio TEXT,
+  followers_count INT DEFAULT 0,
   is_banned BOOLEAN DEFAULT false,
   ban_reason TEXT,
   dispute_flags_count INT DEFAULT 0,
@@ -61,6 +62,21 @@ CREATE INDEX idx_listings_created_at ON listings(created_at);
 CREATE INDEX idx_listings_brand ON listings(brand);
 
 -- ============================================================================
+-- FOLLOWS TABLE
+-- ============================================================================
+CREATE TABLE follows (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  follower_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  following_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(follower_id, following_id)
+);
+
+-- Create indexes
+CREATE INDEX idx_follows_follower_id ON follows(follower_id);
+CREATE INDEX idx_follows_following_id ON follows(following_id);
+
+-- ============================================================================
 -- POSTS TABLE
 -- ============================================================================
 CREATE TABLE posts (
@@ -70,6 +86,8 @@ CREATE TABLE posts (
   images TEXT[],
   likes_count INT DEFAULT 0,
   is_rising_brand BOOLEAN DEFAULT false,
+  related_listing_id UUID REFERENCES listings(id) ON DELETE SET NULL,
+  is_custom_brand BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -77,6 +95,8 @@ CREATE TABLE posts (
 CREATE INDEX idx_posts_seller_id ON posts(seller_id);
 CREATE INDEX idx_posts_created_at ON posts(created_at);
 CREATE INDEX idx_posts_is_rising_brand ON posts(is_rising_brand);
+CREATE INDEX idx_posts_related_listing_id ON posts(related_listing_id);
+CREATE INDEX idx_posts_is_custom_brand ON posts(is_custom_brand);
 
 -- ============================================================================
 -- POST_LIKES TABLE
@@ -268,6 +288,26 @@ CREATE INDEX idx_reviews_seller_id ON reviews(seller_id);
 -- Toggle OFF "Confirm email" / "Enable email confirmations"
 -- This allows users to sign in immediately after signup without email verification.
 
+-- Function to generate a random unique username (e.g. "user_a7x9k2m")
+CREATE OR REPLACE FUNCTION public.generate_random_username()
+RETURNS TEXT AS $$
+DECLARE
+  new_username TEXT;
+  chars TEXT := 'abcdefghijklmnopqrstuvwxyz0123456789';
+  i INT;
+BEGIN
+  LOOP
+    new_username := 'user_';
+    FOR i IN 1..7 LOOP
+      new_username := new_username || substr(chars, floor(random() * length(chars) + 1)::int, 1);
+    END LOOP;
+    -- Ensure uniqueness
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM profiles WHERE username = new_username);
+  END LOOP;
+  RETURN new_username;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Function to automatically create a profile when a new auth user is created
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -277,7 +317,7 @@ BEGIN
     new.id,
     new.email,
     new.raw_user_meta_data ->> 'full_name',
-    LOWER(new.email),
+    public.generate_random_username(),
     COALESCE(new.raw_user_meta_data ->> 'role', 'buyer')
   );
   RETURN new;
@@ -361,6 +401,31 @@ CREATE TRIGGER post_likes_decrement
   AFTER DELETE ON post_likes
   FOR EACH ROW EXECUTE FUNCTION public.on_post_like_deleted();
 
+-- Triggers for follower count on follows table
+CREATE OR REPLACE FUNCTION public.on_follow_inserted()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE profiles SET followers_count = followers_count + 1 WHERE id = NEW.following_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.on_follow_deleted()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE profiles SET followers_count = GREATEST(followers_count - 1, 0) WHERE id = OLD.following_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER follows_increment
+  AFTER INSERT ON follows
+  FOR EACH ROW EXECUTE FUNCTION public.on_follow_inserted();
+
+CREATE TRIGGER follows_decrement
+  AFTER DELETE ON follows
+  FOR EACH ROW EXECUTE FUNCTION public.on_follow_deleted();
+
 -- Function to check if username is available
 CREATE OR REPLACE FUNCTION public.is_username_available(username_check TEXT)
 RETURNS BOOLEAN AS $$
@@ -378,6 +443,7 @@ $$ LANGUAGE plpgsql;
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
@@ -444,6 +510,22 @@ CREATE POLICY "Sellers can update their own listings" ON listings
 -- Sellers can delete their own listings
 CREATE POLICY "Sellers can delete their own listings" ON listings
   FOR DELETE USING (auth.uid() = seller_id);
+
+-- ============================================================================
+-- FOLLOWS POLICIES
+-- ============================================================================
+
+-- Anyone can read follows
+CREATE POLICY "Everyone can read follows" ON follows
+  FOR SELECT USING (true);
+
+-- Users can follow others
+CREATE POLICY "Users can insert follows" ON follows
+  FOR INSERT WITH CHECK (auth.uid() = follower_id);
+
+-- Users can unfollow
+CREATE POLICY "Users can delete their own follows" ON follows
+  FOR DELETE USING (auth.uid() = follower_id);
 
 -- ============================================================================
 -- POSTS POLICIES
