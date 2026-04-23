@@ -6,6 +6,7 @@ import { Pagination } from "@/components/layout/Pagination";
 import { Search, BadgeCheck, ChevronDown, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
+import { BRANDS as ALL_BRANDS } from "@/lib/constants";
 import { Listing } from "@/types";
 
 interface ListingDisplay {
@@ -25,7 +26,7 @@ interface ListingDisplay {
   gradient: string;
 }
 
-const BRANDS = ["Nike", "Adidas", "New Balance", "Jordan", "Yeezy", "Puma", "Converse", "Vans", "Asics", "Other / Independent Brand"];
+const BRANDS = ALL_BRANDS;
 const CONDITIONS = ["New", "Like New", "Used - Excellent", "Used - Good", "Used - Fair"];
 const SIZES = Array.from({ length: 31 }, (_, i) => {
   const baseSize = 3.5 + i * 0.5;
