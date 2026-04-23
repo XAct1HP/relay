@@ -370,13 +370,10 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                           </Link>
                         )}
 
-                        <div className="flex gap-6 text-sm text-white/50">
-                          <button className="flex items-center gap-2 hover:text-relay-accent transition-colors">
-                            <Heart size={16} /> {post.likes_count}
-                          </button>
-                          <button className="flex items-center gap-2 hover:text-relay-accent transition-colors">
-                            <MessageCircle size={16} /> {post.comments_count || 0}
-                          </button>
+                        <div className="flex gap-4 text-sm text-white/50">
+                          <span className="flex items-center gap-1.5">
+                            <Heart size={14} className={post.likes_count > 0 ? "fill-relay-accent text-relay-accent" : ""} /> {post.likes_count}
+                          </span>
                         </div>
                       </div>
                     </div>

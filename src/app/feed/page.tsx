@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Pagination } from "@/components/layout/Pagination";
-import { Heart, MessageCircle, Share2, Sparkles, TrendingUp, Star } from "lucide-react";
+import { Heart, Sparkles, TrendingUp, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import Link from "next/link";
@@ -19,7 +19,6 @@ interface FeedPost {
   images: string[];
   likes: number;
   isLiked: boolean;
-  comments: number;
   timeAgo: string;
   relatedListing?: {
     id: string;
@@ -43,6 +42,7 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const likingInFlight = useRef(new Set<string>());
 
   useEffect(() => {
     async function fetchPosts() {
@@ -171,7 +171,6 @@ export default function FeedPage() {
         images: post.images || [],
         likes: post.likes_count || 0,
         isLiked: likedPostIds.has(post.id),
-        comments: 0,
         timeAgo: post.created_at,
         _isFollowed: followedIds.includes(post.seller_id),
         relatedListing: listing ? { id: listing.id, name: listing.brand + " " + listing.model, brand: listing.brand, price: lowestPrice, image: listing.images?.[0] || undefined } : undefined,
@@ -183,18 +182,36 @@ export default function FeedPage() {
 
   const toggleLike = async (postId: string) => {
     if (!currentUser?.id) return;
+    // Prevent rapid double-clicks — ignore if this post is already being toggled
+    if (likingInFlight.current.has(postId)) return;
+    likingInFlight.current.add(postId);
+
     const supabase = createClient();
     const post = posts.find((p) => p.id === postId);
-    if (!post) return;
+    if (!post) { likingInFlight.current.delete(postId); return; }
+
+    const wasLiked = post.isLiked;
+
+    // Optimistic update (clamp to 0 minimum)
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, isLiked: !wasLiked, likes: Math.max(0, wasLiked ? p.likes - 1 : p.likes + 1) } : p));
+
     try {
-      if (post.isLiked) {
+      if (wasLiked) {
         await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", currentUser!.id);
       } else {
         await supabase.from("post_likes").insert({ post_id: postId, user_id: currentUser!.id });
       }
-      setPosts(posts.map((p) => p.id === postId ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 } : p));
+      // Re-fetch actual count from DB to reconcile
+      const { data: postData } = await supabase.from("posts").select("likes_count").eq("id", postId).single();
+      if (postData) {
+        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: postData.likes_count } : p));
+      }
     } catch (error) {
+      // Revert optimistic update on failure
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, isLiked: wasLiked, likes: Math.max(0, wasLiked ? p.likes + 1 : p.likes - 1) } : p));
       console.error("Error toggling like:", error);
+    } finally {
+      likingInFlight.current.delete(postId);
     }
   };
 
@@ -241,7 +258,20 @@ export default function FeedPage() {
       {posts.length > 0 ? (
         <div className="space-y-5">
           {posts.map((post) => (
-            <div key={post.id} className="relay-card p-5 hover:bg-white/[0.06] transition-colors">
+            <div key={post.id} className="relay-card p-5 hover:bg-white/[0.06] transition-colors relative overflow-visible">
+              {/* Like Badge — floats top-right corner */}
+              <button
+                onClick={() => toggleLike(post.id)}
+                className={`absolute -top-3 -right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg backdrop-blur-md border transition-all duration-200 cursor-pointer group ${
+                  post.isLiked
+                    ? "bg-relay-accent/20 border-relay-accent/40 text-relay-accent shadow-relay-accent/20"
+                    : "bg-relay-bg/90 border-white/15 text-white/50 hover:text-relay-accent hover:border-relay-accent/30 hover:shadow-relay-accent/10"
+                }`}
+              >
+                <Heart size={14} className={`transition-transform duration-200 group-hover:scale-110 ${post.isLiked ? "fill-relay-accent" : ""}`} />
+                <span className="text-xs font-bold">{post.likes}</span>
+              </button>
+
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Link href={"/profile/" + post.sellerUsername.replace("@", "")}>
@@ -317,25 +347,6 @@ export default function FeedPage() {
                 </Link>
               )}
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                <button onClick={() => toggleLike(post.id)} className="flex items-center gap-2 text-relay-subtle hover:text-relay-accent transition-colors group">
-                  <div className="p-2 rounded-lg group-hover:bg-relay-accent/10 transition-colors">
-                    <Heart size={18} className={post.isLiked ? "fill-relay-accent" : ""} color={post.isLiked ? "#7ca6ff" : "currentColor"} />
-                  </div>
-                  <span className="text-sm font-medium">{post.likes}</span>
-                </button>
-                <button className="flex items-center gap-2 text-relay-subtle hover:text-relay-accent transition-colors group">
-                  <div className="p-2 rounded-lg group-hover:bg-relay-accent/10 transition-colors">
-                    <MessageCircle size={18} />
-                  </div>
-                  <span className="text-sm font-medium">{post.comments}</span>
-                </button>
-                <button className="flex items-center gap-2 text-relay-subtle hover:text-relay-accent transition-colors group">
-                  <div className="p-2 rounded-lg group-hover:bg-relay-accent/10 transition-colors">
-                    <Share2 size={18} />
-                  </div>
-                </button>
-              </div>
             </div>
           ))}
         </div>
