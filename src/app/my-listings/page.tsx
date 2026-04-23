@@ -12,7 +12,7 @@ interface MyListing {
   image: string
   brand: string
   model: string
-  status: 'active' | 'sold_out' | 'inactive' | 'removed'
+  status: 'active' | 'sold_out' | 'inactive' | 'removed' | 'pending_review' | 'rejected'
   sizes: string[]
   priceRange: { min: number; max: number }
   totalQuantity: number
@@ -31,6 +31,8 @@ const STATUS_BADGES = {
     color: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
   },
   removed: { label: 'Removed', color: 'bg-red-500/20 text-red-300 border-red-500/30' },
+  pending_review: { label: 'Pending Review', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+  rejected: { label: 'Rejected', color: 'bg-red-500/20 text-red-300 border-red-500/30' },
 }
 
 export default function MyListingsPage() {
@@ -136,7 +138,7 @@ export default function MyListingsPage() {
               image: listing.images?.[0] || '/placeholder-shoe.png',
               brand: listing.brand,
               model: listing.model,
-              status: listing.status as 'active' | 'sold_out' | 'inactive' | 'removed',
+              status: listing.status as MyListing['status'],
               sizes,
               priceRange: { min: minPrice, max: maxPrice },
               totalQuantity: totalQty,

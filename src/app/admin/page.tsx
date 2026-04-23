@@ -41,6 +41,7 @@ interface MetricsData {
   activeBuyers: number;
   activeListings: number;
   pendingApplications: Array<any>;
+  pendingListingReviews: Array<any>;
   activeDisputes: Array<any>;
   pendingReturns: number;
   flaggedSellers: number;
@@ -232,6 +233,7 @@ export default function AdminPage() {
     activeBuyers: 0,
     activeListings: 0,
     pendingApplications: [],
+    pendingListingReviews: [],
     activeDisputes: [],
     pendingReturns: 0,
     flaggedSellers: 0,
@@ -258,6 +260,14 @@ export default function AdminPage() {
         .from("seller_applications")
         .select("*, profiles(*)")
         .eq("status", "pending")
+        .limit(3);
+
+      // Get pending listing reviews
+      const { data: pendingReviews } = await supabase
+        .from("listings")
+        .select("*, seller:profiles!listings_seller_id_fkey(*)")
+        .eq("status", "pending_review")
+        .order("created_at", { ascending: false })
         .limit(3);
 
       // Get active disputes
@@ -293,6 +303,7 @@ export default function AdminPage() {
         activeBuyers: buyers || 0,
         activeListings: listings || 0,
         pendingApplications: apps || [],
+        pendingListingReviews: pendingReviews || [],
         activeDisputes: disputes || [],
         pendingReturns: returnsCount || 0,
         flaggedSellers: flaggedCount || 0,
@@ -413,7 +424,38 @@ export default function AdminPage() {
         </div>
 
         {/* Action Items Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+          <ActionCard
+            title="Listing Reviews"
+            count={metrics.pendingListingReviews.length}
+            viewAllLink="/admin/listing-reviews"
+          >
+            {metrics.pendingListingReviews.length > 0 ? (
+              metrics.pendingListingReviews.map((listing: any) => (
+                <div key={listing.id} className="flex items-center justify-between py-3 px-0 border-b border-white/5 last:border-b-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-[#f5f7fb] text-sm font-medium truncate">{listing.brand} {listing.model}</p>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                        listing.brand === "Individual Brand"
+                          ? "bg-purple-500/20 text-purple-300"
+                          : "bg-amber-500/20 text-amber-300"
+                      }`}>
+                        {listing.brand === "Individual Brand" ? "Indie" : "Custom"}
+                      </span>
+                    </div>
+                    <p className="text-white/40 text-xs">by {listing.seller?.display_name || listing.seller?.username || 'Unknown'}</p>
+                  </div>
+                  <Link href="/admin/listing-reviews">
+                    <button className="relay-button-secondary text-xs px-2 py-1">Review</button>
+                  </Link>
+                </div>
+              ))
+            ) : (
+              <div className="text-white/40 text-sm py-2">No listings pending review</div>
+            )}
+          </ActionCard>
+
           <ActionCard
             title="Pending Seller Applications"
             count={metrics.pendingApplications.length}

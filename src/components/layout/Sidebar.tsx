@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Rss,
   LogOut,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -52,6 +53,7 @@ export function Sidebar() {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     ...sellerLinks,
   ];
 
@@ -148,7 +150,7 @@ export function Sidebar() {
               onClick={signOut}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10 transition-colors"
             >
-              <LogOut size={16} />
+                            <LogOut size={16} />
               Sign Out
             </button>
           )}

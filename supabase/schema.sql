@@ -49,8 +49,11 @@ CREATE TABLE listings (
   description TEXT,
   images TEXT[],
   sizes JSONB NOT NULL, -- Array of {size, price, quantity}
+  admin_review_status TEXT DEFAULT NULL
+    CHECK (admin_review_status IN ('pending_review', 'approved', 'rejected')),
+  admin_review_notes TEXT DEFAULT NULL,
   status TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'sold_out', 'inactive', 'removed')),
+    CHECK (status IN ('active', 'sold_out', 'inactive', 'removed', 'pending_review', 'rejected')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -363,9 +366,9 @@ BEGIN
   SET likes_count = likes_count + 1
   WHERE id = post_id;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- Function to decrement post likes count
+-- Function to decrement post likes count (SECURITY DEFINER to bypass RLS)
 CREATE OR REPLACE FUNCTION public.decrement_post_likes(post_id UUID)
 RETURNS VOID AS $$
 BEGIN
@@ -373,7 +376,7 @@ BEGIN
   SET likes_count = GREATEST(likes_count - 1, 0)
   WHERE id = post_id;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to update likes count when a like is added
 CREATE OR REPLACE FUNCTION public.on_post_like_inserted()
@@ -382,7 +385,7 @@ BEGIN
   PERFORM public.increment_post_likes(NEW.post_id);
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to update likes count when a like is deleted
 CREATE OR REPLACE FUNCTION public.on_post_like_deleted()
@@ -391,7 +394,7 @@ BEGIN
   PERFORM public.decrement_post_likes(OLD.post_id);
   RETURN OLD;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER post_likes_increment
   AFTER INSERT ON post_likes
@@ -408,7 +411,7 @@ BEGIN
   UPDATE profiles SET followers_count = followers_count + 1 WHERE id = NEW.following_id;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE OR REPLACE FUNCTION public.on_follow_deleted()
 RETURNS TRIGGER AS $$
@@ -416,7 +419,7 @@ BEGIN
   UPDATE profiles SET followers_count = GREATEST(followers_count - 1, 0) WHERE id = OLD.following_id;
   RETURN OLD;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER follows_increment
   AFTER INSERT ON follows
@@ -481,11 +484,14 @@ CREATE POLICY "Only admins can delete profiles" ON profiles
 -- LISTINGS POLICIES
 -- ============================================================================
 
--- Anyone can read active listings, and order participants can always view the listing
+-- Anyone can read active listings; sellers see their own; admins see all (for reviews)
 CREATE POLICY "Everyone can read active listings" ON listings
   FOR SELECT USING (
     status = 'active'
     OR seller_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
     OR EXISTS (
       SELECT 1 FROM orders
       WHERE orders.listing_id = listings.id
@@ -503,9 +509,14 @@ CREATE POLICY "Sellers can insert their own listings" ON listings
     )
   );
 
--- Sellers can update their own listings
+-- Sellers can update their own listings; admins can update any listing (for approvals)
 CREATE POLICY "Sellers can update their own listings" ON listings
-  FOR UPDATE USING (auth.uid() = seller_id);
+  FOR UPDATE USING (
+    auth.uid() = seller_id
+    OR EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
 -- Sellers can delete their own listings
 CREATE POLICY "Sellers can delete their own listings" ON listings

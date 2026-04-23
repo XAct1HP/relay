@@ -40,7 +40,9 @@ export interface Listing {
   description: string;
   images: string[];
   sizes: SizeOption[];
-  status: 'active' | 'sold_out' | 'inactive' | 'removed';
+  status: 'active' | 'sold_out' | 'inactive' | 'removed' | 'pending_review' | 'rejected';
+  admin_review_status: 'pending_review' | 'approved' | 'rejected' | null;
+  admin_review_notes: string | null;
   created_at: string;
   updated_at: string;
   seller?: User;

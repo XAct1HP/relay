@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { BRANDS, BRANDS_REQUIRING_REVIEW, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -50,6 +50,7 @@ export default function SellPage() {
 
   // UI State
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [publishedNeedsReview, setPublishedNeedsReview] = useState(false);
   const dragOverCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -195,7 +196,7 @@ export default function SellPage() {
             price: s.price,
             quantity: s.quantity,
           })),
-          status: "active",
+          status: BRANDS_REQUIRING_REVIEW.has(brand) ? "pending_review" : "active",
         })
         .select()
         .single();
@@ -207,6 +208,7 @@ export default function SellPage() {
       }
 
       // Success
+      setPublishedNeedsReview(BRANDS_REQUIRING_REVIEW.has(brand));
       setPublishSuccess(true);
     } catch (error) {
       console.error("Publish error:", error);
@@ -245,13 +247,15 @@ export default function SellPage() {
       <div className="max-w-2xl mx-auto">
           <div className="relay-card p-12 text-center">
             <div className="flex justify-center mb-6">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                <Check size={32} className="text-emerald-400" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${publishedNeedsReview ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
+                <Check size={32} className={publishedNeedsReview ? 'text-amber-400' : 'text-emerald-400'} />
               </div>
             </div>
-            <h2 className="relay-title text-relay-text mb-2">Listing Published!</h2>
+            <h2 className="relay-title text-relay-text mb-2">{publishedNeedsReview ? 'Listing Submitted for Review' : 'Listing Published!'}</h2>
             <p className="text-relay-muted mb-8">
-              Your shoe listing is now live on Relay. Buyers can start viewing and purchasing.
+              {publishedNeedsReview
+                ? 'Your listing has been submitted and is pending admin approval. You\'ll be notified once it\'s reviewed and goes live on the marketplace.'
+                : 'Your shoe listing is now live on Relay. Buyers can start viewing and purchasing.'}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
@@ -331,12 +335,28 @@ export default function SellPage() {
                     className="relay-select pr-10 appearance-none"
                   >
                     <option value="">Select a brand...</option>
-                    {BRANDS.map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
+                    <optgroup label="Special Categories">
+                      <option value="Individual Brand">Individual Brand</option>
+                      <option value="Custom">Custom</option>
+                    </optgroup>
+                    <optgroup label="Brands">
+                      {BRANDS.filter(b => b !== 'Individual Brand' && b !== 'Custom').map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </optgroup>
                   </select>
                   <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
                 </div>
+                {BRANDS_REQUIRING_REVIEW.has(brand) && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <p className="text-amber-300 text-sm font-medium mb-1">Admin Approval Required</p>
+                    <p className="text-amber-200/60 text-xs leading-relaxed">
+                      {brand === 'Individual Brand'
+                        ? 'Listings for individual/independent brands are exempt from third-party authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'
+                        : 'Custom-made shoes are unique and cannot go through standard authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -653,6 +673,14 @@ export default function SellPage() {
           {/* Step 4: Review & Publish */}
           {currentStep === 4 && (
             <div className="space-y-8">
+              {BRANDS_REQUIRING_REVIEW.has(brand) && (
+                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-amber-300 text-sm font-semibold mb-1">This listing requires admin approval</p>
+                  <p className="text-amber-200/60 text-xs leading-relaxed">
+                    Because this is {brand === 'Individual Brand' ? 'an individual brand' : 'a custom shoe'} listing, it will be submitted for review instead of going live immediately. A Relay admin will review your listing details and approve or reject it.
+                  </p>
+                </div>
+              )}
               {/* Shoe Details Summary */}
               <div>
                 <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
@@ -754,6 +782,7 @@ export default function SellPage() {
               )}
 
               {/* Description Preview */}
+              {/* Description Preview */}
               <div>
                 <h3 className="text-sm font-semibold text-relay-text mb-2">Description</h3>
                 <p className="text-relay-muted text-sm bg-white/[0.02] border border-white/5 rounded-lg p-4">
@@ -807,7 +836,7 @@ export default function SellPage() {
                 disabled={isPublishing}
                 className="relay-button-accent flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isPublishing ? "Publishing..." : "Publish Listing"}
+                {isPublishing ? "Publishing..." : BRANDS_REQUIRING_REVIEW.has(brand) ? "Submit for Review" : "Publish Listing"}
               </button>
             )}
 
