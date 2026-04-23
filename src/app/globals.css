@@ -25,6 +25,7 @@
 
   html {
     @apply scroll-smooth;
+    background: var(--relay-bg);
   }
 
   body {

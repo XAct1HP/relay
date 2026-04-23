@@ -28,6 +28,8 @@ interface SellerProfile {
   is_verified_seller?: boolean;
   profile_theme?: string;
   followers_count?: number;
+  sales_count?: number;
+  avg_rating?: number;
 }
 
 interface ThemeColors {
@@ -78,7 +80,7 @@ interface Post {
 interface Review {
   id: string;
   rating: number;
-  comment: string;
+  comment: string | null;
   created_at: string;
   profiles: { username: string };
   orders: { listings: { brand: string; model: string } };
@@ -129,8 +131,18 @@ export default function SellerProfilePage({ params }: { params: { username: stri
         setAverageRating(avg);
       }
 
-      const { count } = await supabase.from('orders').select('*', { count: 'exact' }).eq('seller_id', profileData.id).eq('status', 'completed');
-      setTotalSales(count || 0);
+      // Use stored profile stats, fall back to counting
+      if (profileData.sales_count != null && profileData.sales_count > 0) {
+        setTotalSales(profileData.sales_count);
+      } else {
+        const { count } = await supabase.from('orders').select('*', { count: 'exact' }).eq('seller_id', profileData.id).eq('status', 'completed');
+        setTotalSales(count || 0);
+      }
+
+      // Use stored avg_rating as fallback if no reviews fetched
+      if ((!reviewsData || reviewsData.length === 0) && profileData.avg_rating) {
+        setAverageRating(parseFloat(profileData.avg_rating).toFixed(1));
+      }
 
       setFollowersCount(profileData.followers_count || 0);
 
@@ -425,7 +437,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                                 ))}
                               </div>
                             </div>
-                            <p className="text-relay-text mb-2">{review.comment}</p>
+                            {review.comment && <p className="text-relay-text mb-2">{review.comment}</p>}
                             <p className="text-xs text-relay-accent">Purchased: {shoeModel}</p>
                           </div>
                         </div>

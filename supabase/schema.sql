@@ -22,6 +22,8 @@ CREATE TABLE profiles (
   profile_theme TEXT DEFAULT 'default',
   bio TEXT,
   followers_count INT DEFAULT 0,
+  sales_count INT DEFAULT 0,
+  avg_rating NUMERIC(3,2) DEFAULT 0,
   is_banned BOOLEAN DEFAULT false,
   ban_reason TEXT,
   dispute_flags_count INT DEFAULT 0,
@@ -428,6 +430,34 @@ CREATE TRIGGER follows_increment
 CREATE TRIGGER follows_decrement
   AFTER DELETE ON follows
   FOR EACH ROW EXECUTE FUNCTION public.on_follow_deleted();
+
+-- Triggers for seller stats on reviews table
+CREATE OR REPLACE FUNCTION public.on_review_inserted()
+RETURNS TRIGGER AS $$
+DECLARE
+  current_sales INT;
+  current_avg NUMERIC;
+  new_avg NUMERIC;
+BEGIN
+  SELECT COALESCE(sales_count, 0), COALESCE(avg_rating, 0)
+    INTO current_sales, current_avg
+    FROM profiles WHERE id = NEW.seller_id;
+
+  current_sales := current_sales + 1;
+  new_avg := (current_avg * (current_sales - 1) + NEW.rating) / current_sales;
+
+  UPDATE profiles
+    SET sales_count = current_sales,
+        avg_rating = ROUND(new_avg, 2)
+    WHERE id = NEW.seller_id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE TRIGGER reviews_update_seller_stats
+  AFTER INSERT ON reviews
+  FOR EACH ROW EXECUTE FUNCTION public.on_review_inserted();
 
 -- Function to check if username is available
 CREATE OR REPLACE FUNCTION public.is_username_available(username_check TEXT)

@@ -199,30 +199,8 @@ export async function POST(
       )
     }
 
-    // Update seller stats (check gracefully if columns exist)
-    const { data: sellerStats } = await supabase
-      .from('profiles')
-      .select('sales_count, avg_rating')
-      .eq('id', order.seller_id)
-      .single()
-
-    if (sellerStats) {
-      const newSalesCount = ((sellerStats as any).sales_count || 0) + 1
-      const currentAvgRating = (sellerStats as any).avg_rating || 0
-      const newAvgRating =
-        (currentAvgRating * (newSalesCount - 1) + rating) / newSalesCount
-
-      const updatePayload: Record<string, any> = {}
-      if ('sales_count' in sellerStats) updatePayload.sales_count = newSalesCount
-      if ('avg_rating' in sellerStats) updatePayload.avg_rating = newAvgRating
-
-      if (Object.keys(updatePayload).length > 0) {
-        await supabase
-          .from('profiles')
-          .update(updatePayload)
-          .eq('id', order.seller_id)
-      }
-    }
+    // Seller stats (sales_count, avg_rating) are updated automatically
+    // by the on_review_inserted() SECURITY DEFINER trigger on the reviews table.
 
     return NextResponse.json({ review, order: { ...order, status: 'completed' } })
   } catch (error) {
