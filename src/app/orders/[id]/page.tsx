@@ -75,9 +75,11 @@ interface OrderData {
   returnTrackingNumber?: string
   returnPackingSlipId?: string
   returnStatus?: string
+  isAuthExempt?: boolean
 }
 
 const statusStages = ["paid", "auth_submitted", "label_created", "shipped", "delivered", "review_window", "completed"] as const
+const statusStagesAuthExempt = ["paid", "label_created", "shipped", "delivered", "review_window", "completed"] as const
 
 const stageLabels: Record<string, string> = {
   paid: "Payment",
@@ -107,6 +109,8 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ReactNode; 
   return_delivered: { label: "Return Received", icon: <CheckCircle2 className="w-4 h-4" />, color: "bg-green-500/20 text-green-300" },
 }
 
+const AUTH_EXEMPT_BRANDS = new Set(["Individual Brand", "Custom"])
+
 const AUTH_ANGLES = ["Front", "Back", "Medial Side", "Lateral Side", "Sole", "Size Tag", "With Challenge Code", "Packed Shipment"]
 
 // ── Helper: format address ──
@@ -120,13 +124,15 @@ function formatAddress(addr: ShippingAddress | null): string {
 }
 
 // ── ProgressTracker ──
-const ProgressTracker = ({ currentStatus }: { currentStatus: OrderStatus }) => {
-  const stageIndex = statusStages.indexOf(currentStatus as any)
+const ProgressTracker = ({ currentStatus, isAuthExempt }: { currentStatus: OrderStatus; isAuthExempt?: boolean }) => {
+  const stages = isAuthExempt ? statusStagesAuthExempt : statusStages
+  const labels = isAuthExempt ? { ...stageLabels, paid: "Payment" } : stageLabels
+  const stageIndex = stages.indexOf(currentStatus as any)
 
   return (
     <div className="relay-card p-6 mb-6">
       <div className="flex items-center justify-between">
-        {statusStages.map((stage, idx) => {
+        {stages.map((stage, idx) => {
           const isCompleted = idx < stageIndex
           const isCurrent = idx === stageIndex
 
@@ -149,11 +155,11 @@ const ProgressTracker = ({ currentStatus }: { currentStatus: OrderStatus }) => {
                   )}
                 </div>
                 <p className="text-xs font-medium text-[#7ca6ff] mt-2 text-center">
-                  {stageLabels[stage]}
+                  {labels[stage]}
                 </p>
               </div>
 
-              {idx < statusStages.length - 1 && (
+              {idx < stages.length - 1 && (
                 <div
                   className={`flex-1 h-1 mx-2 transition-all ${
                     isCompleted ? "bg-emerald-500/40" : "bg-white/10"
@@ -516,6 +522,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       returnTrackingNumber: data.return_tracking_number || undefined,
       returnPackingSlipId: data.return_packing_slip_id || undefined,
       returnStatus: data.return_status || undefined,
+      isAuthExempt: AUTH_EXEMPT_BRANDS.has(listing?.brand || ""),
     }
 
     setOrder(orderData)
@@ -887,7 +894,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
       {/* Progress Tracker */}
       {!["completed", "disputed", "cancelled", "refunded", "refund_pending", "payout_failed", "return_pending", "return_shipped", "return_delivered"].includes(currentStatus) && (
-        <ProgressTracker currentStatus={currentStatus} />
+        <ProgressTracker currentStatus={currentStatus} isAuthExempt={order.isAuthExempt} />
       )}
 
       {/* Order Summary Card */}
@@ -977,7 +984,50 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       {/* ═══════════════════════════════════════════ */}
       {/* STATUS: PAID (Seller needs to authenticate) */}
       {/* ═══════════════════════════════════════════ */}
-      {currentStatus === "paid" && order.userRole === "seller" && (
+      {currentStatus === "paid" && order.userRole === "seller" && order.isAuthExempt && (
+        <div className="relay-card p-6 mb-6 border border-emerald-500/30 bg-emerald-500/5">
+          <h2 className="text-lg font-bold text-emerald-300 mb-4 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5" />
+            Admin-Approved Listing — No Authentication Needed
+          </h2>
+          <p className="text-[#7ca6ff] text-sm mb-4">
+            This is {order.brand === "Individual Brand" ? "an individual brand" : "a custom"} listing that was approved by Relay admin. Authentication is not required — generate a shipping label to proceed.
+            {order.shippingDeadline && (
+              <>
+                {" "}You have until{" "}
+                <span className="font-semibold">{order.shippingDeadline}</span> to ship.
+              </>
+            )}
+          </p>
+
+          <button
+            onClick={handleGenerateLabel}
+            disabled={generatingLabel}
+            className="relay-button-primary w-full mb-4 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {generatingLabel ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating Label...
+              </>
+            ) : (
+              "Generate Shipping Label"
+            )}
+          </button>
+
+          {order.shippingDeadline && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-red-300">
+                You have 5 days from purchase to ship. Deadline:{" "}
+                <span className="font-semibold">{order.shippingDeadline}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {currentStatus === "paid" && order.userRole === "seller" && !order.isAuthExempt && (
         <>
           <div className="relay-card p-6 mb-6 border border-[#5f8fff]/30 bg-[#5f8fff]/5">
             <h2 className="text-lg font-bold text-[#f5f7fb] mb-2 flex items-center gap-2">
@@ -1061,10 +1111,12 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         <div className="relay-card p-6 mb-6 bg-white/[0.04]">
           <h2 className="text-lg font-bold text-[#f5f7fb] mb-2 flex items-center gap-2">
             <Clock className="w-5 h-5 text-[#7ca6ff]" />
-            Awaiting Seller Authentication
+            {order.isAuthExempt ? "Awaiting Shipment" : "Awaiting Seller Authentication"}
           </h2>
           <p className="text-[#7ca6ff] text-sm">
-            The seller is authenticating your item. You&apos;ll be notified once a shipping label is created.
+            {order.isAuthExempt
+              ? "This is an admin-approved listing. The seller is preparing your order and will ship it shortly."
+              : "The seller is authenticating your item. You\u0027ll be notified once a shipping label is created."}
           </p>
         </div>
       )}
@@ -1566,20 +1618,33 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
           {order.userRole === "buyer" && (
             <p className="text-sm text-emerald-300">
-              Thank you for your purchase! We hope you enjoy your new kicks.
+              Thank you for your purchase! We hope you enjoy your new shoes.
             </p>
           )}
         </div>
       )}
 
-      {/* Rating Modal */}
-      {showRatingModal && (
-        <RatingModal
-          onSubmit={handleRatingSubmit}
-          onClose={() => setShowRatingModal(false)}
-          submitting={submittingReview}
-        />
+      {/* ══════════════════════ */}
+      {/* STATUS: DISPUTED      */}
+      {/* ══════════════════════ */}
+      {currentStatus === "disputed" && (
+        <div className="relay-card p-6 mb-6 border border-red-500/30 bg-red-500/5">
+          <h2 className="text-lg font-bold text-red-300 mb-4 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            Order Disputed
+          </h2>
+          {order.disputeReason && (
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
+              <p className="text-sm text-white/40 mb-1">Dispute Reason</p>
+              <p className="text-sm text-[#f5f7fb]">{order.disputeReason}</p>
+            </div>
+          )}
+          <p className="text-sm text-[#7ca6ff]">
+            This order is under review by the Relay team. You will be notified of the outcome.
+          </p>
+        </div>
       )}
+
     </div>
   )
 }
