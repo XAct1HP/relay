@@ -424,7 +424,7 @@ export default function AdminPage() {
                 key={app.id}
                 app={{
                   id: app.id,
-                  name: app.profiles?.full_name || app.profiles?.display_name || 'Unknown',
+                  name: app.profiles?.full_name || app.profiles?.display_name || app.profiles?.username || 'Unknown',
                   email: app.profiles?.email || 'N/A',
                   date: new Date(app.created_at).toLocaleDateString(),
                 }}
@@ -444,8 +444,8 @@ export default function AdminPage() {
                     id: dispute.id,
                     orderId: dispute.id.slice(0, 8) + '...',
                     reason: dispute.dispute_reason || 'Disputed',
-                    buyer: dispute.buyer?.full_name || dispute.buyer?.display_name || 'Unknown',
-                    seller: dispute.seller?.full_name || dispute.seller?.display_name || 'Unknown',
+                    buyer: dispute.buyer?.full_name || dispute.buyer?.display_name || dispute.buyer?.username || 'Unknown',
+                    seller: dispute.seller?.full_name || dispute.seller?.display_name || dispute.seller?.username || 'Unknown',
                     date: new Date(dispute.created_at).toLocaleDateString(),
                   }}
                 />

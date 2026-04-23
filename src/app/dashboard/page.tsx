@@ -304,7 +304,19 @@ export default function DashboardPage() {
             <Link href={`/profile/${currentUser?.username}`}>
               <button className="relay-button-primary">View Profile</button>
             </Link>
-            <button className="relay-button-secondary flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/stripe/dashboard', { method: 'POST' })
+                  const data = await res.json()
+                  if (!res.ok) throw new Error(data.error || 'Failed to open Stripe dashboard')
+                  if (data.url) window.open(data.url, '_blank')
+                } catch (err: any) {
+                  alert(err.message || 'Failed to open Stripe dashboard')
+                }
+              }}
+              className="relay-button-secondary flex items-center gap-2"
+            >
               <ExternalLink className="w-4 h-4" />
               Stripe Dashboard
             </button>

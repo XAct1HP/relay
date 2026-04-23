@@ -388,59 +388,61 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Connected Accounts */}
-        <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
-          <h2 className="text-xl font-semibold text-white mb-6">Connected Accounts</h2>
+        {/* Connected Accounts — only show for sellers or users with a seller application */}
+        {(currentUser?.role === 'seller' || currentUser?.role === 'admin' || sellerApplicationStatus) && (
+          <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-6">Connected Accounts</h2>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between py-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-[#635BFF] rounded-lg flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.918 3.757 7.076c0 4.72 2.891 6.442 6.029 7.744 2.098.868 2.913 1.571 2.913 2.607 0 1.028-.874 1.634-2.28 1.634-2.04 0-5.152-1.035-7.036-2.282l-.895 5.535C4.566 23.272 7.528 24 10.656 24c2.584 0 4.704-.706 6.184-1.957 1.592-1.34 2.403-3.244 2.403-5.503 0-4.784-2.95-6.473-5.267-7.39z" />
-                  </svg>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-[#635BFF] rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.918 3.757 7.076c0 4.72 2.891 6.442 6.029 7.744 2.098.868 2.913 1.571 2.913 2.607 0 1.028-.874 1.634-2.28 1.634-2.04 0-5.152-1.035-7.036-2.282l-.895 5.535C4.566 23.272 7.528 24 10.656 24c2.584 0 4.704-.706 6.184-1.957 1.592-1.34 2.403-3.244 2.403-5.503 0-4.784-2.95-6.473-5.267-7.39z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Stripe</p>
+                    <p className="text-white/50 text-sm">
+                      {stripeConnected ? 'Connected' : 'Not connected'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-white font-medium">Stripe</p>
-                  <p className="text-white/50 text-sm">
-                    {stripeConnected ? 'Connected' : 'Not connected'}
-                  </p>
-                </div>
-              </div>
-              {!stripeConnected ? (
-                <button
-                  onClick={async () => {
-                    setStripeLoading(true)
-                    try {
-                      const response = await fetch('/api/stripe/connect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ returnTo: 'settings' }),
-                      })
-                      const data = await response.json()
-                      if (!response.ok) throw new Error(data.error || 'Failed to connect Stripe')
-                      if (data.url) {
-                        window.location.href = data.url
+                {!stripeConnected ? (
+                  <button
+                    onClick={async () => {
+                      setStripeLoading(true)
+                      try {
+                        const response = await fetch('/api/stripe/connect', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ returnTo: 'settings' }),
+                        })
+                        const data = await response.json()
+                        if (!response.ok) throw new Error(data.error || 'Failed to connect Stripe')
+                        if (data.url) {
+                          window.location.href = data.url
+                        }
+                      } catch (err: any) {
+                        alert(err.message || 'Failed to connect Stripe account')
+                      } finally {
+                        setStripeLoading(false)
                       }
-                    } catch (err: any) {
-                      alert(err.message || 'Failed to connect Stripe account')
-                    } finally {
-                      setStripeLoading(false)
-                    }
-                  }}
-                  disabled={stripeLoading}
-                  className="px-4 py-2 rounded-lg font-medium transition-colors bg-[#5f8fff] text-white hover:bg-[#7ca6ff] disabled:opacity-50"
-                >
-                  {stripeLoading ? 'Connecting...' : 'Connect'}
-                </button>
-              ) : (
-                <span className="px-4 py-2 rounded-lg font-medium bg-green-500/20 text-green-300 border border-green-500/30">
-                  Connected
-                </span>
-              )}
+                    }}
+                    disabled={stripeLoading}
+                    className="px-4 py-2 rounded-lg font-medium transition-colors bg-[#5f8fff] text-white hover:bg-[#7ca6ff] disabled:opacity-50"
+                  >
+                    {stripeLoading ? 'Connecting...' : 'Connect'}
+                  </button>
+                ) : (
+                  <span className="px-4 py-2 rounded-lg font-medium bg-green-500/20 text-green-300 border border-green-500/30">
+                    Connected
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Danger Zone */}
         <div className="bg-red-500/10 backdrop-blur-xl rounded-[1.5rem] border border-red-500/30 p-8">
