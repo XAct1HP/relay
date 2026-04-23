@@ -9,39 +9,25 @@ import {
   Package,
   Clock,
   Image as ImageIcon,
+  ShieldCheck,
+  Camera,
 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase";
 import { useParams } from "next/navigation";
 
 type ModalState = "none" | "buyer" | "seller";
 
-function ImageGallery({ images, title }: any) {
-  return (
-    <div>
-      <h4 className="text-sm font-semibold text-[#f5f7fb] mb-3 flex items-center gap-2">
-        <ImageIcon className="w-4 h-4" />
-        {title}
-      </h4>
-      <div className="grid grid-cols-3 gap-3">
-        {images.map((img: any) => (
-          <div
-            key={img.id}
-            className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative"
-          >
-            <Image
-              src={img.url}
-              alt="Evidence"
-              fill
-              className="object-cover"
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+const AUTH_PHOTO_LABELS = [
+  "Front",
+  "Back",
+  "Medial Side",
+  "Lateral Side",
+  "Sole",
+  "Size Tag",
+  "Challenge Code",
+  "Packed Shipment",
+];
 
 function RulingModal({ isOpen, type, onConfirm, onCancel }: any) {
   const [notes, setNotes] = useState("");
@@ -264,8 +250,8 @@ export default function DisputeDetailPage() {
                   <div className="grid grid-cols-3 gap-2">
                     {dispute.dispute_evidence_buyer.map((url: string, i: number) => (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                        <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative">
-                          <Image src={url} alt={`Buyer evidence ${i + 1}`} fill className="object-cover" />
+                        <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer">
+                          <img src={url} alt={`Buyer evidence ${i + 1}`} className="w-full h-full object-cover" />
                         </div>
                       </a>
                     ))}
@@ -306,8 +292,8 @@ export default function DisputeDetailPage() {
                       <div className="grid grid-cols-3 gap-2">
                         {dispute.dispute_evidence_seller.map((url: string, i: number) => (
                           <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                            <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer relative">
-                              <Image src={url} alt={`Seller evidence ${i + 1}`} fill className="object-cover" />
+                            <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer">
+                              <img src={url} alt={`Seller evidence ${i + 1}`} className="w-full h-full object-cover" />
                             </div>
                           </a>
                         ))}
@@ -336,6 +322,51 @@ export default function DisputeDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Pre-Shipment Authentication Photos */}
+        {(dispute.auth_photos?.length > 0 || dispute.checkcheck_certificate_url) && (
+          <div className="relay-card p-5 border-l-4 border-l-purple-500">
+            <h3 className="text-lg font-semibold text-[#f5f7fb] mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-purple-400" />
+              Pre-Shipment Authentication
+            </h3>
+
+            {dispute.auth_photos && dispute.auth_photos.length > 0 && (
+              <div className="mb-6">
+                <p className="text-white/60 text-sm mb-3 flex items-center gap-2">
+                  <Camera className="w-4 h-4" />
+                  Authentication Photos ({dispute.auth_photos.length} photo{dispute.auth_photos.length > 1 ? 's' : ''})
+                </p>
+                <div className="grid grid-cols-4 gap-3">
+                  {dispute.auth_photos.map((url: string, i: number) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                      <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-purple-500/50 transition-colors cursor-pointer">
+                        <img src={url} alt={AUTH_PHOTO_LABELS[i] || `Auth photo ${i + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                      <p className="text-white/50 text-xs mt-1 text-center truncate">
+                        {AUTH_PHOTO_LABELS[i] || `Photo ${i + 1}`}
+                      </p>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dispute.checkcheck_certificate_url && (
+              <div>
+                <p className="text-white/60 text-sm mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  CheckCheck Certificate
+                </p>
+                <a href={dispute.checkcheck_certificate_url} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
+                  <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-purple-500/50 transition-colors cursor-pointer">
+                    <img src={dispute.checkcheck_certificate_url} alt="CheckCheck Certificate" className="w-full h-auto object-contain" />
+                  </div>
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Admin Ruling Section */}
         {!hasRuling && (
