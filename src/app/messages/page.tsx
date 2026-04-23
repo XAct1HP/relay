@@ -793,7 +793,7 @@ export default function MessagesPage() {
       alert("Could not find listing details for this offer.");
       return;
     }
-    const url = `/checkout?listing=${encodeURIComponent(msg._offerListingId)}&size=${encodeURIComponent(msg.custom_offer_size || "")}&price=${encodeURIComponent(String(msg.custom_offer_price || 0))}&customOffer=${encodeURIComponent(msg._offerCustomOfferId || "true")}`;
+    const url = `/checkout?listing=${encodeURIComponent(msg._offerListingId)}&size=${encodeURIComponent(msg.custom_offer_size || "")}&customOffer=${encodeURIComponent(msg._offerCustomOfferId || "true")}`;
     window.location.href = url;
   };
 

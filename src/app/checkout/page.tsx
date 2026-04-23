@@ -33,7 +33,6 @@ export default function CheckoutPage() {
 
   const listingId = searchParams.get('listing');
   const size = searchParams.get('size');
-  const price = searchParams.get('price');
   const customOfferId = searchParams.get('customOffer');
 
   const [listing, setListing] = useState<Listing | null>(null);
@@ -54,11 +53,12 @@ export default function CheckoutPage() {
   });
 
   const [shippingRate, setShippingRate] = useState<ShippingRate | null>(null);
+  const [resolvedPrice, setResolvedPrice] = useState<number | null>(null);
 
-  // Fetch listing details
+  // Fetch listing details and resolve price from database
   useEffect(() => {
     async function fetchListing() {
-      if (!listingId) return;
+      if (!listingId || !size) return;
       const supabase = createClient();
       setLoading(true);
 
@@ -76,6 +76,34 @@ export default function CheckoutPage() {
           if (data.seller?.ship_from_address) {
             setSellerAddress(data.seller.ship_from_address);
           }
+
+          // Resolve price from custom offer or listing sizes
+          if (customOfferId && customOfferId !== 'true') {
+            const { data: offer, error: offerError } = await supabase
+              .from('custom_offers')
+              .select('offer_price, status')
+              .eq('id', customOfferId)
+              .single();
+
+            if (offerError || !offer) {
+              setError('Custom offer not found.');
+              return;
+            }
+            if (offer.status !== 'accepted') {
+              setError('This offer is no longer valid.');
+              return;
+            }
+            setResolvedPrice(parseFloat(offer.offer_price));
+          } else {
+            // Look up price from listing sizes
+            const sizes = data.sizes as any[];
+            const sizeEntry = sizes?.find((s: any) => String(s.size) === String(size));
+            if (!sizeEntry) {
+              setError('Selected size is no longer available.');
+              return;
+            }
+            setResolvedPrice(sizeEntry.price);
+          }
         }
       } catch (err) {
         console.error('Error fetching listing:', err);
@@ -86,7 +114,7 @@ export default function CheckoutPage() {
     }
 
     fetchListing();
-  }, [listingId]);
+  }, [listingId, size, customOfferId]);
 
   // Pre-fill buyer name from profile
   useEffect(() => {
@@ -161,7 +189,7 @@ export default function CheckoutPage() {
   };
 
   const handleProceedToPayment = async () => {
-    if (!shippingRate || !listing || !price) return;
+    if (!shippingRate || !listing || resolvedPrice === null) return;
 
     setCheckoutLoading(true);
     setError(null);
@@ -173,7 +201,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           listingId,
           size,
-          price: parseFloat(price),
+          price: resolvedPrice,
           shippingCost: parseFloat(shippingRate.amount),
           buyerAddress: {
             name: buyerAddress.name,
@@ -213,7 +241,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!listing || !price || !size) {
+  if (!listing || resolvedPrice === null || !size) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center">
         <p className="text-relay-muted mb-4">Missing checkout information.</p>
@@ -224,7 +252,7 @@ export default function CheckoutPage() {
     );
   }
 
-  const shoePrice = parseFloat(price);
+  const shoePrice = resolvedPrice;
   const shippingCost = shippingRate ? parseFloat(shippingRate.amount) : 0;
   const total = shoePrice + shippingCost;
 

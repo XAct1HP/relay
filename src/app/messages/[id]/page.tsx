@@ -233,7 +233,7 @@ export default function ConversationPage() {
     console.log("[CHECKOUT] called with offer:", JSON.stringify(offer));
     if (!offer) return;
 
-    const url = `/checkout?listing=${encodeURIComponent(offer.listingId)}&size=${encodeURIComponent(offer.size)}&price=${encodeURIComponent(offer.offerPrice.toString())}&customOffer=${encodeURIComponent(offer.customOfferId || "true")}`;
+    const url = `/checkout?listing=${encodeURIComponent(offer.listingId)}&size=${encodeURIComponent(offer.size)}&customOffer=${encodeURIComponent(offer.customOfferId || "true")}`;
     console.log("[CHECKOUT] navigating to:", url);
 
     // Use window.location for guaranteed navigation

@@ -409,7 +409,7 @@ export default function ListingDetailPage({
                     router.push('/auth/login');
                     return;
                   }
-                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}&price=${selectedSizeData?.price}`);
+                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}`);
                 }}
                 disabled={selectedSize === null}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

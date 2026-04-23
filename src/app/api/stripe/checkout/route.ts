@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { listingId, size, price, shippingCost, buyerAddress, customOfferId } =
+    const { listingId, size, shippingCost, buyerAddress, customOfferId } =
       await request.json()
 
-    if (!listingId || !size || price === undefined || shippingCost === undefined) {
+    if (!listingId || !size || shippingCost === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -68,19 +68,45 @@ export async function POST(request: NextRequest) {
 
     // Check the requested size still has stock
     const sizes = listing.sizes as any[]
-    if (Array.isArray(sizes)) {
-      const sizeEntry = sizes.find((s: any) => String(s.size) === String(size))
-      if (!sizeEntry || (sizeEntry.quantity || 0) <= 0) {
-        return NextResponse.json(
-          { error: 'This size is no longer available' },
-          { status: 400 }
-        )
+    const sizeEntry = Array.isArray(sizes)
+      ? sizes.find((s: any) => String(s.size) === String(size))
+      : null
+
+    if (!sizeEntry || (sizeEntry.quantity || 0) <= 0) {
+      return NextResponse.json(
+        { error: 'This size is no longer available' },
+        { status: 400 }
+      )
+    }
+
+    // Resolve the authoritative price from the database — never trust client input
+    let price: number
+
+    if (customOfferId) {
+      const { data: offer, error: offerError } = await supabase
+        .from('custom_offers')
+        .select('offer_price, status')
+        .eq('id', customOfferId)
+        .single()
+
+      if (offerError || !offer) {
+        return NextResponse.json({ error: 'Custom offer not found' }, { status: 404 })
       }
+      if (offer.status !== 'accepted') {
+        return NextResponse.json({ error: 'This offer is no longer valid' }, { status: 400 })
+      }
+      price = parseFloat(offer.offer_price)
+    } else {
+      price = sizeEntry.price
+    }
+
+    if (!price || price <= 0) {
+      return NextResponse.json({ error: 'Invalid price for this listing' }, { status: 400 })
     }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
 
-    // Add shoe price
+    // Add shoe price (using server-verified price)
     lineItems.push({
       price_data: {
         currency: 'usd',
