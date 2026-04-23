@@ -41,7 +41,6 @@ export default function ProfileStudioPage() {
   const [postImages, setPostImages] = useState<string[]>([]);
   const [postImageFiles, setPostImageFiles] = useState<File[]>([]);
   const [selectedListingId, setSelectedListingId] = useState<string>('');
-  const [isCustomBrand, setIsCustomBrand] = useState(false);
   const [publishingPost, setPublishingPost] = useState(false);
   const [postSuccess, setPostSuccess] = useState(false);
   const [sellerListings, setSellerListings] = useState<any[]>([]);
@@ -67,12 +66,20 @@ export default function ProfileStudioPage() {
         if (data.profile_banner_url) setBannerPreview(data.profile_banner_url);
         if (data.ship_from_address) setAddress(data.ship_from_address);
       }
-      const { data: listingsData } = await supabase.from('listings').select('id, brand, model, nickname, images, sizes').eq('seller_id', currentUser!.id).eq('status', 'active');
+      const { data: listingsData } = await supabase.from('listings').select('id, brand, model, nickname, images, sizes, admin_review_status').eq('seller_id', currentUser!.id).eq('status', 'active');
       setSellerListings(listingsData || []);
       setLoading(false);
     }
     loadProfile();
   }, [currentUser?.id]);
+
+  // Auto-detect indie brand boost: only for linked listings that are approved "Individual Brand"
+  const selectedListing = sellerListings.find((l: any) => l.id === selectedListingId);
+  const isCustomBrand = !!(
+    selectedListing &&
+    selectedListing.brand === 'Individual Brand' &&
+    selectedListing.admin_review_status === 'approved'
+  );
 
   const [hasChanges, setHasChanges] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +137,7 @@ export default function ProfileStudioPage() {
         is_custom_brand: isCustomBrand,
       });
       if (error) throw error;
-      setPostContent(''); setPostImages([]); setPostImageFiles([]); setSelectedListingId(''); setIsCustomBrand(false);
+      setPostContent(''); setPostImages([]); setPostImageFiles([]); setSelectedListingId('');
       setPostSuccess(true); setTimeout(() => setPostSuccess(false), 3000);
     } catch (err) {
       console.error('Post publish error:', err); alert('Failed to publish post. Please try again.');
@@ -340,20 +347,18 @@ export default function ProfileStudioPage() {
               </select>
             </div>
 
-            <div className="mb-6">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div onClick={() => setIsCustomBrand(!isCustomBrand)} className={"relative w-11 h-6 rounded-full transition-colors " + (isCustomBrand ? 'bg-relay-accent' : 'bg-white/10')}>
-                  <div className={"absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform " + (isCustomBrand ? 'translate-x-5' : '')} />
-                </div>
+            {isCustomBrand && (
+              <div className="mb-6 p-4 bg-relay-accent/10 border border-relay-accent/30 rounded-lg flex items-center gap-3">
+                <Sparkles size={18} className="text-relay-accent flex-shrink-0" />
                 <div>
-                  <span className="text-sm font-semibold flex items-center gap-2"><Sparkles size={14} className="text-relay-accent" /> Custom Brand Post</span>
-                  <p className="text-xs text-white/50 mt-0.5">Mark this post as your own brand — it gets boosted in feeds with a special tag</p>
+                  <p className="text-sm font-semibold text-relay-accent">Independent Brand Boost Active</p>
+                  <p className="text-xs text-white/50 mt-0.5">This post will get boosted visibility because it&apos;s linked to an approved independent brand listing.</p>
                 </div>
-              </label>
-            </div>
+              </div>
+            )}
 
             <div className="p-4 bg-white/[0.02] border border-white/10 rounded-lg mb-6">
-              <p className="text-xs text-white/60">Posts appear on your profile and in buyer feeds where they can help drive traffic to your listings. Custom brand posts get extra visibility to help new brands get discovered.</p>
+              <p className="text-xs text-white/60">Posts appear on your profile and in buyer feeds where they can help drive traffic to your listings. Link an approved independent brand listing to get extra visibility.</p>
             </div>
 
             <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent hover:bg-relay-accent-light disabled:opacity-50 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-lg transition-colors">
