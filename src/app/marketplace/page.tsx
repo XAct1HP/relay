@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Pagination } from "@/components/layout/Pagination";
-import { Search, BadgeCheck, ChevronDown, X } from "lucide-react";
+import { Search, BadgeCheck, ChevronDown, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import { Listing } from "@/types";
 
 interface ListingDisplay {
@@ -40,6 +41,7 @@ function formatSizeDisplay(sizes: number[]): string {
 }
 
 export default function MarketplacePage() {
+  const { onboardingActive, loading: onboardingLoading } = useOnboardingPhase();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
@@ -157,9 +159,24 @@ export default function MarketplacePage() {
   );
   const totalPages = Math.ceil(filteredListings.length / itemsPerPage);
 
-  if (loading) {
+  if (onboardingLoading || loading) {
     return (
       <div className="relay-empty text-center">Loading...</div>
+    );
+  }
+
+  if (onboardingActive) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
+        <div className="p-4 bg-white/5 rounded-2xl mb-6">
+          <Lock className="w-10 h-10 text-white/30" />
+        </div>
+        <h1 className="text-2xl font-bold text-[#f5f7fb] mb-3">Marketplace Opening Soon</h1>
+        <p className="text-white/50 max-w-md leading-relaxed">
+          Relay is currently in its onboarding phase. Sellers are setting up their shops
+          and populating listings. The marketplace will open once onboarding is complete.
+        </p>
+      </div>
     );
   }
 

@@ -344,7 +344,7 @@ export default function AdminPage() {
                 <h3 className="text-[#f5f7fb] font-semibold text-lg">Onboarding Phase</h3>
                 <p className="text-white/50 text-sm mt-0.5">
                   {onboardingActive
-                    ? 'Active — Marketplace is closed to buyers. Sellers are populating listings. Feed listings are hidden.'
+                    ? 'Active — Marketplace is closed to everyone. Sellers are populating listings. Feed listings are hidden.'
                     : 'Inactive — Marketplace is fully open. Buyers can sign up and purchase.'}
                 </p>
               </div>
@@ -368,7 +368,7 @@ export default function AdminPage() {
             </button>
           </div>
           {onboardingActive && (
-            <div className="mt-4 pt-4 border-t border-amber-500/20">
+            <div className="mt-4 pt-4 border-t border-amber-500/20 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div className="flex items-center gap-2 text-amber-300/80">
                   <Lock className="w-4 h-4" />
@@ -376,11 +376,21 @@ export default function AdminPage() {
                 </div>
                 <div className="flex items-center gap-2 text-amber-300/80">
                   <ShoppingCart className="w-4 h-4" />
-                  <span>Marketplace closed</span>
+                  <span>Marketplace closed to all</span>
                 </div>
                 <div className="flex items-center gap-2 text-amber-300/80">
                   <Package className="w-4 h-4" />
                   <span>Listing links hidden</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-white/[0.04] border border-white/10 p-4">
+                  <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-1">Seller Signups</p>
+                  <p className="text-2xl font-bold text-[#f5f7fb]">{metrics.activeSellers}</p>
+                </div>
+                <div className="rounded-xl bg-white/[0.04] border border-white/10 p-4">
+                  <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-1">Active Listings</p>
+                  <p className="text-2xl font-bold text-[#f5f7fb]">{metrics.activeListings}</p>
                 </div>
               </div>
             </div>
