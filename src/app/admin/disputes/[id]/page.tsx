@@ -358,11 +358,29 @@ export default function DisputeDetailPage() {
                   <CheckCircle className="w-4 h-4" />
                   CheckCheck Certificate
                 </p>
-                <a href={dispute.checkcheck_certificate_url} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
-                  <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-purple-500/50 transition-colors cursor-pointer">
-                    <img src={dispute.checkcheck_certificate_url} alt="CheckCheck Certificate" className="w-full h-auto object-contain" />
+                {dispute.checkcheck_certificate_url.toLowerCase().endsWith('.pdf') ? (
+                  <div className="max-w-2xl">
+                    <iframe
+                      src={dispute.checkcheck_certificate_url}
+                      className="w-full h-[500px] rounded-lg border border-white/10 bg-white"
+                      title="CheckCheck Certificate"
+                    />
+                    <a
+                      href={dispute.checkcheck_certificate_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 mt-2 text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      Open PDF in new tab
+                    </a>
                   </div>
-                </a>
+                ) : (
+                  <a href={dispute.checkcheck_certificate_url} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
+                    <div className="rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-purple-500/50 transition-colors cursor-pointer">
+                      <img src={dispute.checkcheck_certificate_url} alt="CheckCheck Certificate" className="w-full h-auto object-contain" />
+                    </div>
+                  </a>
+                )}
               </div>
             )}
           </div>
