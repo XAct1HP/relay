@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [stripeConnected, setStripeConnected] = useState(false)
   const [stripeLoading, setStripeLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [instagramUrl, setInstagramUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [sellerApplicationStatus, setSellerApplicationStatus] = useState<string | null>(null)
 
@@ -53,6 +54,7 @@ export default function SettingsPage() {
         setFullName(data.full_name || '')
         if (data.avatar_url) setAvatar(data.avatar_url)
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
+        if (data.instagram_url) setInstagramUrl(data.instagram_url)
         // Check if Stripe account is connected based on profile data
         if (data.stripe_account_id) {
           setStripeConnected(true)
@@ -105,6 +107,7 @@ export default function SettingsPage() {
       await updateProfile({
         full_name: fullName,
         avatar_url: avatarUrl,
+        instagram_url: instagramUrl || null,
       })
 
       setAvatarFile(null)
@@ -223,6 +226,21 @@ export default function SettingsPage() {
                 className="w-full px-4 py-3 bg-white/[0.02] border border-white/10 rounded-lg text-white/50 cursor-not-allowed"
               />
               <p className="text-white/50 text-xs mt-2">Email cannot be changed</p>
+            </div>
+
+            {/* Instagram */}
+            <div>
+              <label className="block text-white/70 text-sm font-medium mb-2">
+                Instagram
+              </label>
+              <input
+                type="text"
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                className="w-full px-4 py-3 bg-white/[0.04] border border-white/10 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-[#5f8fff]/50 transition-colors"
+                placeholder="@yourusername or full URL"
+              />
+              <p className="text-white/50 text-xs mt-2">Shown on your public profile</p>
             </div>
           </div>
         </div>
@@ -497,16 +515,3 @@ export default function SettingsPage() {
               >
                 Cancel
               </button>
-              <button
-                onClick={handleDeleteAccount}
-                className="flex-1 px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-medium rounded-lg transition-colors border border-red-500/30"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}

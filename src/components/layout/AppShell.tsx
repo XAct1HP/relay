@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="relative min-h-screen bg-relay-bg">
+    <div className="relative min-h-screen">
       {/* Sidebar */}
       <div className="hidden lg:block">
         <Sidebar />

@@ -23,14 +23,25 @@
     @apply border-white/10;
   }
 
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
   html {
     @apply scroll-smooth;
-    background: var(--relay-bg);
+    background:
+      radial-gradient(circle at 15% 18%, rgba(95, 143, 255, 0.1), transparent 20%),
+      radial-gradient(circle at 82% 24%, rgba(140, 82, 255, 0.08), transparent 18%),
+      radial-gradient(circle at 50% 82%, rgba(0, 194, 255, 0.06), transparent 20%),
+      var(--relay-bg);
+    background-attachment: fixed;
   }
 
   body {
     @apply antialiased;
-    background: var(--relay-bg);
+    background: transparent;
     color: var(--relay-text);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color-scheme: dark;
@@ -172,7 +183,6 @@
       radial-gradient(circle at 15% 18%, rgba(95, 143, 255, 0.1), transparent 20%),
       radial-gradient(circle at 82% 24%, rgba(140, 82, 255, 0.08), transparent 18%),
       radial-gradient(circle at 50% 82%, rgba(0, 194, 255, 0.06), transparent 20%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0) 18%),
       var(--relay-bg);
   }
 

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import useAuth from '@/hooks/useAuth';
-import { Star, MessageCircle, Share2, TrendingUp, UserPlus, UserCheck, Heart } from 'lucide-react';
+import { Star, MessageCircle, TrendingUp, UserPlus, UserCheck, Heart, Instagram } from 'lucide-react';
 import Link from 'next/link';
 
 interface Tab {
@@ -30,6 +30,7 @@ interface SellerProfile {
   followers_count?: number;
   sales_count?: number;
   avg_rating?: number;
+  instagram_url?: string;
 }
 
 interface ThemeColors {
@@ -101,6 +102,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
+  const followInFlight = useRef(false);
 
   useEffect(() => {
     async function loadData() {
@@ -177,22 +179,26 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
   const handleFollow = async () => {
     if (!currentUser?.id || !profile?.id) { router.push('/login'); return; }
-    setFollowLoading(true);
+    if (followInFlight.current) return;
+    followInFlight.current = true;
+    const wasFollowing = isFollowing;
+    // Optimistic update
+    setIsFollowing(!wasFollowing);
+    setFollowersCount((prev) => wasFollowing ? Math.max(prev - 1, 0) : prev + 1);
     try {
       const supabase = createClient();
-      if (isFollowing) {
+      if (wasFollowing) {
         await supabase.from('follows').delete().eq('follower_id', currentUser!.id).eq('following_id', profile.id);
-        setIsFollowing(false);
-        setFollowersCount((prev) => Math.max(prev - 1, 0));
       } else {
         await supabase.from('follows').insert({ follower_id: currentUser!.id, following_id: profile.id });
-        setIsFollowing(true);
-        setFollowersCount((prev) => prev + 1);
       }
     } catch (error) {
+      // Revert on failure
+      setIsFollowing(wasFollowing);
+      setFollowersCount((prev) => wasFollowing ? prev + 1 : Math.max(prev - 1, 0));
       console.error('Error toggling follow:', error);
     } finally {
-      setFollowLoading(false);
+      followInFlight.current = false;
     }
   };
 
@@ -246,10 +252,12 @@ export default function SellerProfilePage({ params }: { params: { username: stri
               <MessageCircle size={18} />
               {messagingLoading ? 'Opening...' : 'Message'}
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:bg-white/[0.08] rounded-lg transition-colors">
-              <Share2 size={18} />
-              Share
-            </button>
+            {profile.instagram_url && (
+              <a href={profile.instagram_url.startsWith('http') ? profile.instagram_url : 'https://instagram.com/' + profile.instagram_url.replace(/^@/, '')} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:bg-white/[0.08] rounded-lg transition-colors" style={{ color: theme.accent }}>
+                <Instagram size={18} />
+                Instagram
+              </a>
+            )}
           </div>
         </div>
 
@@ -398,59 +406,62 @@ export default function SellerProfilePage({ params }: { params: { username: stri
           </div>
         )}
 
-        {activeTab === 'reviews' && (
-          <div>
-            {reviews.length > 0 ? (
-              <>
-                <div className="mb-8 p-6 backdrop-blur-xl rounded-[1.5rem]" style={{ backgroundColor: theme.cardBg, border: '1px solid ' + theme.cardBorder }}>
-                  <div className="flex items-center gap-4">
-                    <div className="text-4xl font-bold" style={{ color: theme.accent }}>{averageRating}</div>
-                    <div>
-                      <div className="flex gap-1 mb-2">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} size={20} className={i < Math.round(parseFloat(averageRating)) ? 'fill-relay-accent text-relay-accent' : 'text-white/20'} />
-                        ))}
+        {activeTab === 'reviews' && (() => {
+          const reviewsWithComments = reviews.filter((r) => r.comment);
+          return (
+            <div>
+              {reviewsWithComments.length > 0 ? (
+                <>
+                  <div className="mb-8 p-6 backdrop-blur-xl rounded-[1.5rem]" style={{ backgroundColor: theme.cardBg, border: '1px solid ' + theme.cardBorder }}>
+                    <div className="flex items-center gap-4">
+                      <div className="text-4xl font-bold" style={{ color: theme.accent }}>{averageRating}</div>
+                      <div>
+                        <div className="flex gap-1 mb-2">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} size={20} className={i < Math.round(parseFloat(averageRating)) ? 'fill-relay-accent text-relay-accent' : 'text-white/20'} />
+                          ))}
+                        </div>
+                        <p className="text-sm text-white/60">Based on {reviews.length} rating{reviews.length !== 1 ? 's' : ''}</p>
                       </div>
-                      <p className="text-sm text-white/60">Based on {reviews.length} reviews</p>
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  {reviews.map((review) => {
-                    const shoeModel = review.orders?.listings ? review.orders.listings.brand + ' ' + review.orders.listings.model : 'Unknown Model';
-                    return (
-                      <div key={review.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-6 hover:bg-white/[0.08] transition-colors">
-                        <div className="flex items-start gap-4">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-relay-bg">
-                            {review.profiles?.username?.charAt(0).toUpperCase() || 'U'}
-                          </div>
-                          <div className="flex-grow">
-                            <div className="flex items-center justify-between mb-2">
-                              <div>
-                                <h4 className="font-semibold">{review.profiles?.username}</h4>
-                                <p className="text-xs text-white/50">{new Date(review.created_at).toLocaleDateString()}</p>
-                              </div>
-                              <div className="flex gap-1">
-                                {[...Array(5)].map((_, i) => (
-                                  <Star key={i} size={14} className={i < review.rating ? 'fill-relay-accent text-relay-accent' : 'text-white/20'} />
-                                ))}
-                              </div>
+                  <div className="space-y-4">
+                    {reviewsWithComments.map((review) => {
+                      const shoeModel = review.orders?.listings ? review.orders.listings.brand + ' ' + review.orders.listings.model : 'Unknown Model';
+                      return (
+                        <div key={review.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-6 hover:bg-white/[0.08] transition-colors">
+                          <div className="flex items-start gap-4">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-relay-bg">
+                              {review.profiles?.username?.charAt(0).toUpperCase() || 'U'}
                             </div>
-                            {review.comment && <p className="text-relay-text mb-2">{review.comment}</p>}
-                            <p className="text-xs text-relay-accent">Purchased: {shoeModel}</p>
+                            <div className="flex-grow">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <h4 className="font-semibold">{review.profiles?.username}</h4>
+                                  <p className="text-xs text-white/50">{new Date(review.created_at).toLocaleDateString()}</p>
+                                </div>
+                                <div className="flex gap-1">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star key={i} size={14} className={i < review.rating ? 'fill-relay-accent text-relay-accent' : 'text-white/20'} />
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-relay-text mb-2">{review.comment}</p>
+                              <p className="text-xs text-relay-accent">Purchased: {shoeModel}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <div className="relay-empty text-center p-12"><p className="text-white/40 text-lg">No reviews yet</p></div>
-            )}
-          </div>
-        )}
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="relay-empty text-center p-12"><p className="text-white/40 text-lg">No reviews yet</p></div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

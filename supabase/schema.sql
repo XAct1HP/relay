@@ -24,6 +24,7 @@ CREATE TABLE profiles (
   followers_count INT DEFAULT 0,
   sales_count INT DEFAULT 0,
   avg_rating NUMERIC(3,2) DEFAULT 0,
+  instagram_url TEXT,
   is_banned BOOLEAN DEFAULT false,
   ban_reason TEXT,
   dispute_flags_count INT DEFAULT 0,
