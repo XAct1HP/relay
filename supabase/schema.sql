@@ -415,9 +415,17 @@ CREATE POLICY "Only admins can delete profiles" ON profiles
 -- LISTINGS POLICIES
 -- ============================================================================
 
--- Anyone can read active listings
+-- Anyone can read active listings, and order participants can always view the listing
 CREATE POLICY "Everyone can read active listings" ON listings
-  FOR SELECT USING (status = 'active' OR seller_id = auth.uid());
+  FOR SELECT USING (
+    status = 'active'
+    OR seller_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM orders
+      WHERE orders.listing_id = listings.id
+      AND (orders.buyer_id = auth.uid() OR orders.seller_id = auth.uid())
+    )
+  );
 
 -- Sellers can insert their own listings
 CREATE POLICY "Sellers can insert their own listings" ON listings

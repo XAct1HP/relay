@@ -161,13 +161,13 @@ export default function OrdersPage() {
       try {
         const { data: buyingOrders } = await supabase
           .from("orders")
-          .select("*, listing:listings(brand, model)")
+          .select("*, listing:listings(brand, model, images)")
           .eq("buyer_id", currentUser!.id)
           .order("created_at", { ascending: false })
 
         const { data: sellingOrders } = await supabase
           .from("orders")
-          .select("*, listing:listings(brand, model)")
+          .select("*, listing:listings(brand, model, images)")
           .eq("seller_id", currentUser!.id)
           .order("created_at", { ascending: false })
 
@@ -178,7 +178,7 @@ export default function OrdersPage() {
             ...buyingOrders.map((order: Order) => ({
               id: order.id,
               role: "buying" as const,
-              shoeImage: "/placeholder-shoe.png",
+              shoeImage: order.listing?.images?.[0] || "",
               brand: order.listing?.brand || "Unknown",
               model: order.listing?.model || "Unknown",
               size: order.size,
@@ -194,7 +194,7 @@ export default function OrdersPage() {
             ...sellingOrders.map((order: Order) => ({
               id: order.id,
               role: "selling" as const,
-              shoeImage: "/placeholder-shoe.png",
+              shoeImage: order.listing?.images?.[0] || "",
               brand: order.listing?.brand || "Unknown",
               model: order.listing?.model || "Unknown",
               size: order.size,
@@ -272,8 +272,12 @@ export default function OrdersPage() {
                   <div className="flex items-center gap-4">
                     {/* Left: Image */}
                     <div className="flex-shrink-0">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5">
-                        <Package className="h-8 w-8 text-[#7ca6ff]" />
+                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
+                        {order.shoeImage ? (
+                          <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="h-full w-full object-cover" />
+                        ) : (
+                          <Package className="h-8 w-8 text-[#7ca6ff]" />
+                        )}
                       </div>
                     </div>
 
