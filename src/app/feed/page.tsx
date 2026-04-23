@@ -262,43 +262,44 @@ export default function FeedPage() {
               {/* Like Badge — floats top-right corner */}
               <button
                 onClick={() => toggleLike(post.id)}
-                className={`absolute -top-3 -right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg backdrop-blur-md border transition-all duration-200 cursor-pointer group ${
+                className={`absolute -top-4 -right-4 z-10 flex flex-col items-center justify-center w-16 h-16 rounded-2xl shadow-xl backdrop-blur-md border-2 transition-all duration-200 cursor-pointer group ${
                   post.isLiked
-                    ? "bg-relay-accent/20 border-relay-accent/40 text-relay-accent shadow-relay-accent/20"
-                    : "bg-relay-bg/90 border-white/15 text-white/50 hover:text-relay-accent hover:border-relay-accent/30 hover:shadow-relay-accent/10"
+                    ? "bg-relay-accent/20 border-relay-accent/50 text-relay-accent shadow-relay-accent/25"
+                    : "bg-relay-bg/90 border-white/15 text-white/50 hover:text-relay-accent hover:border-relay-accent/40 hover:shadow-relay-accent/15"
                 }`}
               >
-                <Heart size={14} className={`transition-transform duration-200 group-hover:scale-110 ${post.isLiked ? "fill-relay-accent" : ""}`} />
-                <span className="text-xs font-bold">{post.likes}</span>
+                <Heart size={22} className={`transition-transform duration-200 group-hover:scale-125 ${post.isLiked ? "fill-relay-accent" : ""}`} />
+                <span className="text-sm font-bold mt-0.5 leading-none">{post.likes}</span>
               </button>
 
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <Link href={"/profile/" + post.sellerUsername.replace("@", "")}>
-                    <img src={post.sellerAvatar} alt={post.sellerName} className="w-10 h-10 rounded-full border border-white/10 hover:opacity-80 transition-opacity" />
-                  </Link>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Link href={"/profile/" + post.sellerUsername.replace("@", "")} className="hover:underline">
-                        <h3 className="font-semibold text-relay-text">{post.sellerName}</h3>
-                      </Link>
-                      {post.isCustomBrand && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30">
-                          <Star size={11} className="text-purple-400 fill-purple-400" />
-                          <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Own Brand</span>
-                        </span>
-                      )}
-                      {post.isRisingBrand && !post.isCustomBrand && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-relay-accent/10 border border-relay-accent/20">
-                          <TrendingUp size={12} className="text-relay-accent" />
-                          <span className="text-xs font-medium text-relay-accent">Rising Brand</span>
-                        </span>
-                      )}
-                    </div>
+              <div className="flex items-center gap-3 mb-4">
+                <Link href={"/profile/" + post.sellerUsername.replace("@", "")}>
+                  <img src={post.sellerAvatar} alt={post.sellerName} className="w-10 h-10 rounded-full border border-white/10 hover:opacity-80 transition-opacity" />
+                </Link>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Link href={"/profile/" + post.sellerUsername.replace("@", "")} className="hover:underline">
+                      <h3 className="font-semibold text-relay-text">{post.sellerName}</h3>
+                    </Link>
+                    {post.isCustomBrand && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30">
+                        <Star size={11} className="text-purple-400 fill-purple-400" />
+                        <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Own Brand</span>
+                      </span>
+                    )}
+                    {post.isRisingBrand && !post.isCustomBrand && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-relay-accent/10 border border-relay-accent/20">
+                        <TrendingUp size={12} className="text-relay-accent" />
+                        <span className="text-xs font-medium text-relay-accent">Rising Brand</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
                     <p className="text-sm text-relay-muted">{post.sellerUsername}</p>
+                    <span className="text-white/20">·</span>
+                    <p className="text-sm text-relay-subtle">{formatTimeAgo(post.timeAgo)}</p>
                   </div>
                 </div>
-                <p className="text-sm text-relay-subtle">{formatTimeAgo(post.timeAgo)}</p>
               </div>
 
               <p className="text-relay-text mb-4 leading-relaxed">{post.content}</p>
