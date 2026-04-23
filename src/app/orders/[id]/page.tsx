@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
@@ -188,8 +189,10 @@ const RatingModal = ({
   const [comment, setComment] = useState("")
   const [hoveredRating, setHoveredRating] = useState(0)
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+  if (typeof document === "undefined") return null
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999]">
       <div className="relay-card p-6 max-w-md w-full mx-4">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-[#f5f7fb]">Rate Your Experience</h2>
@@ -235,7 +238,8 @@ const RatingModal = ({
           Submit Review & Complete Order
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
