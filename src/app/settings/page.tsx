@@ -228,7 +228,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Seller Application Status */}
-        {sellerApplicationStatus ? (
+        {sellerApplicationStatus && sellerApplicationStatus !== 'none' ? (
           <div className={`backdrop-blur-xl rounded-[1.5rem] border p-8 mb-6 ${
             sellerApplicationStatus === 'approved'
               ? 'bg-green-500/[0.06] border-green-500/20'
@@ -388,8 +388,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Connected Accounts — only show for sellers or users with a seller application */}
-        {(currentUser?.role === 'seller' || currentUser?.role === 'admin' || sellerApplicationStatus) && (
+        {/* Connected Accounts — only show for sellers or users with an active seller application */}
+        {(currentUser?.role === 'seller' || currentUser?.role === 'admin' || (sellerApplicationStatus && sellerApplicationStatus !== 'none')) && (
           <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
             <h2 className="text-xl font-semibold text-white mb-6">Connected Accounts</h2>
 
