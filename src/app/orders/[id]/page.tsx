@@ -282,26 +282,35 @@ const DisputeForm = ({
   const handleSubmit = async () => {
     setUploading(true)
     try {
-      const supabase = createClient()
       const uploadedUrls: string[] = []
 
       for (let i = 0; i < evidenceFiles.length; i++) {
         const file = evidenceFiles[i]
         const ext = file.name.split(".").pop() || "jpg"
-        const path = `${orderId}/dispute-buyer-${i}.${ext}`
-        const { error } = await supabase.storage
-          .from("order-photos")
-          .upload(path, file, { upsert: true })
-        if (!error) {
-          const { data: urlData } = supabase.storage
-            .from("order-photos")
-            .getPublicUrl(path)
-          uploadedUrls.push(urlData.publicUrl)
+        const fileName = `dispute-buyer-${i}.${ext}`
+
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("fileName", fileName)
+
+        const res = await fetch(`/api/orders/${orderId}/upload-evidence`, {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.error || "Failed to upload evidence photo")
         }
+
+        const { url } = await res.json()
+        uploadedUrls.push(url)
       }
 
       onSubmit(reason, description, uploadedUrls)
-    } catch {
+    } catch (err: any) {
+      console.error("Evidence upload error:", err)
+      alert(err.message || "Failed to upload evidence photos. Please try again.")
       setUploading(false)
     }
   }
@@ -708,22 +717,29 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     setError(null)
 
     try {
-      const supabase = createClient()
       const uploadedUrls: string[] = []
 
       for (let i = 0; i < sellerEvidenceFiles.length; i++) {
         const file = sellerEvidenceFiles[i]
         const ext = file.name.split(".").pop() || "jpg"
-        const path = `${order.id}/dispute-seller-${i}.${ext}`
-        const { error: uploadError } = await supabase.storage
-          .from("order-photos")
-          .upload(path, file, { upsert: true })
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from("order-photos")
-            .getPublicUrl(path)
-          uploadedUrls.push(urlData.publicUrl)
+        const fileName = `dispute-seller-${i}.${ext}`
+
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("fileName", fileName)
+
+        const uploadRes = await fetch(`/api/orders/${order.id}/upload-evidence`, {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json()
+          throw new Error(err.error || "Failed to upload evidence photo")
         }
+
+        const { url } = await uploadRes.json()
+        uploadedUrls.push(url)
       }
 
       const res = await fetch(`/api/orders/${order.id}/seller-evidence`, {
