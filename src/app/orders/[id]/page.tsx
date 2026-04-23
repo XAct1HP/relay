@@ -194,11 +194,8 @@ const RatingModal = ({
   return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999]">
       <div className="relay-card p-6 max-w-md w-full mx-4">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h2 className="text-xl font-bold text-[#f5f7fb]">Rate Your Experience</h2>
-          <button onClick={onClose} className="text-white/40 hover:text-white/70">
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         <div className="flex justify-center gap-3 mb-6">
