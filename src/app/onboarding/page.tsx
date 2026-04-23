@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useAuth from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase';
-import { ShippingAddress, SellerApplication } from '@/types';
+import { ShippingAddress } from '@/types';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
@@ -28,6 +28,7 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [stripeConnected, setStripeConnected] = useState(false);
+  const [authenticityAccepted, setAuthenticityAccepted] = useState(false);
 
   const [formData, setFormData] = useState<OnboardingFormData>(() => {
     // Restore saved form data from localStorage (persisted before Stripe redirect)
@@ -57,6 +58,8 @@ export default function OnboardingPage() {
         monthly_volume: '',
         why_relay: '',
         own_brand: '',
+        instagram_url: '',
+        other_links: '',
       },
       stripe_connected: false,
       terms_accepted: false,
@@ -186,8 +189,8 @@ export default function OnboardingPage() {
   const handleSubmitApplication = async () => {
     setError('');
 
-    if (!formData.terms_accepted) {
-      setError('Please accept the Terms and Conditions');
+    if (!formData.terms_accepted || !authenticityAccepted) {
+      setError('You must agree to the terms and certify authenticity to continue.');
       return;
     }
 
@@ -525,6 +528,39 @@ export default function OnboardingPage() {
                     className="relay-textarea h-20"
                   />
                 </div>
+
+                {/* Instagram Link */}
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Instagram link (optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://instagram.com/yourhandle"
+                    value={formData.questionnaire_responses.instagram_url}
+                    onChange={(e) => handleQuestionnaireChange('instagram_url', e.target.value)}
+                    className="relay-input"
+                  />
+                  <p className="text-xs text-white/40 mt-1">
+                    Share your Instagram so we can see your presence in the sneaker community.
+                  </p>
+                </div>
+
+                {/* Other Links */}
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Other links (optional)
+                  </label>
+                  <textarea
+                    placeholder="eBay store, Grailed profile, personal website, etc."
+                    value={formData.questionnaire_responses.other_links}
+                    onChange={(e) => handleQuestionnaireChange('other_links', e.target.value)}
+                    className="relay-textarea h-20"
+                  />
+                  <p className="text-xs text-white/40 mt-1">
+                    Any marketplace profiles, websites, or links that support your seller history.
+                  </p>
+                </div>
               </div>
 
               {error && (
@@ -602,7 +638,7 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl sm:text-2xl font-semibold text-white mb-1">Review & Submit</h2>
-                <p className="text-sm text-white/60">Confirm your application details</p>
+                <p className="text-sm text-white/60">Review your info and agree to our seller terms</p>
               </div>
 
               <div className="mt-6 space-y-4">
@@ -640,6 +676,12 @@ export default function OnboardingPage() {
                       <dt className="text-white/60">Monthly Volume:</dt>
                       <dd className="text-white font-medium">{formData.questionnaire_responses.monthly_volume}</dd>
                     </div>
+                    {formData.questionnaire_responses.instagram_url && (
+                      <div className="flex justify-between">
+                        <dt className="text-white/60">Instagram:</dt>
+                        <dd className="text-white font-medium">{formData.questionnaire_responses.instagram_url}</dd>
+                      </div>
+                    )}
                   </dl>
                 </div>
 
@@ -650,22 +692,171 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {/* Terms Checkbox */}
-                <div className="flex items-start gap-3 p-4 relay-subcard">
-                  <input
-                    id="terms"
-                    type="checkbox"
-                    checked={formData.terms_accepted}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, terms_accepted: e.target.checked }))}
-                    className="mt-1"
-                  />
-                  <label htmlFor="terms" className="text-sm text-white/70">
-                    I agree to the{' '}
-                    <a href="#" className="text-blue-400 hover:text-blue-300">
-                      Terms and Conditions
-                    </a>
-                    {' '}and understand my seller account must be approved before I can list items.
-                  </label>
+                {/* Seller Terms & Conditions */}
+                <div>
+                  <h3 className="text-sm font-semibold text-white mb-3">Seller Terms & Conditions</h3>
+                  <p className="text-xs text-white/50 mb-3">
+                    You must review and agree before submitting your application.
+                  </p>
+
+                  <div className="h-[28rem] overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-white/70">
+                    <p className="mb-3 text-sm font-semibold text-white">Relay Seller Terms & Conditions</p>
+
+                    <p className="mb-3">
+                      By submitting your seller application, checking the agreement boxes below, connecting a payout account, listing items, or otherwise using Relay as a seller, you agree to these Seller Terms & Conditions. These terms apply to your application, your account, your listings, your communications, your fulfillment activity, and every transaction you complete through Relay.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">1. Platform Role</p>
+                    <p className="mb-3">
+                      Relay operates solely as a marketplace platform that connects buyers and sellers. Relay is not the owner, consignor, merchant of record, reseller, shipper, authenticator, or guarantor of any item listed by users unless Relay expressly states otherwise in writing for a specific program. Relay does not take title to seller inventory and is not a party to the underlying sale contract between buyer and seller.
+                    </p>
+                    <p className="mb-3">
+                      You acknowledge and agree that all item listings, descriptions, photographs, authenticity claims, condition statements, shipping commitments, and transaction representations are made by the seller, not by Relay. Any account review, onboarding review, moderation review, platform policy enforcement, dispute review, or listing review performed by Relay does not convert Relay into the seller, does not create a warranty by Relay, and does not constitute a certification or guarantee by Relay.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">2. Seller Responsibility</p>
+                    <p className="mb-3">
+                      You, as the seller, are solely responsible for everything you list, offer, sell, ship, and communicate on Relay. This includes, without limitation, the authenticity, legality, ownership, condition, accuracy, completeness, timing, packaging, shipment, and delivery of each item. You are responsible for ensuring that every listing is truthful and not misleading in any respect.
+                    </p>
+                    <p className="mb-3">
+                      You agree that you will only list items that you have the legal right to sell and transfer, that are lawful to sell, and that are accurately described. You are responsible for all consequences arising from inaccurate listings, omitted defects, incomplete disclosures, delayed shipment, poor packaging, counterfeit goods, materially misrepresented goods, or any other seller-side failure.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">3. Authenticity Disclaimer</p>
+                    <p className="mb-3">
+                      Relay does not guarantee the authenticity of any item listed, offered, sold, purchased, shipped, or delivered through the platform. Even if Relay reviews a seller application, reviews a dispute, removes certain listings, bans certain users, or uses policies intended to discourage counterfeit goods, Relay is not making any representation or warranty that items on the platform are authentic.
+                    </p>
+                    <p className="mb-3">
+                      Buyers and sellers transact at their own risk. Seller onboarding, seller review, moderation, policy enforcement, and dispute tools are platform features only and do not create any authentication service, expert verification service, or authenticity insurance by Relay.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">4. Prohibited Conduct</p>
+                    <p className="mb-3">
+                      You may not use Relay to engage in fraud, deception, off-platform circumvention, sale of counterfeit goods, sale of stolen goods, materially misleading listing practices, bait-and-switch conduct, false shipment claims, chargeback abuse, abusive communication, or any conduct that harms users or the platform.
+                    </p>
+                    <p className="mb-3">
+                      You specifically agree not to list, offer, or sell counterfeit, replica, altered, unauthorized, materially misrepresented, or fake items. You may not intentionally conceal damage, wear, missing accessories, repairs, odor, defects, box condition issues, or any other fact that could affect a buyer&apos;s decision.
+                    </p>
+                    <p className="mb-3">
+                      You also agree not to use Relay to locate buyers and then divert those buyers to direct or off-platform transactions. Relay reserves the right to remove listings, block transactions, suspend accounts, reject applications, or permanently ban users for any conduct Relay believes presents risk to users or the marketplace.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">5. Listing Accuracy and Condition</p>
+                    <p className="mb-3">
+                      Every listing you create must accurately reflect the exact item offered for sale. All photos, descriptions, sizes, condition notes, variants, pricing, accessories, and fulfillment expectations must be accurate at the time of listing and remain accurate through the time of shipment.
+                    </p>
+                    <p className="mb-3">
+                      You are responsible for ensuring that buyers receive the exact item they purchased, in the exact condition represented, with the exact relevant accessories or packaging disclosed in the listing. If your listing omits a material fact, contains an inaccurate statement, or uses images or language that create a misleading impression, you are solely responsible for that error or misrepresentation.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">6. Shipping and Fulfillment</p>
+                    <p className="mb-3">
+                      You are solely responsible for proper order fulfillment. This includes timely shipment, secure packaging, using the correct label, protecting the item in transit, and ensuring that the shipped item matches the order. You are responsible for making commercially reasonable efforts to package items so they arrive in the stated condition.
+                    </p>
+                    <p className="mb-3">
+                      Relay is not responsible for lost packages, stolen packages, delayed packages, carrier scanning issues, delivery exceptions, weather disruptions, routing errors, porch theft, damage caused by carriers, or any other shipping-related issue outside Relay&apos;s direct control. Once an item has been accepted by a shipping carrier, delivery performance and carrier handling are outside Relay&apos;s control.
+                    </p>
+                    <p className="mb-3">
+                      Relay may provide shipping labels, tracking integrations, shipping status visibility, or other convenience features. Those tools are provided as a platform convenience only. They do not make Relay the carrier, warehouse, insurer, or shipping guarantor.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">7. Payments and Third-Party Providers</p>
+                    <p className="mb-3">
+                      Payments, payouts, and related money movement are handled by third-party service providers, including Stripe. Relay does not directly hold user funds except to the extent funds may temporarily move through platform or processor-controlled flows required by the payment infrastructure.
+                    </p>
+                    <p className="mb-3">
+                      You agree to comply with all requirements imposed by Relay&apos;s payment providers, including identity verification, payout onboarding, account reviews, reserve requirements, payout holds, and risk controls. Relay may delay, withhold, reverse, or restrict certain transactions or payouts where required by policy, law, processor requirements, dispute status, or risk review.
+                    </p>
+                    <p className="mb-3">
+                      Relay is not liable for processor outages, payout delays, identity verification delays, account freezes, reserve requirements, third-party compliance reviews, or actions taken by payment service providers.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">8. Disputes and Platform Enforcement</p>
+                    <p className="mb-3">
+                      Relay may offer dispute-reporting tools, review windows, evidence-upload tools, moderation tools, and administrative intervention features. These tools are offered for marketplace management and user experience only. Relay is not obligated to resolve any dispute in favor of any party, and Relay does not guarantee any specific outcome.
+                    </p>
+                    <p className="mb-3">
+                      You agree that Relay may evaluate disputes, reports, evidence, shipment history, communication history, account behavior, or other relevant facts in its sole discretion. Relay may deny a claim, uphold a claim, reverse a transaction, block a payout, suspend an account, remove a listing, or take no action at all, as Relay deems appropriate.
+                    </p>
+                    <p className="mb-3">
+                      All moderation and dispute decisions made by Relay are final to the fullest extent permitted by law. The existence of a dispute system does not create any fiduciary duty, insurance obligation, expert authentication duty, or legal duty for Relay to achieve a perfect result for any user.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">9. No Warranty by Relay</p>
+                    <p className="mb-3">
+                      Relay provides the platform, listings, communications tools, seller review flow, moderation systems, shipping integrations, and related marketplace services on an &quot;as is&quot; and &quot;as available&quot; basis. To the fullest extent permitted by law, Relay disclaims all warranties, whether express, implied, statutory, or otherwise, including any implied warranties of merchantability, fitness for a particular purpose, title, non-infringement, authenticity, uninterrupted service, or error-free operation.
+                    </p>
+                    <p className="mb-3">
+                      Relay does not warrant that the platform will always be available, that transactions will always complete successfully, that sellers or buyers will always act honestly, or that any marketplace screening process will catch all bad actors.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">10. Suspension, Removal, and Termination</p>
+                    <p className="mb-3">
+                      Relay may reject applications, place applications under review, remove listings, pause payouts, suspend selling privileges, suspend accounts, or permanently ban users at any time and for any reason consistent with marketplace safety, risk management, compliance, legal obligations, operational needs, or platform policy.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">11. Limitation of Liability</p>
+                    <p className="mb-3">
+                      To the fullest extent permitted by law, Relay, its operators, owners, affiliates, contractors, officers, employees, agents, and service providers shall not be liable for any indirect, incidental, consequential, special, exemplary, or punitive damages, including loss of profits, loss of data, loss of reputation, business interruption, loss of opportunity, shipping losses, counterfeit losses, or damages arising from user conduct or third-party services.
+                    </p>
+                    <p className="mb-3">
+                      If Relay is found liable to you for any reason, Relay&apos;s total aggregate liability to you shall not exceed the total platform fees actually paid by you to Relay during the three months immediately preceding the event giving rise to the claim.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">12. Indemnification</p>
+                    <p className="mb-3">
+                      You agree to defend, indemnify, and hold harmless Relay, its operators, owners, affiliates, contractors, officers, employees, agents, and service providers from and against any and all claims, demands, disputes, liabilities, damages, judgments, settlements, penalties, losses, costs, and expenses, including reasonable legal fees, arising out of or relating to your account, your listings, your items, your transactions, your communications, your shipment activity, your alleged or actual sale of counterfeit or misrepresented items, your violation of law, your violation of platform policy, or your breach of these terms.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">13. Compliance With Law</p>
+                    <p className="mb-3">
+                      You are solely responsible for complying with all laws, rules, regulations, tax obligations, intellectual property rules, consumer protection rules, marketplace rules, and shipment restrictions applicable to your listings and sales. Relay does not provide legal, tax, or regulatory advice, and your use of the platform does not relieve you of your legal responsibilities as a seller.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">14. Changes to Terms</p>
+                    <p className="mb-3">
+                      Relay may update or revise these Seller Terms & Conditions at any time. Continued use of the platform after such changes become effective constitutes acceptance of the revised terms.
+                    </p>
+
+                    <p className="mb-3 font-semibold text-white">15. Seller Certification</p>
+                    <p className="mb-3">
+                      By agreeing below, you certify that the information in your seller application is truthful to the best of your knowledge, that you intend to sell only authentic and accurately described products, that you understand fake sales or fraudulent behavior may result in permanent removal, and that you accept responsibility for your own transactions and conduct on the Relay platform.
+                    </p>
+
+                    <p className="font-semibold text-white">16. Acceptance</p>
+                    <p>
+                      By checking the boxes below, saving your seller application, or using Relay as a seller, you acknowledge that you have read, understood, and agreed to these Seller Terms & Conditions in full.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Checkboxes */}
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-4 relay-subcard">
+                    <input
+                      id="terms"
+                      type="checkbox"
+                      checked={formData.terms_accepted}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, terms_accepted: e.target.checked }))}
+                      className="mt-1 accent-blue-500"
+                    />
+                    <label htmlFor="terms" className="text-sm text-white/70">
+                      I have read and agree to the Seller Terms & Conditions
+                    </label>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-4 relay-subcard">
+                    <input
+                      id="authenticity"
+                      type="checkbox"
+                      checked={authenticityAccepted}
+                      onChange={(e) => setAuthenticityAccepted(e.target.checked)}
+                      className="mt-1 accent-blue-500"
+                    />
+                    <label htmlFor="authenticity" className="text-sm text-white/70">
+                      I certify that all items I list will be authentic and accurately described
+                    </label>
+                  </div>
                 </div>
 
                 {error && (
@@ -676,7 +867,7 @@ export default function OnboardingPage() {
 
                 <button
                   onClick={handleSubmitApplication}
-                  disabled={isLoading || !formData.terms_accepted}
+                  disabled={isLoading || !formData.terms_accepted || !authenticityAccepted}
                   className="relay-button-primary w-full"
                 >
                   {isLoading ? 'Submitting...' : 'Submit Application'}

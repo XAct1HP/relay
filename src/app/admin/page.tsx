@@ -32,6 +32,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import Link from "next/link";
+import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 
 interface MetricsData {
   gmvData: Array<{ month: string; gmv: number }>;
@@ -224,6 +225,8 @@ function ActivityItem({ activity }: any) {
 }
 
 export default function AdminPage() {
+  const { onboardingActive, loading: onboardingLoading, toggleOnboarding } = useOnboardingPhase();
+  const [toggling, setToggling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<MetricsData>({
     gmvData: [],
@@ -328,6 +331,60 @@ export default function AdminPage() {
         <div className="space-y-2">
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Platform Overview</h1>
+        </div>
+
+        {/* Onboarding Phase Control */}
+        <div className={`relay-card p-5 border ${onboardingActive ? 'border-amber-500/30 bg-amber-500/5' : 'border-green-500/30 bg-green-500/5'}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl ${onboardingActive ? 'bg-amber-500/20' : 'bg-green-500/20'}`}>
+                <Shield className={`w-6 h-6 ${onboardingActive ? 'text-amber-400' : 'text-green-400'}`} />
+              </div>
+              <div>
+                <h3 className="text-[#f5f7fb] font-semibold text-lg">Onboarding Phase</h3>
+                <p className="text-white/50 text-sm mt-0.5">
+                  {onboardingActive
+                    ? 'Active — Marketplace is closed to buyers. Sellers are populating listings. Feed listings are hidden.'
+                    : 'Inactive — Marketplace is fully open. Buyers can sign up and purchase.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setToggling(true);
+                await toggleOnboarding(!onboardingActive);
+                setToggling(false);
+              }}
+              disabled={toggling || onboardingLoading}
+              className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                onboardingActive ? 'bg-amber-500' : 'bg-green-500'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  onboardingActive ? 'translate-x-0' : 'translate-x-6'
+                }`}
+              />
+            </button>
+          </div>
+          {onboardingActive && (
+            <div className="mt-4 pt-4 border-t border-amber-500/20">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div className="flex items-center gap-2 text-amber-300/80">
+                  <Lock className="w-4 h-4" />
+                  <span>Buyer signup blocked</span>
+                </div>
+                <div className="flex items-center gap-2 text-amber-300/80">
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>Marketplace closed</span>
+                </div>
+                <div className="flex items-center gap-2 text-amber-300/80">
+                  <Package className="w-4 h-4" />
+                  <span>Listing links hidden</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Top Metrics Row */}

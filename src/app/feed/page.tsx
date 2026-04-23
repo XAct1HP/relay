@@ -5,6 +5,7 @@ import { Pagination } from "@/components/layout/Pagination";
 import { Heart, Sparkles, TrendingUp, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
+import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import Link from "next/link";
 
 interface FeedPost {
@@ -37,6 +38,7 @@ const CUSTOM_BRAND_INTERVAL = 5;
 
 export default function FeedPage() {
   const { currentUser } = useAuth();
+  const { onboardingActive } = useOnboardingPhase();
   const [activeTab, setActiveTab] = useState("For You");
   const [currentPage, setCurrentPage] = useState(1);
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -325,7 +327,7 @@ export default function FeedPage() {
                 </div>
               )}
 
-              {post.relatedListing && (
+              {post.relatedListing && !onboardingActive && (
                 <Link href={"/listing/" + post.relatedListing.id} className="block mb-4 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-colors">
                   <div className="flex items-center gap-4">
                     {post.relatedListing.image && (
@@ -348,7 +350,15 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="relay-empty text-center py-12">
-          {activeTab === "Following" ? (
+          {onboardingActive ? (
+            <div>
+              <p className="text-white/50 text-lg mb-2 font-semibold">The marketplace is getting ready</p>
+              <p className="text-white/35 text-sm max-w-md mx-auto leading-relaxed">
+                Buyers haven&apos;t arrived yet — now is the perfect time to make posts,
+                showcase your inventory, and build your presence so you&apos;re ready when the doors open.
+              </p>
+            </div>
+          ) : activeTab === "Following" ? (
             <div>
               <p className="text-white/40 text-lg mb-2">No posts from people you follow yet</p>
               <p className="text-white/30 text-sm">Follow sellers to see their updates here</p>

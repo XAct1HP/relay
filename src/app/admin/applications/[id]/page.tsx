@@ -10,6 +10,7 @@ import {
   Mail,
   Calendar,
   CreditCard,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
@@ -382,6 +383,8 @@ export default function ApplicationDetailPage() {
               monthly_volume: 'What is your expected monthly listing volume?',
               why_relay: 'Why do you want to sell on Relay?',
               own_brand: 'Are you building your own shoe brand?',
+              instagram_url: 'Instagram',
+              other_links: 'Other Links / Proof',
             };
             return (
               <QuestionResponseCard
@@ -391,6 +394,38 @@ export default function ApplicationDetailPage() {
               />
             );
           })}
+        </div>
+      )}
+
+      {/* Social & Proof Links */}
+      {app.questionnaire_responses && (app.questionnaire_responses.instagram_url || app.questionnaire_responses.other_links) && (
+        <div className="relay-card p-5">
+          <h3 className="text-lg font-semibold text-[#f5f7fb] mb-4 flex items-center gap-2">
+            <ExternalLink className="w-5 h-5 text-[#5f8fff]" />
+            Social & Proof Links
+          </h3>
+          <div className="space-y-3">
+            {app.questionnaire_responses.instagram_url && (
+              <div>
+                <p className="text-white/60 text-sm mb-1">Instagram</p>
+                <a
+                  href={app.questionnaire_responses.instagram_url.startsWith('http') ? app.questionnaire_responses.instagram_url : `https://instagram.com/${app.questionnaire_responses.instagram_url.replace('@', '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#5f8fff] hover:text-[#7ca6ff] text-sm flex items-center gap-1.5 transition-colors"
+                >
+                  {app.questionnaire_responses.instagram_url}
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            )}
+            {app.questionnaire_responses.other_links && (
+              <div>
+                <p className="text-white/60 text-sm mb-1">Other Links</p>
+                <p className="text-white/70 text-sm whitespace-pre-wrap">{app.questionnaire_responses.other_links}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

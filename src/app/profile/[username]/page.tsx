@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import useAuth from '@/hooks/useAuth';
+import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { Star, MessageCircle, TrendingUp, UserPlus, UserCheck, Heart, Instagram } from 'lucide-react';
 import Link from 'next/link';
 
@@ -90,6 +91,7 @@ interface Review {
 export default function SellerProfilePage({ params }: { params: { username: string } }) {
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { onboardingActive } = useOnboardingPhase();
   const [activeTab, setActiveTab] = useState<string>('inventory');
   const [loading, setLoading] = useState(true);
   const [messagingLoading, setMessagingLoading] = useState(false);
@@ -301,27 +303,41 @@ export default function SellerProfilePage({ params }: { params: { username: stri
           <div>
             {listings.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {listings.map((listing) => (
-                  <Link key={listing.id} href={'/listing/' + listing.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:bg-white/[0.08] transition-colors group cursor-pointer block">
-                    <div className="h-48 w-full relative overflow-hidden">
-                      {listing.images?.[0] ? (
-                        <img src={listing.images[0]} alt={listing.brand + ' ' + listing.model} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full" style={{ background: 'linear-gradient(135deg, #2d2d3d 0%, #3d3d4d 100%)' }} />
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-relay-bg/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                        <span className="w-full text-relay-bg font-semibold py-2 rounded-lg transition-colors text-center block" style={{ backgroundColor: theme.accent }}>View Details</span>
+                {listings.map((listing) => {
+                  const cardContent = (
+                    <>
+                      <div className="h-48 w-full relative overflow-hidden">
+                        {listing.images?.[0] ? (
+                          <img src={listing.images[0]} alt={listing.brand + ' ' + listing.model} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full" style={{ background: 'linear-gradient(135deg, #2d2d3d 0%, #3d3d4d 100%)' }} />
+                        )}
+                        {!onboardingActive && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-relay-bg/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                            <span className="w-full text-relay-bg font-semibold py-2 rounded-lg transition-colors text-center block" style={{ backgroundColor: theme.accent }}>View Details</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-relay-text mb-2 line-clamp-2">{listing.brand} {listing.model}</h3>
-                      <div className="flex items-baseline justify-between">
-                        <p className="text-2xl font-bold" style={{ color: theme.accent }}>{"$" + (listing.sizes?.[0]?.price || 0)}</p>
-                        <p className="text-xs text-white/50">{listing.sizes?.length || 0} size{listing.sizes?.length !== 1 ? 's' : ''}</p>
+                      <div className="p-4">
+                        <h3 className="font-semibold text-relay-text mb-2 line-clamp-2">{listing.brand} {listing.model}</h3>
+                        <div className="flex items-baseline justify-between">
+                          <p className="text-2xl font-bold" style={{ color: theme.accent }}>{"$" + (listing.sizes?.[0]?.price || 0)}</p>
+                          <p className="text-xs text-white/50">{listing.sizes?.length || 0} size{listing.sizes?.length !== 1 ? 's' : ''}</p>
+                        </div>
                       </div>
+                    </>
+                  );
+
+                  return onboardingActive ? (
+                    <div key={listing.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
+                      {cardContent}
                     </div>
-                  </Link>
-                ))}
+                  ) : (
+                    <Link key={listing.id} href={'/listing/' + listing.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:bg-white/[0.08] transition-colors group cursor-pointer block">
+                      {cardContent}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="relay-empty text-center p-12"><p className="text-white/40 text-lg">No active listings</p></div>

@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import useAuth from '@/hooks/useAuth';
+import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { ShoppingBag, Store } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
   const { signUp, isLoading } = useAuth();
+  const { onboardingActive } = useOnboardingPhase();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -141,18 +143,24 @@ export default function SignupPage() {
               <div className="space-y-2">
                 <button
                   type="button"
-                  onClick={() => setRole('buyer')}
-                  disabled={isLoading}
+                  onClick={() => !onboardingActive && setRole('buyer')}
+                  disabled={isLoading || !!onboardingActive}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                    role === 'buyer'
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : 'border-white/10 bg-white/5 hover:bg-white/[0.07]'
+                    onboardingActive
+                      ? 'border-white/5 bg-white/[0.02] opacity-50 cursor-not-allowed'
+                      : role === 'buyer'
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/[0.07]'
                   }`}
                 >
                   <ShoppingBag size={20} />
                   <div className="text-left">
                     <p className="text-sm font-medium text-white">I&apos;m a Buyer</p>
-                    <p className="text-xs text-white/60">Browse and buy sneakers</p>
+                    <p className="text-xs text-white/60">
+                      {onboardingActive
+                        ? 'Buyer signups open soon — sellers are setting up first'
+                        : 'Browse and buy sneakers'}
+                    </p>
                   </div>
                 </button>
 
