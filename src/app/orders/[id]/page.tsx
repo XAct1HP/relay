@@ -1624,25 +1624,13 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
       )}
 
-      {/* ══════════════════════ */}
-      {/* STATUS: DISPUTED      */}
-      {/* ══════════════════════ */}
-      {currentStatus === "disputed" && (
-        <div className="relay-card p-6 mb-6 border border-red-500/30 bg-red-500/5">
-          <h2 className="text-lg font-bold text-red-300 mb-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            Order Disputed
-          </h2>
-          {order.disputeReason && (
-            <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
-              <p className="text-sm text-white/40 mb-1">Dispute Reason</p>
-              <p className="text-sm text-[#f5f7fb]">{order.disputeReason}</p>
-            </div>
-          )}
-          <p className="text-sm text-[#7ca6ff]">
-            This order is under review by the Relay team. You will be notified of the outcome.
-          </p>
-        </div>
+      {/* Rating Modal */}
+      {showRatingModal && (
+        <RatingModal
+          onSubmit={handleRatingSubmit}
+          onClose={() => setShowRatingModal(false)}
+          submitting={submittingReview}
+        />
       )}
 
     </div>
