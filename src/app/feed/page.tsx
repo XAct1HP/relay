@@ -201,11 +201,6 @@ export default function FeedPage() {
       } else {
         await supabase.from("post_likes").insert({ post_id: postId, user_id: currentUser!.id });
       }
-      // Re-fetch actual count from DB to reconcile
-      const { data: postData } = await supabase.from("posts").select("likes_count").eq("id", postId).single();
-      if (postData) {
-        setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: postData.likes_count } : p));
-      }
     } catch (error) {
       // Revert optimistic update on failure
       setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, isLiked: wasLiked, likes: Math.max(0, wasLiked ? p.likes + 1 : p.likes - 1) } : p));
