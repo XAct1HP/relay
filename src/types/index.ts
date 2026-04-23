@@ -16,6 +16,9 @@ export interface User {
   profile_theme: string;
   bio: string | null;
   followers_count: number;
+  sales_count: number;
+  avg_rating: number;
+  instagram_url: string | null;
   created_at: string;
   updated_at: string;
 }

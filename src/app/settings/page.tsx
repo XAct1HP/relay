@@ -514,4 +514,16 @@ export default function SettingsPage() {
                 className="flex-1 px-4 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] font-medium rounded-lg transition-colors border border-white/10"
               >
                 Cancel
+              </button>              <button
+                onClick={handleDeleteAccount}
+                className="flex-1 px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-medium rounded-lg transition-colors border border-red-500/30"
+              >
+                Delete Forever
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
