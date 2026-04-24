@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,9 +33,14 @@ export function Navbar() {
       <div className="h-full px-4 md:px-6 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex-shrink-0">
-          <div className="font-bold text-xl tracking-tight text-relay-text hover:text-relay-accent transition-colors">
-            Relay
-          </div>
+          <Image
+            src="/branding/logo-darkmode.png"
+            alt="Relay"
+            width={100}
+            height={36}
+            className="object-contain"
+            priority
+          />
         </Link>
 
         {/* Desktop Navigation */}

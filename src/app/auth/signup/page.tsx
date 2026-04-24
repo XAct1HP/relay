@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import useAuth from '@/hooks/useAuth';
 import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { ShoppingBag, Store } from 'lucide-react';
@@ -59,9 +60,16 @@ export default function SignupPage() {
     <div className="relay-page flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white">Relay</h1>
-          <p className="mt-2 text-sm text-white/60">Create your account</p>
+        <div className="mb-8 text-center flex flex-col items-center">
+          <Image
+            src="/branding/logo-darkmode.png"
+            alt="Relay"
+            width={120}
+            height={44}
+            className="object-contain"
+            priority
+          />
+          <p className="mt-3 text-sm text-white/60">Create your account</p>
         </div>
 
         {/* Card */}

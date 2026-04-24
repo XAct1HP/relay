@@ -104,6 +104,7 @@ export async function GET(
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; color: #111; }
     .container { max-width: 600px; margin: 0 auto; border: 2px solid #000; padding: 32px; }
     .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 24px; }
+    .header img { max-width: 160px; height: auto; margin: 0 auto 8px; display: block; }
     .header h1 { font-size: 24px; font-weight: 700; letter-spacing: 2px; }
     .header p { font-size: 12px; color: #666; margin-top: 4px; }
     .slip-id-section { text-align: center; margin: 24px 0; padding: 16px; background: #f5f5f5; border: 1px dashed #333; }
@@ -130,7 +131,7 @@ export async function GET(
 <body>
   <div class="container">
     <div class="header">
-      <h1>RELAY</h1>
+      <img src="/branding/logo-lightmode.png" alt="Relay" />
       <p>Return Packing Slip</p>
     </div>
 

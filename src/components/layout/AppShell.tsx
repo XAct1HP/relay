@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { Sidebar } from "./Sidebar";
 import { MobileBottomBar } from "./MobileBottomBar";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -68,9 +69,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
-          <div className="font-bold text-lg tracking-tight text-relay-text">
-            Relay
-          </div>
+          <Image
+            src="/branding/logo-darkmode.png"
+            alt="Relay"
+            width={88}
+            height={32}
+            className="object-contain"
+            priority
+          />
         </div>
 
         {/* Content Area */}

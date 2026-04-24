@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -73,10 +74,28 @@ export function Sidebar() {
     >
       {/* Header */}
       <div className={`h-[72px] flex items-center border-b border-white/10 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
-        {!isCollapsed && (
-          <div className="font-bold text-xl tracking-tight text-relay-text">
-            Relay
-          </div>
+        {!isCollapsed ? (
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/branding/logo-darkmode.png"
+              alt="Relay"
+              width={100}
+              height={36}
+              className="object-contain"
+              priority
+            />
+          </Link>
+        ) : (
+          <Link href="/" className="flex items-center justify-center">
+            <Image
+              src="/branding/logo-darkmode.png"
+              alt="Relay"
+              width={32}
+              height={32}
+              className="object-contain"
+              priority
+            />
+          </Link>
         )}
         <button
           onClick={toggleCollapsed}
