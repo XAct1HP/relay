@@ -153,9 +153,7 @@ export default function Home() {
                 </div>
 
                 <h1 className="text-5xl lg:text-6xl font-bold leading-[1.05] relay-text-gradient">
-                  Build your reseller brand.
-                  <br />
-                  Not just another listing.
+                  The Marketplace Built for Resellers
                 </h1>
 
                 <p className="text-lg text-white/65 max-w-lg leading-relaxed">
@@ -812,88 +810,68 @@ export default function Home() {
       </section>
 
       {/* ────────────────────────────────────────────────────────────────
-          7 · EARLY ACCESS + FINAL CTA
+          7 · FINAL CTA
       ──────────────────────────────────────────────────────────────── */}
-      <section className="relative py-20 lg:py-32 border-t border-white/5">
-        <div className="relay-container">
-          <div className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto items-start">
-            {/* Early access card */}
-            <RevealSection>
-              <div className="relay-card p-8 border-relay-accent/30 bg-gradient-to-br from-relay-accent/10 to-transparent h-full">
-                <div className="space-y-5">
-                  <div>
-                    <p className="text-sm text-relay-accent font-medium uppercase tracking-wider">
-                      Early Access Perks
-                    </p>
-                    <p className="mt-2 text-white/60 text-sm leading-relaxed">
-                      Join now and shape the future of sneaker reselling.
-                    </p>
-                  </div>
-                  <ul className="space-y-3">
-                    {[
-                      "Founding seller badge on your profile",
-                      "Shape the platform — your feedback builds features",
-                      "First-mover visibility as the marketplace grows",
-                      "Lock in the lowest fees from day one",
-                    ].map((benefit, idx) => (
-                      <li
-                        key={idx}
-                        className="flex items-center gap-3 text-sm text-white/70"
-                      >
-                        <Check size={16} className="text-emerald-400" />
-                        <span>{benefit}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </RevealSection>
+      <section className="relative py-24 lg:py-36 border-t border-white/5 overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute inset-0 bg-gradient-to-t from-relay-accent/[0.06] via-transparent to-transparent pointer-events-none" />
 
-            {/* Final CTA */}
-            <RevealSection delay={100}>
-              <div className="relay-card p-8 h-full flex flex-col justify-center space-y-6">
-                <div className="space-y-3">
-                  <h2 className="text-3xl lg:text-4xl font-bold text-relay-text">
-                    Start building your brand on Relay.
-                  </h2>
-                  <p className="text-white/60 leading-relaxed">
-                    Create your seller identity, connect directly with buyers,
-                    and sell on a platform designed around resellers — not
-                    against them.
-                  </p>
-                </div>
+        <div className="relay-container relative">
+          <RevealSection className="max-w-3xl mx-auto text-center space-y-8">
+            <h2 className="text-4xl lg:text-5xl font-bold relay-text-gradient">
+              Ready to start selling?
+            </h2>
+            <p className="text-xl text-white/60 leading-relaxed max-w-xl mx-auto">
+              Create your seller identity, connect directly with buyers, and
+              sell on a platform designed around resellers — not against them.
+            </p>
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                  <Link
-                    href="/auth/signup"
-                    className="relay-button-primary gap-2 text-base px-8 py-3"
-                  >
-                    Join Relay Today
-                    <ChevronRight size={20} />
-                  </Link>
-                  <Link
-                    href="/marketplace"
-                    className="relay-button-secondary gap-2 text-base px-8 py-3 hover:border-relay-accent/50 hover:bg-white/[0.08]"
-                  >
-                    Explore Marketplace
-                    <ChevronRight size={20} />
-                  </Link>
+            {/* Early access perks — inline, no card */}
+            <div className="flex flex-wrap justify-center gap-x-8 gap-y-3 pt-2">
+              {[
+                "Founding seller badge",
+                "Shape the platform with feedback",
+                "First-mover visibility",
+                "Lowest fees from day one",
+              ].map((perk, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 text-sm text-white/55"
+                >
+                  <Check size={14} className="text-emerald-400 flex-shrink-0" />
+                  <span>{perk}</span>
                 </div>
+              ))}
+            </div>
 
-                <div className="pt-4 border-t border-white/10">
-                  <p className="text-white/50 text-sm">
-                    Already have an account?{" "}
-                    <Link
-                      href="/auth/login"
-                      className="text-relay-accent hover:text-relay-accent/80 transition-colors font-medium"
-                    >
-                      Sign in
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            </RevealSection>
-          </div>
+            {/* Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <Link
+                href="/auth/signup"
+                className="relay-button-primary gap-2 text-base px-8 py-3"
+              >
+                Join Relay Today
+                <ChevronRight size={20} />
+              </Link>
+              <Link
+                href="/marketplace"
+                className="relay-button-secondary gap-2 text-base px-8 py-3 hover:border-relay-accent/50 hover:bg-white/[0.08]"
+              >
+                Explore Marketplace
+                <ChevronRight size={20} />
+              </Link>
+            </div>
+
+            <p className="text-white/40 text-sm pt-4">
+              Already have an account?{" "}
+              <Link
+                href="/auth/login"
+                className="text-relay-accent hover:text-relay-accent/80 transition-colors font-medium"
+              >
+                Sign in
+              </Link>
+            </p>
+          </RevealSection>
         </div>
       </section>
 
