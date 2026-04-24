@@ -151,12 +151,12 @@ export default function Home() {
                   <p className="text-xs text-white/50 font-medium">Platform Fee</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-relay-accent">5K+</div>
-                  <p className="text-xs text-white/50 font-medium">Verified Sellers</p>
+                  <div className="text-2xl font-bold text-relay-accent">$0</div>
+                  <p className="text-xs text-white/50 font-medium">To List</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-relay-accent">Live</div>
-                  <p className="text-xs text-white/50 font-medium">Real-Time Chat</p>
+                  <div className="text-2xl font-bold text-relay-accent">Direct</div>
+                  <p className="text-xs text-white/50 font-medium">Offers & Chat</p>
                 </div>
               </div>
             </RevealSection>
@@ -571,30 +571,44 @@ export default function Home() {
               </div>
             </RevealSection>
 
-            {/* Right side - Community stats */}
+            {/* Right side - Savings calculator & early access */}
             <RevealSection className="space-y-6">
               <div className="relay-card p-8 space-y-6">
-                <div className="space-y-2">
-                  <p className="text-sm text-white/50 font-medium">Active Members</p>
-                  <p className="text-4xl font-bold text-relay-accent">50K+</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-white/50 font-medium">Your earnings on a $200 sale</p>
                 </div>
-                <div className="h-px bg-white/5" />
-                <div className="space-y-2">
-                  <p className="text-sm text-white/50 font-medium">Listings Posted</p>
-                  <p className="text-4xl font-bold text-relay-accent">250K+</p>
+                <div className="space-y-3">
+                  {[
+                    { platform: "StockX", fee: "9%", payout: "$182", color: "text-white/40" },
+                    { platform: "eBay", fee: "12%", payout: "$176", color: "text-white/40" },
+                    { platform: "GOAT", fee: "9.5%", payout: "$181", color: "text-white/40" },
+                  ].map((item) => (
+                    <div key={item.platform} className="flex items-center justify-between py-2 border-b border-white/5">
+                      <span className="text-sm text-white/50">{item.platform}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-white/30">{item.fee} fee</span>
+                        <span className={`text-sm font-semibold ${item.color}`}>{item.payout}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-sm font-semibold text-relay-accent">Relay</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-relay-accent/60">1% fee</span>
+                      <span className="text-lg font-bold text-relay-accent">$198</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="h-px bg-white/5" />
-                <div className="space-y-2">
-                  <p className="text-sm text-white/50 font-medium">Monthly Sales</p>
-                  <p className="text-4xl font-bold text-relay-accent">$5M+</p>
+                <div className="pt-2 border-t border-white/5 text-center">
+                  <p className="text-xs text-white/40">You keep <span className="text-emerald-400 font-semibold">$16–$22 more</span> per sale on Relay</p>
                 </div>
               </div>
 
               <div className="relay-card p-8 border-relay-accent/30 bg-gradient-to-br from-relay-accent/10 to-transparent">
                 <div className="space-y-4">
-                  <p className="text-sm text-relay-accent font-medium">Pro Seller Benefits</p>
+                  <p className="text-sm text-relay-accent font-medium">Early Access Perks</p>
                   <ul className="space-y-3">
-                    {["Featured listings", "Priority support", "Advanced analytics", "No fees on first 10 sales"].map(
+                    {["Founding seller badge on your profile", "Shape the platform — your feedback builds features", "First-mover visibility as the marketplace grows", "Lock in the lowest fees from day one"].map(
                       (benefit, idx) => (
                         <li key={idx} className="flex items-center gap-3 text-sm text-white/70">
                           <Check size={16} className="text-emerald-400" />
@@ -619,7 +633,7 @@ export default function Home() {
                 Ready to Start Selling?
               </h2>
               <p className="text-xl text-white/65">
-                Join thousands of resellers who are already earning more with Relay.
+                Stop giving away your margins. List your first pair and see the difference.
               </p>
             </div>
 
@@ -655,71 +669,11 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="relative border-t border-white/5 py-12">
+      <footer className="relative border-t border-white/5 py-8">
         <div className="relay-container">
-          <div className="space-y-8">
-            {/* Footer content grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-relay-text">Product</h3>
-                <ul className="space-y-2">
-                  {["Marketplace", "How it works", "Pricing", "Blog"].map((link) => (
-                    <li key={link}>
-                      <button className="text-sm text-white/50 hover:text-white/70 transition-colors">
-                        {link}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-relay-text">Company</h3>
-                <ul className="space-y-2">
-                  {["About", "Contact", "Careers", "Press"].map((link) => (
-                    <li key={link}>
-                      <button className="text-sm text-white/50 hover:text-white/70 transition-colors">
-                        {link}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-relay-text">Legal</h3>
-                <ul className="space-y-2">
-                  {["Privacy", "Terms", "Cookies", "Compliance"].map((link) => (
-                    <li key={link}>
-                      <button className="text-sm text-white/50 hover:text-white/70 transition-colors">
-                        {link}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-relay-text">Connect</h3>
-                <ul className="space-y-2">
-                  {["Twitter", "Instagram", "Discord", "Email"].map((link) => (
-                    <li key={link}>
-                      <button className="text-sm text-white/50 hover:text-white/70 transition-colors">
-                        {link}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Copyright */}
-            <div className="pt-8 border-t border-white/5">
-              <p className="text-sm text-white/40 text-center">
-                &copy; 2026 Relay. The marketplace for resellers. All rights reserved.
-              </p>
-            </div>
-          </div>
+          <p className="text-sm text-white/40 text-center">
+            &copy; 2026 Relay. All rights reserved.
+          </p>
         </div>
       </footer>
     </main>
