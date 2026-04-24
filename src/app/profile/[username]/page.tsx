@@ -23,6 +23,7 @@ interface SellerProfile {
   id: string;
   username: string;
   display_name: string;
+  full_name?: string;
   bio: string;
   avatar_url?: string;
   profile_banner_url?: string;
