@@ -208,7 +208,10 @@ export default function SellerProfilePage({ params }: { params: { username: stri
   if (!profile) return <div className="text-center text-white/40 py-12">Profile not found</div>;
 
   const theme = THEME_MAP[profile.profile_theme || 'blue'] || THEME_MAP.blue;
-  const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').toUpperCase();
+  const getInitials = (name: string) => (name || '?').split(' ').map((n) => n[0]).join('').toUpperCase();
+
+  // Fallback display name if not yet set
+  const displayName = profile.display_name || profile.full_name || profile.username || 'Seller';
 
   return (
     <div>
@@ -220,15 +223,15 @@ export default function SellerProfilePage({ params }: { params: { username: stri
         <div className="relative -mt-16 mb-12">
           <div className="h-28 w-28 rounded-full border-4 flex-shrink-0 flex items-center justify-center overflow-hidden mb-4" style={{ borderColor: theme.accent, background: 'linear-gradient(135deg, ' + theme.accentLight + ', ' + theme.accent + ')' }}>
             {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
+              <img src={profile.avatar_url} alt={displayName} className="w-full h-full object-cover" />
             ) : (
-              <span className="text-4xl font-bold text-relay-bg">{getInitials(profile.display_name)}</span>
+              <span className="text-4xl font-bold text-relay-bg">{getInitials(displayName)}</span>
             )}
           </div>
 
           <div className="mb-4">
             <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-bold">{profile.display_name}</h1>
+              <h1 className="text-2xl font-bold">{displayName}</h1>
               {profile.is_verified_seller && (
                 <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: theme.accent + '20', color: theme.accent, border: '1px solid ' + theme.cardBorder }}>Verified</span>
               )}
@@ -354,16 +357,16 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                     <div className="flex items-start gap-4">
                       <div className="h-12 w-12 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, ' + theme.accentLight + ', ' + theme.accent + ')' }}>
                         {profile.avatar_url ? (
-                          <img src={profile.avatar_url} alt={profile.display_name} className="w-full h-full object-cover" />
+                          <img src={profile.avatar_url} alt={displayName} className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-lg font-bold text-relay-bg">{getInitials(profile.display_name)}</span>
+                          <span className="text-lg font-bold text-relay-bg">{getInitials(displayName)}</span>
                         )}
                       </div>
                       <div className="flex-grow">
                         <div className="flex items-center justify-between mb-2">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h4 className="font-semibold">{profile.display_name}</h4>
+                              <h4 className="font-semibold">{displayName}</h4>
                               {post.is_custom_brand && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30">
                                   <Star size={11} className="text-purple-400 fill-purple-400" />

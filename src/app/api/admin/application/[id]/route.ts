@@ -68,10 +68,10 @@ export async function PATCH(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Get application
+    // Get application with full data
     const { data: application, error: fetchError } = await supabaseAdmin
       .from('seller_applications')
-      .select('id, user_id, status, rejection_count')
+      .select('id, user_id, status, rejection_count, ship_from_address, questionnaire_responses')
       .eq('id', applicationId)
       .single()
 
@@ -103,14 +103,39 @@ export async function PATCH(
         )
       }
 
-      // 2. Update user profile — role to seller, application status to approved
+      // 2. Get the user's current profile to check what needs initializing
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('full_name, display_name, username, ship_from_address, instagram_url')
+        .eq('id', application.user_id)
+        .single()
+
+      // Build the profile update — initialize fields that are still empty
+      const profileUpdate: Record<string, any> = {
+        role: 'seller',
+        is_verified_seller: true,
+        seller_application_status: 'approved',
+      }
+
+      // Set display_name from full_name if not already set
+      if (!existingProfile?.display_name && existingProfile?.full_name) {
+        profileUpdate.display_name = existingProfile.full_name
+      }
+
+      // Copy ship_from_address from application if profile doesn't have one
+      if (!existingProfile?.ship_from_address && application.ship_from_address) {
+        profileUpdate.ship_from_address = application.ship_from_address
+      }
+
+      // Copy instagram_url from application questionnaire if profile doesn't have one
+      const questionnaire = application.questionnaire_responses as Record<string, string> | null
+      if (!existingProfile?.instagram_url && questionnaire?.instagram_url) {
+        profileUpdate.instagram_url = questionnaire.instagram_url
+      }
+
       const { error: updateUserError } = await supabaseAdmin
         .from('profiles')
-        .update({
-          role: 'seller',
-          is_verified_seller: true,
-          seller_application_status: 'approved',
-        })
+        .update(profileUpdate)
         .eq('id', application.user_id)
 
       if (updateUserError) {
