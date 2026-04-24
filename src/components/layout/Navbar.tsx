@@ -36,8 +36,8 @@ export function Navbar() {
           <Image
             src="/branding/logo-darkmode.png"
             alt="Relay"
-            width={100}
-            height={36}
+            width={75}
+            height={27}
             className="object-contain"
             priority
           />

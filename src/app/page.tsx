@@ -69,13 +69,16 @@ function ShoeCard({ brand, model, price, image }: { brand: string; model: string
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Image placeholder */}
-      <div className={`relative h-48 overflow-hidden bg-gradient-to-br ${image} transition-transform duration-300 ${isHovered ? 'scale-105' : ''}`}>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-white/30 font-semibold text-sm">Shoe Image</div>
-        </div>
+      {/* Image */}
+      <div className="relative h-48 overflow-hidden bg-black/20">
+        <Image
+          src={image}
+          alt={`${brand} ${model}`}
+          fill
+          className={`object-cover transition-transform duration-300 ${isHovered ? 'scale-105' : ''}`}
+        />
         {isHovered && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-10">
             <Heart className="text-white" size={28} fill="white" />
           </div>
         )}
@@ -166,12 +169,16 @@ export default function Home() {
 
                 {/* Main card */}
                 <div className="relay-card p-6 space-y-4 relative">
-                  {/* Image placeholder */}
-                  <div className="h-64 rounded-2xl bg-gradient-to-br from-purple-600/20 to-blue-600/20 flex items-center justify-center overflow-hidden group">
-                    <div className="text-white/20 text-center space-y-2">
-                      <div className="text-sm font-medium">Featured Listing</div>
-                      <div className="text-xs">Premium Sneaker</div>
-                    </div>
+                  {/* Featured image */}
+                  <div className="relative h-64 rounded-2xl overflow-hidden border border-white/10 bg-black/20">
+                    <Image
+                      src="/branding/home/jordan1-chicago.png"
+                      alt="Air Jordan 1 Retro High Chicago"
+                      fill
+                      priority
+                      className="object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
                   </div>
 
                   {/* Card content */}
@@ -466,27 +473,27 @@ export default function Home() {
             {[
               {
                 brand: "Nike",
-                model: "Air Jordan 1 Retro",
+                model: "Air Jordan 1 Retro High",
                 price: 1200,
-                image: "from-purple-600/20 to-blue-600/20",
+                image: "/branding/home/jordan1-chicago.png",
+              },
+              {
+                brand: "Nike",
+                model: "SB Dunk Low",
+                price: 285,
+                image: "/branding/home/sb-dunk.png",
+              },
+              {
+                brand: "Jordan",
+                model: "4 Bred Reimagined",
+                price: 332,
+                image: "/branding/home/jordan4-bred.png",
               },
               {
                 brand: "Adidas",
-                model: "Yeezy 350 V2",
-                price: 450,
-                image: "from-pink-600/20 to-red-600/20",
-              },
-              {
-                brand: "New Balance",
-                model: "990v6",
-                price: 280,
-                image: "from-green-600/20 to-emerald-600/20",
-              },
-              {
-                brand: "Puma",
-                model: "Future Rider",
-                price: 95,
-                image: "from-cyan-600/20 to-blue-600/20",
+                model: "Yeezy Boost 350 V2",
+                price: 210,
+                image: "/branding/home/yeezy-350.png",
               },
             ].map((shoe, idx) => (
               <RevealSection key={idx} style={{ animationDelay: `${idx * 100}ms` }}>
