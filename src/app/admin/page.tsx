@@ -47,6 +47,11 @@ interface MetricsData {
   pendingReturns: number;
   flaggedSellers: number;
   bannedUsers: number;
+  // Trends (real month-over-month)
+  gmvTrend: { direction: "up" | "down"; value: string };
+  sellersTrend: { direction: "up" | "down"; value: string };
+  buyersTrend: { direction: "up" | "down"; value: string };
+  listingsTrend: { direction: "up" | "down"; value: string };
 }
 
 function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
@@ -241,6 +246,10 @@ export default function AdminPage() {
     pendingReturns: 0,
     flaggedSellers: 0,
     bannedUsers: 0,
+    gmvTrend: { direction: "up", value: "0%" },
+    sellersTrend: { direction: "up", value: "0" },
+    buyersTrend: { direction: "up", value: "0" },
+    listingsTrend: { direction: "up", value: "0" },
   });
 
   useEffect(() => {
@@ -248,15 +257,69 @@ export default function AdminPage() {
       const supabase = createClient();
 
       // Get counts
-      const [{ count: sellers }, { count: buyers }, { count: listings }, { data: ordersData }] = await Promise.all([
+      const [{ count: sellers }, { count: buyers }, { count: listings }, { data: allOrders }] = await Promise.all([
         supabase.from("profiles").select("*", { count: "exact" }).eq("role", "seller"),
         supabase.from("profiles").select("*", { count: "exact" }).eq("role", "buyer"),
         supabase.from("listings").select("*", { count: "exact" }).eq("status", "active"),
-        supabase.from("orders").select("price").eq("status", "completed"),
+        supabase.from("orders").select("price, created_at, status"),
       ]);
 
+      const completedOrders = (allOrders || []).filter((o: any) => o.status === "completed");
+
       // Calculate GMV
-      const totalGMV = ordersData?.reduce((sum: number, order: any) => sum + (order.price || 0), 0) || 0;
+      const totalGMV = completedOrders.reduce((sum: number, order: any) => sum + (order.price || 0), 0);
+
+      // Build monthly chart data (last 6 months)
+      const now = new Date();
+      const monthlyGmv: Array<{ month: string; gmv: number }> = [];
+      const monthlyOrders: Array<{ month: string; orders: number }> = [];
+
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthLabel = d.toLocaleDateString("en-US", { month: "short" });
+        const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+        const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+
+        const monthOrders = completedOrders.filter((o: any) => {
+          const oDate = new Date(o.created_at);
+          return oDate >= monthStart && oDate <= monthEnd;
+        });
+
+        const monthGmv = monthOrders.reduce((sum: number, o: any) => sum + (o.price || 0), 0);
+        monthlyGmv.push({ month: monthLabel, gmv: Math.round(monthGmv) });
+        monthlyOrders.push({ month: monthLabel, orders: monthOrders.length });
+      }
+
+      // Calculate trends (this month vs last month)
+      const thisMonthGmv = monthlyGmv[monthlyGmv.length - 1]?.gmv || 0;
+      const lastMonthGmv = monthlyGmv[monthlyGmv.length - 2]?.gmv || 0;
+      const gmvTrendPct = lastMonthGmv > 0 ? ((thisMonthGmv - lastMonthGmv) / lastMonthGmv * 100).toFixed(1) : "0";
+
+      // Calculate seller/buyer growth (joined this month vs last month)
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+      const { count: sellersThisMonth } = await supabase
+        .from("profiles").select("*", { count: "exact", head: true })
+        .eq("role", "seller").gte("created_at", thisMonthStart.toISOString());
+      const { count: sellersLastMonth } = await supabase
+        .from("profiles").select("*", { count: "exact", head: true })
+        .eq("role", "seller").gte("created_at", lastMonthStart.toISOString()).lte("created_at", lastMonthEnd.toISOString());
+
+      const { count: buyersThisMonth } = await supabase
+        .from("profiles").select("*", { count: "exact", head: true })
+        .eq("role", "buyer").gte("created_at", thisMonthStart.toISOString());
+      const { count: buyersLastMonth } = await supabase
+        .from("profiles").select("*", { count: "exact", head: true })
+        .eq("role", "buyer").gte("created_at", lastMonthStart.toISOString()).lte("created_at", lastMonthEnd.toISOString());
+
+      const { count: listingsThisMonth } = await supabase
+        .from("listings").select("*", { count: "exact", head: true })
+        .eq("status", "active").gte("created_at", thisMonthStart.toISOString());
+      const { count: listingsLastMonth } = await supabase
+        .from("listings").select("*", { count: "exact", head: true })
+        .eq("status", "active").gte("created_at", lastMonthStart.toISOString()).lte("created_at", lastMonthEnd.toISOString());
 
       // Get pending applications
       const { data: apps } = await supabase
@@ -298,10 +361,14 @@ export default function AdminPage() {
         .select("*", { count: "exact", head: true })
         .eq("is_banned", true);
 
+      const sellerDiff = (sellersThisMonth || 0) - (sellersLastMonth || 0);
+      const buyerDiff = (buyersThisMonth || 0) - (buyersLastMonth || 0);
+      const listingDiff = (listingsThisMonth || 0) - (listingsLastMonth || 0);
+
       setMetrics({
-        gmvData: [], // Chart data would require more complex aggregation
-        ordersData: [],
-        totalGMV,
+        gmvData: monthlyGmv,
+        ordersData: monthlyOrders,
+        totalGMV: totalGMV,
         activeSellers: sellers || 0,
         activeBuyers: buyers || 0,
         activeListings: listings || 0,
@@ -311,6 +378,22 @@ export default function AdminPage() {
         pendingReturns: returnsCount || 0,
         flaggedSellers: flaggedCount || 0,
         bannedUsers: bannedCount || 0,
+        gmvTrend: {
+          direction: Number(gmvTrendPct) >= 0 ? "up" : "down",
+          value: `${Number(gmvTrendPct) >= 0 ? "+" : ""}${gmvTrendPct}%`,
+        },
+        sellersTrend: {
+          direction: sellerDiff >= 0 ? "up" : "down",
+          value: `${sellerDiff >= 0 ? "+" : ""}${sellerDiff}`,
+        },
+        buyersTrend: {
+          direction: buyerDiff >= 0 ? "up" : "down",
+          value: `${buyerDiff >= 0 ? "+" : ""}${buyerDiff}`,
+        },
+        listingsTrend: {
+          direction: listingDiff >= 0 ? "up" : "down",
+          value: `${listingDiff >= 0 ? "+" : ""}${listingDiff}`,
+        },
       });
 
       setLoading(false);
@@ -402,91 +485,104 @@ export default function AdminPage() {
           <MetricCard
             icon={DollarSign}
             label="Total GMV"
-            value={`$${(metrics.totalGMV / 1000000).toFixed(1)}M`}
-            trend="up"
-            trendValue="+8.2%"
+            value={metrics.totalGMV >= 1000000 ? `$${(metrics.totalGMV / 1000000).toFixed(1)}M` : metrics.totalGMV >= 1000 ? `$${(metrics.totalGMV / 1000).toFixed(1)}K` : `$${metrics.totalGMV.toFixed(0)}`}
+            trend={metrics.gmvTrend.direction}
+            trendValue={metrics.gmvTrend.value}
           />
           <MetricCard
             icon={Users}
             label="Active Sellers"
             value={metrics.activeSellers}
-            trend="up"
-            trendValue="+12"
+            trend={metrics.sellersTrend.direction}
+            trendValue={metrics.sellersTrend.value}
           />
           <MetricCard
             icon={Users}
             label="Active Buyers"
             value={metrics.activeBuyers}
-            trend="up"
-            trendValue="+156"
+            trend={metrics.buyersTrend.direction}
+            trendValue={metrics.buyersTrend.value}
           />
           <MetricCard
             icon={Package}
             label="Active Listings"
             value={metrics.activeListings}
-            trend="up"
-            trendValue="+342"
+            trend={metrics.listingsTrend.direction}
+            trendValue={metrics.listingsTrend.value}
           />
           <MetricCard
             icon={AlertCircle}
             label="Pending Applications"
             value={metrics.pendingApplications.length}
-            trend="down"
-            trendValue="-2"
+            trend={metrics.pendingApplications.length > 0 ? "up" : "down"}
+            trendValue={`${metrics.pendingApplications.length}`}
           />
         </div>
 
-        {/* Charts Row - Placeholder for real data */}
+        {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartCard title="GMV Over Time">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={[]}>
-                <defs>
-                  <linearGradient id="gmvGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#5f8fff" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#5f8fff" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="month" stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
-                <YAxis stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(6, 7, 10, 0.8)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                  }}
-                  labelStyle={{ color: "#f5f7fb" }}
-                  formatter={(value) => `$${value.toLocaleString()}`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="gmv"
-                  stroke="#5f8fff"
-                  strokeWidth={2}
-                  fill="url(#gmvGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {metrics.gmvData.some((d) => d.gmv > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={metrics.gmvData}>
+                  <defs>
+                    <linearGradient id="gmvGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#5f8fff" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#5f8fff" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="month" stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
+                  <YAxis stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} tickFormatter={(v) => `$${v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}`} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(6, 7, 10, 0.8)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                    }}
+                    labelStyle={{ color: "#f5f7fb" }}
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, "GMV"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="gmv"
+                    stroke="#5f8fff"
+                    strokeWidth={2}
+                    fill="url(#gmvGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-white/40">
+                No completed orders yet
+              </div>
+            )}
           </ChartCard>
 
           <ChartCard title="Orders Per Month">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="month" stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
-                <YAxis stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(6, 7, 10, 0.8)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                  }}
-                  labelStyle={{ color: "#f5f7fb" }}
-                />
-                <Bar dataKey="orders" fill="#5f8fff" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {metrics.ordersData.some((d) => d.orders > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.ordersData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="month" stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} />
+                  <YAxis stroke="rgba(255,255,255,0.45)" style={{ fontSize: "12px" }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(6, 7, 10, 0.8)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                    }}
+                    labelStyle={{ color: "#f5f7fb" }}
+                    formatter={(value: number) => [value, "Orders"]}
+                  />
+                  <Bar dataKey="orders" fill="#5f8fff" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-white/40">
+                No completed orders yet
+              </div>
+            )}
           </ChartCard>
         </div>
 

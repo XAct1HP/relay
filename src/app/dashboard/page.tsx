@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, Eye, ExternalLink } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -143,6 +143,12 @@ export default function DashboardPage() {
     sellerRating: 0,
     totalSales: 0,
     avgOrderValue: 0,
+    // Trends
+    revenueTrend: { direction: "up" as "up" | "down", value: "0%" },
+    listingsTrend: { direction: "up" as "up" | "down", value: "0" },
+    ordersTrend: { direction: "up" as "up" | "down", value: "0%" },
+    ratingTrend: { direction: "up" as "up" | "down", value: "0" },
+    totalConversations: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -179,16 +185,28 @@ export default function DashboardPage() {
           .order("last_message_at", { ascending: false })
           .limit(5);
 
+        // Fetch seller's average rating from reviews
+        const { data: reviews } = await supabase
+          .from("reviews")
+          .select("rating")
+          .eq("seller_id", userId);
+
+        const avgRating = reviews && reviews.length > 0
+          ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+          : 0;
+
         // Process orders for metrics
         if (orders && orders.length > 0) {
           const completed = orders.filter((o) => o.status === "completed");
-          const thisMonth = orders.filter((o) => {
-            const orderDate = new Date(o.created_at);
-            const now = new Date();
-            return (
-              orderDate.getMonth() === now.getMonth() &&
-              orderDate.getFullYear() === now.getFullYear()
-            );
+          const now = new Date();
+          const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+          const thisMonth = orders.filter((o) => new Date(o.created_at) >= thisMonthStart);
+          const lastMonth = orders.filter((o) => {
+            const d = new Date(o.created_at);
+            return d >= lastMonthStart && d <= lastMonthEnd;
           });
 
           const totalRev = completed.reduce(
@@ -198,13 +216,52 @@ export default function DashboardPage() {
           const avgVal =
             completed.length > 0 ? totalRev / completed.length : 0;
 
+          // Revenue trend (this month earnings vs last month)
+          const thisMonthRev = completed
+            .filter((o) => new Date(o.created_at) >= thisMonthStart)
+            .reduce((sum, o) => sum + (o.seller_earnings || 0), 0);
+          const lastMonthRev = completed
+            .filter((o) => { const d = new Date(o.created_at); return d >= lastMonthStart && d <= lastMonthEnd; })
+            .reduce((sum, o) => sum + (o.seller_earnings || 0), 0);
+          const revPct = lastMonthRev > 0 ? ((thisMonthRev - lastMonthRev) / lastMonthRev * 100).toFixed(1) : "0";
+
+          // Orders trend
+          const ordersPct = lastMonth.length > 0
+            ? ((thisMonth.length - lastMonth.length) / lastMonth.length * 100).toFixed(0)
+            : "0";
+
+          // Listings trend: new listings this month
+          const { count: newListingsThisMonth } = await supabase
+            .from("listings")
+            .select("*", { count: "exact", head: true })
+            .eq("seller_id", userId)
+            .eq("status", "active")
+            .gte("created_at", thisMonthStart.toISOString());
+
           setMetrics({
             totalRevenue: totalRev,
             activeListings: listings?.length || 0,
             ordersThisMonth: thisMonth.length,
-            sellerRating: currentUser?.role === "seller" ? 4.8 : 0,
+            sellerRating: Math.round(avgRating * 10) / 10,
             totalSales: completed.length,
             avgOrderValue: avgVal,
+            revenueTrend: {
+              direction: Number(revPct) >= 0 ? "up" : "down",
+              value: `${Number(revPct) >= 0 ? "+" : ""}${revPct}%`,
+            },
+            listingsTrend: {
+              direction: "up",
+              value: `+${newListingsThisMonth || 0}`,
+            },
+            ordersTrend: {
+              direction: Number(ordersPct) >= 0 ? "up" : "down",
+              value: `${Number(ordersPct) >= 0 ? "+" : ""}${ordersPct}%`,
+            },
+            ratingTrend: {
+              direction: "up",
+              value: reviews?.length ? `${reviews.length} reviews` : "No reviews",
+            },
+            totalConversations: conversations?.length || 0,
           });
 
           // Process recent orders
@@ -332,29 +389,29 @@ export default function DashboardPage() {
             icon={DollarSign}
             label="Total Revenue"
             value={`$${metrics.totalRevenue.toFixed(0)}`}
-            trend="up"
-            trendValue="+12.5%"
+            trend={metrics.revenueTrend.direction}
+            trendValue={metrics.revenueTrend.value}
           />
           <MetricCard
             icon={Package}
             label="Active Listings"
             value={metrics.activeListings}
-            trend="up"
-            trendValue="+3"
+            trend={metrics.listingsTrend.direction}
+            trendValue={metrics.listingsTrend.value}
           />
           <MetricCard
             icon={ShoppingCart}
             label="Orders This Month"
             value={metrics.ordersThisMonth}
-            trend="up"
-            trendValue="+18%"
+            trend={metrics.ordersTrend.direction}
+            trendValue={metrics.ordersTrend.value}
           />
           <MetricCard
             icon={Star}
             label="Seller Rating"
-            value={metrics.sellerRating || "N/A"}
-            trend="up"
-            trendValue="+0.2"
+            value={metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "N/A"}
+            trend={metrics.ratingTrend.direction}
+            trendValue={metrics.ratingTrend.value}
           />
         </div>
 
@@ -528,16 +585,18 @@ export default function DashboardPage() {
 
           <div className="relay-card p-5 text-center">
             <MessageSquare className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Response Time</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">2.4h</p>
-            <p className="text-white/40 text-xs mt-2">average reply</p>
+            <p className="text-white/60 text-sm mb-2">Conversations</p>
+            <p className="text-3xl font-bold text-[#f5f7fb]">{metrics.totalConversations}</p>
+            <p className="text-white/40 text-xs mt-2">active threads</p>
           </div>
 
           <div className="relay-card p-5 text-center">
-            <Eye className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Profile Views</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">342</p>
-            <p className="text-white/40 text-xs mt-2">this week</p>
+            <Star className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
+            <p className="text-white/60 text-sm mb-2">Rating</p>
+            <p className="text-3xl font-bold text-[#f5f7fb]">
+              {metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "—"}
+            </p>
+            <p className="text-white/40 text-xs mt-2">{metrics.ratingTrend.value}</p>
           </div>
         </div>
       </div>
