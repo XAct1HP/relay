@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Send,
   Search,
@@ -463,10 +463,13 @@ function ChatArea({
 
 export default function MessagesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useAuth();
   const { markMessagesRead } = useNotificationStore();
   const [conversations, setConversations] = useState<ConversationData[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(
+    searchParams.get("conversation") || null
+  );
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);

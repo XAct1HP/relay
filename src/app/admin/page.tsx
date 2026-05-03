@@ -491,7 +491,7 @@ export default function AdminPage() {
         </div>
 
         {/* Action Items Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <ActionCard
             title="Listing Reviews"
             count={metrics.pendingListingReviews.length}

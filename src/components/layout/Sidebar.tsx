@@ -18,6 +18,7 @@ import {
   Rss,
   LogOut,
   ClipboardCheck,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -38,6 +39,7 @@ export function Sidebar() {
 
   const isActive = (path: string) => {
     if (path === "/" && pathname === "/") return true;
+    if (path === "/admin") return pathname === "/admin";
     return pathname.startsWith(path) && path !== "/";
   };
 
@@ -64,6 +66,7 @@ export function Sidebar() {
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
+    { href: "/admin/users", label: "All Users", icon: Users },
     ...sellerLinks,
   ];
 

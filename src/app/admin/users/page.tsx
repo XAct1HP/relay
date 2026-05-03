@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import useAuth from "@/hooks/useAuth";
 import {
   Search,
   MoreVertical,
@@ -10,13 +12,17 @@ import {
   Unlock,
   AlertTriangle,
   Flag,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
-interface User {
+interface UserProfile {
   id: string;
   display_name: string;
   username: string;
   email: string;
+  full_name: string;
   role: "seller" | "buyer" | "admin";
   is_banned: boolean;
   dispute_flags_count: number;
@@ -25,9 +31,14 @@ interface User {
 
 type FilterTab = "all" | "flagged" | "banned";
 type ModalState = "none" | "ban" | "unban";
-type SelectedUser = null | User;
 
-function UserRow({ user, onActionClick }: any) {
+const PAGE_SIZE = 20;
+
+function UserRow({ user, onActionClick, onMessageClick }: {
+  user: any;
+  onActionClick: (user: any, action: "ban" | "unban") => void;
+  onMessageClick: (user: any) => void;
+}) {
   const roleColor =
     user.role === "seller"
       ? "bg-blue-500/20 text-blue-300"
@@ -35,118 +46,104 @@ function UserRow({ user, onActionClick }: any) {
         ? "bg-emerald-500/20 text-emerald-300"
         : "bg-purple-500/20 text-purple-300";
 
-  const statusConfig = {
-    active: { color: "bg-green-500/20 text-green-300", label: "Active" },
-    banned: { color: "bg-red-500/20 text-red-300", label: "Banned" },
-    temp_ban: { color: "bg-orange-500/20 text-orange-300", label: "Temp Ban" },
-  };
-
-  const statusColor =
-    statusConfig[user.status as keyof typeof statusConfig]?.color ||
-    "bg-gray-500/20 text-gray-300";
-  const statusLabel =
-    statusConfig[user.status as keyof typeof statusConfig]?.label || user.status;
+  const statusColor = user.is_banned
+    ? "bg-red-500/20 text-red-300"
+    : "bg-green-500/20 text-green-300";
+  const statusLabel = user.is_banned ? "Banned" : "Active";
 
   const [showMenu, setShowMenu] = useState(false);
 
   return (
     <div
       className={`flex items-center justify-between py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors group ${
-        user.flagCount > 0 ? "bg-red-500/[0.03] border-l-2 border-l-red-500/50" : ""
+        user.dispute_flags_count > 0 ? "bg-red-500/[0.03] border-l-2 border-l-red-500/50" : ""
       }`}
     >
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5f8fff] to-[#7ca6ff] flex items-center justify-center text-sm font-semibold text-white flex-shrink-0">
-          {user.avatar}
+          {(user.display_name || user.full_name || "U").substring(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-[#f5f7fb] font-medium">{user.name}</p>
-            {user.flagCount > 0 && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-300 text-xs rounded-full font-semibold">
+            <p className="text-[#f5f7fb] font-medium truncate">{user.display_name || user.full_name || "Unknown"}</p>
+            {user.dispute_flags_count > 0 && (
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-300 text-xs rounded-full font-semibold flex-shrink-0">
                 <Flag className="w-3 h-3" />
-                {user.flagCount} dispute{user.flagCount > 1 ? "s" : ""} lost
+                {user.dispute_flags_count}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-white/40 text-sm">@{user.username}</span>
-            <span className="text-white/40 text-sm">·</span>
-            <span className="text-white/40 text-sm">{user.email}</span>
+            {user.username && <span className="text-white/40 text-sm">@{user.username}</span>}
+            {user.username && <span className="text-white/40 text-sm">·</span>}
+            <span className="text-white/40 text-sm truncate">{user.email}</span>
           </div>
         </div>
       </div>
 
       <div className="flex items-center gap-3 flex-shrink-0">
-        <div
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${roleColor}`}
-        >
-          {user.role === "seller"
-            ? "Seller"
-            : user.role === "admin"
-              ? "Admin"
-              : "Buyer"}
+        <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${roleColor}`}>
+          {user.role === "seller" ? "Seller" : user.role === "admin" ? "Admin" : "Buyer"}
         </div>
 
-        <div
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${statusColor}`}
-        >
+        <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${statusColor}`}>
           {statusLabel}
         </div>
+
+        {/* Message button */}
+        <button
+          onClick={() => onMessageClick(user)}
+          className="p-2 rounded-lg text-white/40 hover:text-[#5f8fff] hover:bg-[#5f8fff]/10 transition-colors"
+          title="Open conversation"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </button>
 
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="relay-button-secondary px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors opacity-0 group-hover:opacity-100"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 mt-2 w-48 relay-card p-0 rounded-lg border border-white/10 shadow-xl z-10 py-1">
-              <button className="w-full text-left px-4 py-2 text-white/60 hover:text-[#f5f7fb] hover:bg-white/5 transition-colors text-sm flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                View Profile
-              </button>
-
-              {user.status === "active" && (
-                <>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onActionClick(user, "ban");
-                    }}
-                    className="w-full text-left px-4 py-2 text-orange-300 hover:bg-orange-500/10 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <AlertTriangle className="w-4 h-4" />
-                    Temp Ban
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onActionClick(user, "ban");
-                    }}
-                    className="w-full text-left px-4 py-2 text-red-300 hover:bg-red-500/10 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Lock className="w-4 h-4" />
-                    Permanent Ban
-                  </button>
-                </>
-              )}
-
-              {(user.status === "banned" || user.status === "temp_ban") && (
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    onActionClick(user, "unban");
-                  }}
-                  className="w-full text-left px-4 py-2 text-green-300 hover:bg-green-500/10 transition-colors text-sm flex items-center gap-2"
-                >
-                  <Unlock className="w-4 h-4" />
-                  Unban
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 mt-2 w-48 relay-card p-0 rounded-lg border border-white/10 shadow-xl z-50 py-1">
+                <button className="w-full text-left px-4 py-2 text-white/60 hover:text-[#f5f7fb] hover:bg-white/5 transition-colors text-sm flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  View Profile
                 </button>
-              )}
-            </div>
+
+                {!user.is_banned ? (
+                  <>
+                    <button
+                      onClick={() => { setShowMenu(false); onActionClick(user, "ban"); }}
+                      className="w-full text-left px-4 py-2 text-orange-300 hover:bg-orange-500/10 transition-colors text-sm flex items-center gap-2"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      Temp Ban
+                    </button>
+                    <button
+                      onClick={() => { setShowMenu(false); onActionClick(user, "ban"); }}
+                      className="w-full text-left px-4 py-2 text-red-300 hover:bg-red-500/10 transition-colors text-sm flex items-center gap-2"
+                    >
+                      <Lock className="w-4 h-4" />
+                      Permanent Ban
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setShowMenu(false); onActionClick(user, "unban"); }}
+                    className="w-full text-left px-4 py-2 text-green-300 hover:bg-green-500/10 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <Unlock className="w-4 h-4" />
+                    Unban
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -167,22 +164,18 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="relay-card p-5 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-semibold text-[#f5f7fb] mb-4">
-          {isBan ? `Ban ${user.name}?` : `Unban ${user.name}?`}
+          {isBan ? `Ban ${user.display_name || user.full_name}?` : `Unban ${user.display_name || user.full_name}?`}
         </h2>
 
         {isBan && (
           <>
             <div className="mb-4">
-              <label className="block text-white/70 text-sm mb-2">
-                Ban Type
-              </label>
+              <label className="block text-white/70 text-sm mb-2">Ban Type</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => setBanType("temp")}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${
-                    banType === "temp"
-                      ? "bg-[#5f8fff]/20 text-[#5f8fff]"
-                      : "bg-white/5 text-white/60 hover:bg-white/10"
+                    banType === "temp" ? "bg-[#5f8fff]/20 text-[#5f8fff]" : "bg-white/5 text-white/60 hover:bg-white/10"
                   }`}
                 >
                   Temporary
@@ -190,9 +183,7 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
                 <button
                   onClick={() => setBanType("permanent")}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${
-                    banType === "permanent"
-                      ? "bg-red-500/20 text-red-300"
-                      : "bg-white/5 text-white/60 hover:bg-white/10"
+                    banType === "permanent" ? "bg-red-500/20 text-red-300" : "bg-white/5 text-white/60 hover:bg-white/10"
                   }`}
                 >
                   Permanent
@@ -202,9 +193,7 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
 
             {banType === "temp" && (
               <div className="mb-4">
-                <label className="block text-white/70 text-sm mb-2">
-                  Duration (Days)
-                </label>
+                <label className="block text-white/70 text-sm mb-2">Duration (Days)</label>
                 <input
                   type="number"
                   value={duration}
@@ -230,21 +219,16 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
 
         {!isBan && (
           <p className="text-white/60 mb-6">
-            This user will regain access to their account and can resume
-            selling/buying.
+            This user will regain access to their account and can resume selling/buying.
           </p>
         )}
 
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 relay-button-secondary">
-            Cancel
-          </button>
+          <button onClick={onCancel} className="flex-1 relay-button-secondary">Cancel</button>
           <button
             onClick={() => onConfirm(reason, duration, banType)}
             className={`flex-1 relay-button-secondary ${
-              isBan
-                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+              isBan ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"
             }`}
           >
             {isBan ? "Ban User" : "Unban User"}
@@ -256,55 +240,70 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<FilterTab>("all");
-  const [modalState, setModalState] = useState<ModalState>("none");
-  const [selectedUser, setSelectedUser] = useState<SelectedUser>(null);
-  const [selectedAction, setSelectedAction] = useState<"ban" | "unban" | null>(
-    null
+  const [filter, setFilter] = useState<FilterTab>(
+    (searchParams.get("filter") as FilterTab) || "all"
   );
-  const [users, setUsers] = useState<User[]>([]);
+  const [modalState, setModalState] = useState<ModalState>("none");
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedAction, setSelectedAction] = useState<"ban" | "unban" | null>(null);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [startingConversation, setStartingConversation] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadUsers() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+    loadUsers();
+  }, [currentPage, filter]);
 
-      setUsers(data || []);
-      setLoading(false);
+  async function loadUsers() {
+    const supabase = createClient();
+    setLoading(true);
+
+    let query = supabase
+      .from("profiles")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    if (filter === "flagged") {
+      query = query.gt("dispute_flags_count", 0);
+    } else if (filter === "banned") {
+      query = query.eq("is_banned", true);
     }
 
-    loadUsers();
-  }, []);
+    // Pagination
+    const from = (currentPage - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    query = query.range(from, to);
 
-  const flaggedCount = users.filter(
-    (u) => (u.dispute_flags_count || 0) > 0
-  ).length;
-  const bannedCount = users.filter((u) => u.is_banned).length;
+    const { data, count } = await query;
 
-  const filteredUsers = users
-    .filter((user) => {
-      // Tab filter
-      if (filter === "flagged" && !(user.dispute_flags_count > 0)) return false;
-      if (filter === "banned" && !user.is_banned) return false;
+    setUsers(data || []);
+    setTotalCount(count || 0);
+    setLoading(false);
+  }
 
-      // Search filter
-      if (searchQuery) {
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  // Client-side search filter (within current page)
+  const filteredUsers = searchQuery
+    ? users.filter((user) => {
         const q = searchQuery.toLowerCase();
         return (
           user.display_name?.toLowerCase().includes(q) ||
           user.username?.toLowerCase().includes(q) ||
-          user.email?.toLowerCase().includes(q)
+          user.email?.toLowerCase().includes(q) ||
+          user.full_name?.toLowerCase().includes(q)
         );
-      }
-      return true;
-    })
-    // Sort flagged sellers to top
-    .sort((a, b) => (b.dispute_flags_count || 0) - (a.dispute_flags_count || 0));
+      })
+    : users;
+
+  const flaggedCount = users.filter((u) => (u.dispute_flags_count || 0) > 0).length;
+  const bannedCount = users.filter((u) => u.is_banned).length;
 
   const handleActionClick = (user: any, action: "ban" | "unban") => {
     setSelectedUser(user);
@@ -312,11 +311,50 @@ export default function UsersPage() {
     setModalState(action);
   };
 
-  const handleConfirmAction = async (
-    reason: string,
-    duration: string,
-    banType: string
-  ) => {
+  const handleMessageClick = async (user: UserProfile) => {
+    if (!currentUser?.id || user.id === currentUser.id) return;
+
+    setStartingConversation(user.id);
+    const supabase = createClient();
+
+    // Check if a conversation already exists between admin and this user
+    const { data: existingConvos } = await supabase
+      .from("conversations")
+      .select("id, participant_ids")
+      .contains("participant_ids", [currentUser.id, user.id]);
+
+    // Find the direct conversation (exactly these two participants)
+    const existing = existingConvos?.find(
+      (c) =>
+        c.participant_ids.length === 2 &&
+        c.participant_ids.includes(currentUser.id) &&
+        c.participant_ids.includes(user.id)
+    );
+
+    if (existing) {
+      // Navigate to existing conversation
+      router.push(`/messages?conversation=${existing.id}`);
+    } else {
+      // Create a new conversation
+      const { data: newConvo, error } = await supabase
+        .from("conversations")
+        .insert({
+          participant_ids: [currentUser.id, user.id],
+          last_message: null,
+          last_message_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (newConvo && !error) {
+        router.push(`/messages?conversation=${newConvo.id}`);
+      }
+    }
+
+    setStartingConversation(null);
+  };
+
+  const handleConfirmAction = async (reason: string, duration: string, banType: string) => {
     if (!selectedUser) return;
 
     const supabase = createClient();
@@ -330,11 +368,8 @@ export default function UsersPage() {
         })
         .eq("id", selectedUser.id);
 
-      // Update local state
       setUsers((prev) =>
-        prev.map((u) =>
-          u.id === selectedUser.id ? { ...u, is_banned: true } : u
-        )
+        prev.map((u) => (u.id === selectedUser.id ? { ...u, is_banned: true } : u))
       );
     } else if (selectedAction === "unban") {
       await supabase
@@ -343,9 +378,7 @@ export default function UsersPage() {
         .eq("id", selectedUser.id);
 
       setUsers((prev) =>
-        prev.map((u) =>
-          u.id === selectedUser.id ? { ...u, is_banned: false } : u
-        )
+        prev.map((u) => (u.id === selectedUser.id ? { ...u, is_banned: false } : u))
       );
     }
 
@@ -354,51 +387,34 @@ export default function UsersPage() {
     setSelectedAction(null);
   };
 
+  const handleFilterChange = (newFilter: FilterTab) => {
+    setFilter(newFilter);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
       <div className="space-y-2">
         <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
-        <h1 className="relay-title">User Management</h1>
+        <h1 className="relay-title">All Users</h1>
+        <p className="text-white/50 text-sm">{totalCount} total users on the platform</p>
       </div>
-
-      {/* Flagged Alert Banner */}
-      {flaggedCount > 0 && filter !== "flagged" && (
-        <div
-          onClick={() => setFilter("flagged")}
-          className="relay-card p-4 border border-red-500/30 bg-red-500/5 cursor-pointer hover:bg-red-500/10 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/20 rounded-lg">
-              <Flag className="w-5 h-5 text-red-400" />
-            </div>
-            <div>
-              <p className="text-red-300 font-semibold">
-                {flaggedCount} seller{flaggedCount > 1 ? "s" : ""} flagged for
-                dispute losses
-              </p>
-              <p className="text-white/40 text-sm">
-                Click to review and take action
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => setFilter("all")}
+          onClick={() => handleFilterChange("all")}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === "all"
               ? "bg-[#5f8fff] text-white"
               : "bg-white/5 text-white/60 hover:bg-white/10 border border-white/10"
           }`}
         >
-          All ({users.length})
+          All
         </button>
         <button
-          onClick={() => setFilter("flagged")}
+          onClick={() => handleFilterChange("flagged")}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === "flagged"
               ? "bg-red-500 text-white"
@@ -407,18 +423,18 @@ export default function UsersPage() {
         >
           <span className="flex items-center gap-1.5">
             <Flag className="w-3.5 h-3.5" />
-            Flagged ({flaggedCount})
+            Flagged
           </span>
         </button>
         <button
-          onClick={() => setFilter("banned")}
+          onClick={() => handleFilterChange("banned")}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === "banned"
               ? "bg-[#5f8fff] text-white"
               : "bg-white/5 text-white/60 hover:bg-white/10 border border-white/10"
           }`}
         >
-          Banned ({bannedCount})
+          Banned
         </button>
       </div>
 
@@ -439,7 +455,7 @@ export default function UsersPage() {
       {/* Users Table */}
       {loading ? (
         <div className="relay-card p-12 text-center">
-          <p className="text-white/40">Loading...</p>
+          <p className="text-white/40">Loading users...</p>
         </div>
       ) : (
         <div className="relay-card overflow-hidden p-0">
@@ -448,20 +464,9 @@ export default function UsersPage() {
               filteredUsers.map((user) => (
                 <UserRow
                   key={user.id}
-                  user={{
-                    id: user.id,
-                    name: user.display_name || "Unknown",
-                    username: user.username || "",
-                    email: user.email || "",
-                    avatar: (user.display_name || "U")
-                      .substring(0, 2)
-                      .toUpperCase(),
-                    role: user.role || "buyer",
-                    status: user.is_banned ? "banned" : "active",
-                    flagCount: user.dispute_flags_count || 0,
-                    joinedDate: new Date(user.created_at).toLocaleDateString(),
-                  }}
+                  user={user}
                   onActionClick={handleActionClick}
+                  onMessageClick={handleMessageClick}
                 />
               ))
             ) : (
@@ -470,6 +475,41 @@ export default function UsersPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-white/40 text-sm">
+            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-white/60 text-sm px-3">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Conversation Starting Indicator */}
+      {startingConversation && (
+        <div className="fixed bottom-24 right-6 bg-[#5f8fff]/20 border border-[#5f8fff]/30 text-[#7ca6ff] px-4 py-2 rounded-lg text-sm">
+          Opening conversation...
         </div>
       )}
 
