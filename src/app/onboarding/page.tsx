@@ -24,7 +24,16 @@ export default function OnboardingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser, updateProfile } = useAuth();
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>(1);
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(() => {
+    if (typeof window !== 'undefined') {
+      const savedStep = localStorage.getItem('relay_onboarding_step');
+      if (savedStep) {
+        const parsed = parseInt(savedStep, 10);
+        if (parsed >= 1 && parsed <= 4) return parsed as OnboardingStep;
+      }
+    }
+    return 1;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [stripeConnected, setStripeConnected] = useState(false);
@@ -72,6 +81,13 @@ export default function OnboardingPage() {
       localStorage.setItem('relay_onboarding_form_data', JSON.stringify(formData));
     }
   }, [formData]);
+
+  // Persist current step to localStorage so user resumes where they left off
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('relay_onboarding_step', String(currentStep));
+    }
+  }, [currentStep]);
 
   // Handle return from Stripe onboarding
   useEffect(() => {
@@ -218,9 +234,10 @@ export default function OnboardingPage() {
         seller_application_status: 'pending',
       });
 
-      // Clear saved form data from localStorage after successful submission
+      // Clear saved form data and step from localStorage after successful submission
       if (typeof window !== 'undefined') {
         localStorage.removeItem('relay_onboarding_form_data');
+        localStorage.removeItem('relay_onboarding_step');
       }
 
       // Move to success screen

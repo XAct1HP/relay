@@ -38,10 +38,16 @@ export default function LoginPage() {
       // Check localStorage for intended role (from signup as seller)
       const intendedRole = typeof window !== 'undefined' ? localStorage.getItem('relay_intended_role') : null;
 
+      // Check if there's an incomplete onboarding application in progress
+      const hasIncompleteApplication = typeof window !== 'undefined' && localStorage.getItem('relay_onboarding_form_data');
+
       // Redirect based on role and onboarding status
       if (intendedRole === 'seller' && (!sellerStatus || sellerStatus === 'none')) {
         // New seller signup - needs onboarding
         if (typeof window !== 'undefined') localStorage.removeItem('relay_intended_role');
+        router.push('/onboarding');
+      } else if (hasIncompleteApplication && (!sellerStatus || sellerStatus === 'none')) {
+        // User started onboarding but didn't finish - send them back
         router.push('/onboarding');
       } else if (role === 'admin') {
         router.push('/dashboard');
