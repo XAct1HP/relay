@@ -15,6 +15,7 @@ import {
 import { CustomOfferModal } from "@/components/messages/CustomOfferModal";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
+import { useNotificationStore } from "@/store/notificationStore";
 
 interface MessageData {
   id: string;
@@ -463,11 +464,30 @@ function ChatArea({
 export default function MessagesPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { markMessagesRead } = useNotificationStore();
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Clear the notification dot when viewing messages
+  useEffect(() => {
+    markMessagesRead();
+  }, [markMessagesRead]);
+
+  // Mark specific conversation as read when selected
+  useEffect(() => {
+    if (!selectedConversation || !currentUser?.id) return;
+    const supabase = createClient();
+    supabase
+      .from('conversation_reads')
+      .upsert(
+        { user_id: currentUser.id, conversation_id: selectedConversation, last_read_at: new Date().toISOString() },
+        { onConflict: 'user_id,conversation_id' }
+      )
+      .then();
+  }, [selectedConversation, currentUser?.id]);
 
   const fetchConversations = useCallback(async () => {
     if (!currentUser?.id) return;

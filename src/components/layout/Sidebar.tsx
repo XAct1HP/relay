@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -21,11 +21,20 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
+import { useNotificationStore } from "@/store/notificationStore";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { currentUser: user, signOut } = useAuth();
   const { isCollapsed, toggleCollapsed } = useSidebarStore();
+  const { hasUnreadMessages, hasUnseenOrders, initialize } = useNotificationStore();
+
+  // Initialize notification subscriptions when user is available
+  useEffect(() => {
+    if (user?.id) {
+      initialize(user.id);
+    }
+  }, [user?.id, initialize]);
 
   const isActive = (path: string) => {
     if (path === "/" && pathname === "/") return true;
@@ -114,6 +123,9 @@ export function Sidebar() {
         {navLinks.map((link) => {
           const Icon = link.icon;
           const active = isActive(link.href);
+          const showDot =
+            (link.href === "/messages" && hasUnreadMessages) ||
+            (link.href === "/orders" && hasUnseenOrders);
 
           return (
             <Link
@@ -128,7 +140,12 @@ export function Sidebar() {
               }`}
               title={isCollapsed ? link.label : undefined}
             >
-              <Icon size={20} className="flex-shrink-0" />
+              <span className="relative flex-shrink-0">
+                <Icon size={20} />
+                {showDot && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-relay-bg" />
+                )}
+              </span>
               {!isCollapsed && (
                 <span className="text-sm font-medium">{link.label}</span>
               )}

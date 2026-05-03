@@ -6,6 +6,7 @@ import { ChevronRight, Package, Clock, CheckCircle2, AlertCircle } from "lucide-
 import { createClient } from "@/lib/supabase"
 import useAuth from "@/hooks/useAuth"
 import { Order } from "@/types"
+import { useNotificationStore } from "@/store/notificationStore"
 
 type OrderStatus =
   | "paid"
@@ -144,9 +145,52 @@ const isCancelledOrRefunded = (status: OrderStatus) =>
 
 export default function OrdersPage() {
   const { currentUser } = useAuth()
+  const { markOrdersSeen } = useNotificationStore()
   const [orders, setOrders] = useState<DisplayOrder[]>([])
   const [filter, setFilter] = useState<FilterTab>("all")
   const [loading, setLoading] = useState(true)
+
+  // Clear the notification dot when viewing orders
+  useEffect(() => {
+    markOrdersSeen()
+  }, [markOrdersSeen])
+
+  // Mark all active orders as seen for this user
+  useEffect(() => {
+    if (!currentUser?.id) return
+    const supabase = createClient()
+    const now = new Date().toISOString()
+
+    // Update buyer_last_seen_at for orders where user is buyer
+    supabase
+      .from("orders")
+      .update({ buyer_last_seen_at: now })
+      .eq("buyer_id", currentUser.id)
+      .is("buyer_last_seen_at", null)
+      .then()
+
+    supabase
+      .from("orders")
+      .update({ buyer_last_seen_at: now })
+      .eq("buyer_id", currentUser.id)
+      .lt("buyer_last_seen_at", now)
+      .then()
+
+    // Update seller_last_seen_at for orders where user is seller
+    supabase
+      .from("orders")
+      .update({ seller_last_seen_at: now })
+      .eq("seller_id", currentUser.id)
+      .is("seller_last_seen_at", null)
+      .then()
+
+    supabase
+      .from("orders")
+      .update({ seller_last_seen_at: now })
+      .eq("seller_id", currentUser.id)
+      .lt("seller_last_seen_at", now)
+      .then()
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (!currentUser?.id) {

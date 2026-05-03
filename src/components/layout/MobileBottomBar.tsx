@@ -11,10 +11,12 @@ import {
   Rss,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotificationStore } from "@/store/notificationStore";
 
 export function MobileBottomBar() {
   const pathname = usePathname();
   const { currentUser: user } = useAuth();
+  const { hasUnreadMessages, hasUnseenOrders } = useNotificationStore();
 
   const isActive = (path: string) => {
     if (path === "/" && pathname === "/") return true;
@@ -42,6 +44,9 @@ export function MobileBottomBar() {
       {filteredLinks.map((link) => {
         const Icon = link.icon;
         const active = isActive(link.href);
+        const showDot =
+          (link.href === "/messages" && hasUnreadMessages) ||
+          (link.href === "/orders" && hasUnseenOrders);
 
         return (
           <Link
@@ -53,7 +58,12 @@ export function MobileBottomBar() {
                 : "text-white/60 hover:text-relay-text"
             }`}
           >
-            <Icon size={24} />
+            <span className="relative">
+              <Icon size={24} />
+              {showDot && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-relay-bg" />
+              )}
+            </span>
             <span className="text-xs font-medium">{link.label}</span>
           </Link>
         );
