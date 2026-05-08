@@ -219,3 +219,13 @@
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
 }
+
+/* Showcase tab progress bar */
+@keyframes showcase-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.showcase-progress {
+  animation: showcase-fill 5s linear forwards;
+}
