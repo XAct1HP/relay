@@ -17,7 +17,7 @@ function useInView(ref: React.RefObject<HTMLElement | null>, options = {}) {
           observer.unobserve(entry.target);
         }
       },
-      { threshold: 0.1, ...options }
+      { threshold: 0.15, ...options }
     );
 
     if (ref.current) {
@@ -57,7 +57,8 @@ function Reveal({
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// MOCKUP COMPONENTS
+// SHOWCASE MOCKUPS (Section 2)
+// All mockups render inside a fixed-height container to prevent layout shift
 // ═══════════════════════════════════════════════════════════════════════
 
 function ProfileMockup() {
@@ -207,7 +208,9 @@ const mockupMap: Record<string, React.FC> = {
   offers: OffersMockup,
 };
 
-// ── Walkthrough screen mockups ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// WALKTHROUGH MOCKUPS (Section 4) — clickable stepper
+// ═══════════════════════════════════════════════════════════════════════
 
 function WtProfile() {
   return (
@@ -281,7 +284,7 @@ function WtListing() {
 
 function WtMessaging() {
   return (
-    <div className="flex h-full flex-col p-5">
+    <div className="space-y-3 p-5">
       <div className="flex items-center gap-3 border-b border-white/6 pb-3">
         <div className="h-8 w-8 rounded-full bg-blue-500/20" />
         <div>
@@ -289,7 +292,7 @@ function WtMessaging() {
           <p className="text-[9px] text-white/25">Online</p>
         </div>
       </div>
-      <div className="mt-4 flex-1 space-y-3">
+      <div className="space-y-3">
         <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-white/6 bg-white/[0.03] px-3 py-2">
           <p className="text-[11px] text-white/45">Is the Jordan 4 still available?</p>
         </div>
@@ -304,6 +307,9 @@ function WtMessaging() {
             <span className="rounded-md bg-blue-500/25 px-2 py-1 text-[9px] font-medium text-blue-200">Accept</span>
           </div>
         </div>
+      </div>
+      <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
+        <span className="text-xs text-white/25">Type a message...</span>
       </div>
     </div>
   );
@@ -365,45 +371,33 @@ const wtScreenMap: Record<string, React.FC> = {
 // ═══════════════════════════════════════════════════════════════════════
 
 export default function Home() {
-  // ── Showcase state ──
+  // ── Showcase state (Section 2) ──
   const [showcaseIndex, setShowcaseIndex] = useState(0);
   const [showcasePaused, setShowcasePaused] = useState(false);
+  // Reset animation key when index changes so progress bar restarts
+  const [showcaseKey, setShowcaseKey] = useState(0);
 
   useEffect(() => {
     if (showcasePaused) return;
     const id = setInterval(() => {
       setShowcaseIndex((prev) => (prev + 1) % showcaseScreens.length);
+      setShowcaseKey((k) => k + 1);
     }, 5000);
     return () => clearInterval(id);
   }, [showcasePaused]);
 
+  const handleShowcaseClick = (i: number) => {
+    setShowcaseIndex(i);
+    setShowcaseKey((k) => k + 1);
+  };
+
   const ActiveShowcaseMockup = mockupMap[showcaseScreens[showcaseIndex].mockup];
 
-  // ── Walkthrough sticky scroll state ──
-  const walkthroughRef = useRef<HTMLDivElement>(null);
+  // ── Walkthrough state (Section 4) — now click-driven ──
   const [activeWtStep, setActiveWtStep] = useState(0);
-
-  useEffect(() => {
-    const section = walkthroughRef.current;
-    if (!section) return;
-
-    const handleScroll = () => {
-      const rect = section.getBoundingClientRect();
-      const sectionHeight = section.offsetHeight;
-      const viewportHeight = window.innerHeight;
-      const scrolled = -rect.top / (sectionHeight - viewportHeight);
-      const clamped = Math.max(0, Math.min(1, scrolled));
-      setActiveWtStep(Math.min(walkthroughSteps.length - 1, Math.floor(clamped * walkthroughSteps.length)));
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
   const ActiveWtScreen = wtScreenMap[walkthroughSteps[activeWtStep].screen];
 
-  // ── Fee counter animation ──
+  // ── Fee counter animation (Section 3) ──
   const feeRef = useRef<HTMLSpanElement>(null);
   const [feeVisible, setFeeVisible] = useState(false);
 
@@ -518,7 +512,7 @@ export default function Home() {
                 {showcaseScreens.map((screen, i) => (
                   <button
                     key={screen.label}
-                    onClick={() => setShowcaseIndex(i)}
+                    onClick={() => handleShowcaseClick(i)}
                     className={`w-full rounded-2xl border p-6 text-left transition-all duration-300 ${
                       i === showcaseIndex
                         ? "border-white/12 bg-white/[0.05]"
@@ -542,14 +536,14 @@ export default function Home() {
                     </p>
                     {i === showcaseIndex && !showcasePaused && (
                       <div className="mt-4 h-[2px] w-full overflow-hidden rounded-full bg-white/10">
-                        <div className="showcase-progress h-full rounded-full bg-blue-400/60" />
+                        <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/60" />
                       </div>
                     )}
                   </button>
                 ))}
               </div>
 
-              {/* Device frame */}
+              {/* Device frame — FIXED HEIGHT to prevent layout shift */}
               <div className="relative">
                 <div className="absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-blue-500/[0.08] via-transparent to-violet-500/[0.06] blur-2xl" />
                 <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 shadow-2xl backdrop-blur-xl">
@@ -561,8 +555,11 @@ export default function Home() {
                       <span className="text-[10px] text-white/20">relay.app</span>
                     </div>
                   </div>
-                  <div className="min-h-[380px] rounded-xl border border-white/6 bg-[#0a0c10] p-4 transition-all duration-500">
-                    <ActiveShowcaseMockup />
+                  {/* Fixed height wrapper — prevents page shift between mockups */}
+                  <div className="h-[420px] overflow-hidden rounded-xl border border-white/6 bg-[#0a0c10] p-4">
+                    <div className="h-full overflow-y-auto relay-scrollbar">
+                      <ActiveShowcaseMockup />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -651,78 +648,84 @@ export default function Home() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 4 · PLATFORM WALKTHROUGH (Sticky scroll)
+          SECTION 4 · HOW IT WORKS (Clickable stepper — no sticky scroll)
       ───────────────────────────────────────────────────────────── */}
-      <section
-        ref={walkthroughRef}
-        className="relative border-t border-white/[0.06]"
-        style={{ minHeight: `${(walkthroughSteps.length + 1) * 100}vh` }}
-      >
-        <div className="sticky top-0 flex min-h-screen items-center">
-          <div className="relay-container py-16">
-            <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
-              {/* Phone frame */}
-              <div className="relative order-2 lg:order-1">
+      <section className="relative overflow-hidden border-t border-white/[0.06]">
+        <div className="relay-container py-24 md:py-32">
+          <Reveal>
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl md:text-6xl">
+                Four steps to your first sale.
+              </h2>
+            </div>
+          </Reveal>
+
+          <Reveal className="mt-16">
+            <div className="grid items-start gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+              {/* Steps — clickable */}
+              <div className="space-y-2">
+                {walkthroughSteps.map((step, i) => (
+                  <button
+                    key={step.number}
+                    onClick={() => setActiveWtStep(i)}
+                    className={`w-full rounded-2xl border p-5 text-left transition-all duration-500 ${
+                      i === activeWtStep ? "border-white/12 bg-white/[0.04]" : "border-transparent hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-500 ${
+                        i === activeWtStep
+                          ? "bg-blue-500/20 text-blue-300"
+                          : i < activeWtStep
+                            ? "bg-white/8 text-white/40"
+                            : "bg-white/[0.04] text-white/20"
+                      }`}>
+                        {step.number}
+                      </span>
+                      <div>
+                        <h3 className={`text-lg font-semibold transition-colors duration-500 ${
+                          i === activeWtStep ? "text-white" : "text-white/30"
+                        }`}>
+                          {step.title}
+                        </h3>
+                        <div className={`overflow-hidden transition-all duration-500 ${
+                          i === activeWtStep ? "mt-1.5 max-h-24 opacity-100" : "max-h-0 opacity-0"
+                        }`}>
+                          <p className="text-sm leading-relaxed text-white/50">
+                            {step.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Phone frame — FIXED HEIGHT */}
+              <div className="relative">
                 <div className="absolute -inset-8 rounded-[3rem] bg-gradient-to-b from-blue-500/[0.05] via-transparent to-violet-500/[0.04] blur-3xl" />
                 <div className="relative mx-auto w-full max-w-sm">
                   <div className="overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0a0c10] shadow-2xl">
+                    {/* Notch */}
                     <div className="flex justify-center pb-1 pt-3">
                       <div className="h-5 w-24 rounded-full bg-black" />
                     </div>
-                    <div className="min-h-[480px] transition-all duration-500">
-                      <ActiveWtScreen />
+                    {/* Fixed height screen */}
+                    <div className="h-[480px] overflow-hidden">
+                      <div className="h-full overflow-y-auto relay-scrollbar">
+                        <ActiveWtScreen />
+                      </div>
                     </div>
+                    {/* Home indicator */}
                     <div className="flex justify-center py-3">
                       <div className="h-1 w-28 rounded-full bg-white/15" />
                     </div>
                   </div>
                 </div>
               </div>
-
-              {/* Steps */}
-              <div className="order-1 lg:order-2">
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
-                <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">
-                  Four steps to your first sale.
-                </h2>
-
-                <div className="mt-10 space-y-2">
-                  {walkthroughSteps.map((step, i) => (
-                    <div
-                      key={step.number}
-                      className={`rounded-2xl border p-5 transition-all duration-500 ${
-                        i === activeWtStep ? "border-white/12 bg-white/[0.04]" : "border-transparent"
-                      }`}
-                    >
-                      <div className="flex items-start gap-4">
-                        <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-500 ${
-                          i === activeWtStep
-                            ? "bg-blue-500/20 text-blue-300"
-                            : i < activeWtStep
-                              ? "bg-white/8 text-white/40"
-                              : "bg-white/[0.04] text-white/20"
-                        }`}>
-                          {step.number}
-                        </span>
-                        <div>
-                          <h3 className={`text-lg font-semibold transition-colors duration-500 ${
-                            i === activeWtStep ? "text-white" : "text-white/30"
-                          }`}>
-                            {step.title}
-                          </h3>
-                          <p className={`mt-1.5 text-sm leading-relaxed transition-all duration-500 ${
-                            i === activeWtStep ? "max-h-20 text-white/50 opacity-100" : "max-h-0 overflow-hidden opacity-0"
-                          }`}>
-                            {step.description}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
