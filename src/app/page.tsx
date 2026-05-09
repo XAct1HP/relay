@@ -148,14 +148,8 @@ export default function Home() {
         <div className="relay-container relative z-10 py-24 md:py-32">
           <Reveal>
             <div className="mx-auto max-w-4xl text-center">
-              {/* Eyebrow */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 backdrop-blur-sm">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(124,166,255,0.6)]" />
-                <span className="text-xs font-medium tracking-wide text-white/60">The reseller platform</span>
-              </div>
-
               {/* Headline */}
-              <h1 className="mt-8 text-5xl font-bold leading-[1.0] tracking-[-0.04em] sm:text-7xl md:text-8xl">
+              <h1 className="text-5xl font-bold leading-[1.0] tracking-[-0.04em] sm:text-7xl md:text-8xl">
                 <span className="relay-text-gradient">Where resellers</span>
                 <br />
                 <span className="text-white">build empires.</span>
@@ -209,8 +203,8 @@ export default function Home() {
       ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-t border-white/[0.06]">
         <div className="flex flex-col lg:flex-row">
-          {/* Left — image at 75% width, height driven by aspect ratio */}
-          <div className="relative w-full lg:w-[75%]">
+          {/* Left — image fills its container edge-to-edge */}
+          <div className="relative w-full lg:w-[70%]">
             <div className="relative aspect-[3/2] w-full">
               {showcaseScreens.map((screen, i) => (
                 <div
@@ -223,8 +217,8 @@ export default function Home() {
                     src={screen.image}
                     alt={screen.alt}
                     fill
-                    className="object-contain"
-                    sizes="(max-width: 1024px) 100vw, 75vw"
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 70vw"
                     priority={i === 0}
                   />
                 </div>
@@ -232,8 +226,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right — text panel fills remaining 25% */}
-          <div className="flex flex-col justify-center bg-[var(--relay-bg)] px-8 py-12 sm:px-10 md:px-12 lg:w-[25%] lg:py-16">
+          {/* Right — text panel on pure black */}
+          <div className="flex flex-col justify-center bg-black px-8 py-12 sm:px-10 md:px-12 lg:w-[30%] lg:py-16">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-blue-300/60">
               {showcaseScreens[showcaseIndex].label}
             </p>
@@ -368,59 +362,57 @@ export default function Home() {
       <section className="relative overflow-hidden border-t border-white/[0.06]">
         <div className="relay-container py-24 md:py-32">
           <Reveal>
-            <div className="mx-auto max-w-3xl text-center">
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl md:text-6xl">
-                Four steps to your first sale.
-              </h2>
-            </div>
-          </Reveal>
+            <div className="grid items-center gap-10 lg:grid-cols-[1fr_auto] lg:gap-16">
+              {/* Left — title, subtitle, and clickable steps */}
+              <div className="flex flex-col justify-center">
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
+                <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl md:text-5xl">
+                  Four steps to your first sale.
+                </h2>
 
-          <Reveal className="mt-16">
-            <div className="grid items-start gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
-              {/* Steps — clickable */}
-              <div className="space-y-2">
-                {walkthroughSteps.map((step, i) => (
-                  <button
-                    key={step.number}
-                    onClick={() => setActiveWtStep(i)}
-                    className={`w-full rounded-2xl border p-5 text-left transition-all duration-500 ${
-                      i === activeWtStep ? "border-white/12 bg-white/[0.04]" : "border-transparent hover:bg-white/[0.02]"
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-500 ${
-                        i === activeWtStep
-                          ? "bg-blue-500/20 text-blue-300"
-                          : i < activeWtStep
-                            ? "bg-white/8 text-white/40"
-                            : "bg-white/[0.04] text-white/20"
-                      }`}>
-                        {step.number}
-                      </span>
-                      <div>
-                        <h3 className={`text-lg font-semibold transition-colors duration-500 ${
-                          i === activeWtStep ? "text-white" : "text-white/30"
+                <div className="mt-10 space-y-2">
+                  {walkthroughSteps.map((step, i) => (
+                    <button
+                      key={step.number}
+                      onClick={() => setActiveWtStep(i)}
+                      className={`w-full rounded-2xl border p-5 text-left transition-all duration-500 ${
+                        i === activeWtStep ? "border-white/12 bg-white/[0.04]" : "border-transparent hover:bg-white/[0.02]"
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-500 ${
+                          i === activeWtStep
+                            ? "bg-blue-500/20 text-blue-300"
+                            : i < activeWtStep
+                              ? "bg-white/8 text-white/40"
+                              : "bg-white/[0.04] text-white/20"
                         }`}>
-                          {step.title}
-                        </h3>
-                        <div className={`overflow-hidden transition-all duration-500 ${
-                          i === activeWtStep ? "mt-1.5 max-h-24 opacity-100" : "max-h-0 opacity-0"
-                        }`}>
-                          <p className="text-sm leading-relaxed text-white/50">
-                            {step.description}
-                          </p>
+                          {step.number}
+                        </span>
+                        <div>
+                          <h3 className={`text-lg font-semibold transition-colors duration-500 ${
+                            i === activeWtStep ? "text-white" : "text-white/30"
+                          }`}>
+                            {step.title}
+                          </h3>
+                          <div className={`overflow-hidden transition-all duration-500 ${
+                            i === activeWtStep ? "mt-1.5 max-h-24 opacity-100" : "max-h-0 opacity-0"
+                          }`}>
+                            <p className="text-sm leading-relaxed text-white/50">
+                              {step.description}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Phone frame — FIXED HEIGHT */}
+              {/* Right — phone frame */}
               <div className="relative">
                 <div className="absolute -inset-8 rounded-[3rem] bg-gradient-to-b from-blue-500/[0.05] via-transparent to-violet-500/[0.04] blur-3xl" />
-                <div className="relative mx-auto w-full max-w-sm">
+                <div className="relative mx-auto w-full max-w-xs">
                   <div className="overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0a0c10] shadow-2xl">
                     {/* Notch */}
                     <div className="flex justify-center pb-1 pt-3">
@@ -434,12 +426,8 @@ export default function Home() {
                         alt={walkthroughSteps[activeWtStep].alt}
                         fill
                         className="object-contain"
-                        sizes="(max-width: 1024px) 80vw, 384px"
+                        sizes="(max-width: 1024px) 80vw, 320px"
                       />
-                    </div>
-                    {/* Home indicator */}
-                    <div className="flex justify-center py-3">
-                      <div className="h-1 w-28 rounded-full bg-white/15" />
                     </div>
                   </div>
                 </div>
