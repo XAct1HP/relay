@@ -412,7 +412,7 @@ export default function Home() {
               {/* Right — phone frame */}
               <div className="relative">
                 <div className="absolute -inset-8 rounded-[3rem] bg-gradient-to-b from-blue-500/[0.05] via-transparent to-violet-500/[0.04] blur-3xl" />
-                <div className="relative mx-auto w-full max-w-xs">
+                <div className="relative mx-auto w-full max-w-sm">
                   <div className="overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0a0c10] shadow-2xl">
                     {/* Notch */}
                     <div className="flex justify-center pb-1 pt-3">
