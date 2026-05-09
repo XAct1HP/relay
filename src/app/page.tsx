@@ -214,90 +214,98 @@ export default function Home() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2 · VISUAL SHOWCASE
+          SECTION 2 · VISUAL SHOWCASE (full-bleed background image)
       ───────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-t border-white/[0.06]">
-        <div className="relay-container py-24 md:py-32">
-          <Reveal>
-            <div className="mx-auto max-w-3xl text-center">
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">The platform</p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl md:text-6xl">
-                Everything a reseller needs.
-                <span className="block text-white/50">Nothing they don&apos;t.</span>
-              </h2>
-            </div>
-          </Reveal>
+      <section
+        className="relative min-h-[80vh] overflow-hidden border-t border-white/[0.06]"
+        onMouseEnter={() => setShowcasePaused(true)}
+        onMouseLeave={() => setShowcasePaused(false)}
+      >
+        {/* Background image — fills entire section */}
+        {showcaseScreens.map((screen, i) => (
+          <div
+            key={screen.label}
+            className={`absolute inset-0 transition-opacity duration-700 ${
+              i === showcaseIndex ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <Image
+              src={screen.image}
+              alt={screen.alt}
+              fill
+              className="object-cover"
+              sizes="100vw"
+              priority={i === 0}
+            />
+          </div>
+        ))}
 
-          <Reveal className="mt-16">
-            <div
-              className="grid items-start gap-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16"
-              onMouseEnter={() => setShowcasePaused(true)}
-              onMouseLeave={() => setShowcasePaused(false)}
-            >
-              {/* Tabs */}
-              <div className="space-y-4">
-                {showcaseScreens.map((screen, i) => (
-                  <button
-                    key={screen.label}
-                    onClick={() => handleShowcaseClick(i)}
-                    className={`w-full rounded-2xl border p-6 text-left transition-all duration-300 ${
-                      i === showcaseIndex
-                        ? "border-white/12 bg-white/[0.05]"
-                        : "border-transparent bg-transparent hover:bg-white/[0.02]"
-                    }`}
-                  >
-                    <p className={`text-xs font-medium uppercase tracking-[0.15em] transition-colors ${
-                      i === showcaseIndex ? "text-blue-300/80" : "text-white/25"
-                    }`}>
-                      {screen.label}
-                    </p>
-                    <h3 className={`mt-2 text-xl font-semibold tracking-tight transition-colors sm:text-2xl ${
-                      i === showcaseIndex ? "text-white" : "text-white/40"
-                    }`}>
-                      {screen.title}
-                    </h3>
-                    <p className={`mt-2 text-sm leading-relaxed transition-colors ${
-                      i === showcaseIndex ? "text-white/55" : "text-white/20"
-                    }`}>
-                      {screen.description}
-                    </p>
-                    {i === showcaseIndex && !showcasePaused && (
-                      <div className="mt-4 h-[2px] w-full overflow-hidden rounded-full bg-white/10">
-                        <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/60" />
+        {/* Dark gradient overlay so text is always readable */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#06070a] via-[#06070a]/70 to-[#06070a]/40" />
+
+        {/* Content layer */}
+        <div className="relative z-10 flex min-h-[80vh] items-end">
+          <div className="relay-container w-full pb-16 pt-32 md:pb-24 md:pt-40">
+            <Reveal>
+              <div className="flex items-center gap-4 sm:gap-6">
+                {/* Left arrow */}
+                <button
+                  onClick={() => handleShowcaseClick((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
+                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 backdrop-blur-sm transition hover:bg-white/10 hover:text-white"
+                  aria-label="Previous"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                {/* Text box */}
+                <div className="flex-1 rounded-2xl border border-white/10 bg-black/50 px-6 py-6 backdrop-blur-xl sm:px-8 sm:py-8">
+                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/70">
+                    {showcaseScreens[showcaseIndex].label}
+                  </p>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl md:text-4xl">
+                    {showcaseScreens[showcaseIndex].title}
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/55 sm:text-base">
+                    {showcaseScreens[showcaseIndex].description}
+                  </p>
+
+                  {/* Progress bar + dots */}
+                  <div className="mt-6 flex items-center gap-4">
+                    <div className="flex gap-2">
+                      {showcaseScreens.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleShowcaseClick(i)}
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            i === showcaseIndex ? "w-8 bg-blue-400/70" : "w-2 bg-white/20 hover:bg-white/35"
+                          }`}
+                          aria-label={`Go to slide ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                    {!showcasePaused && (
+                      <div className="h-[2px] flex-1 overflow-hidden rounded-full bg-white/10">
+                        <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/50" />
                       </div>
                     )}
-                  </button>
-                ))}
-              </div>
-
-              {/* Device frame — FIXED HEIGHT to prevent layout shift */}
-              <div className="relative">
-                <div className="absolute -inset-4 rounded-[2.5rem] bg-gradient-to-br from-blue-500/[0.08] via-transparent to-violet-500/[0.06] blur-2xl" />
-                <div className="relative rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 shadow-2xl backdrop-blur-xl">
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="h-2.5 w-2.5 rounded-full bg-white/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-white/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-white/10" />
-                    <div className="ml-3 flex-1 rounded-md bg-white/[0.04] px-3 py-1">
-                      <span className="text-[10px] text-white/20">relay.app</span>
-                    </div>
-                  </div>
-                  {/* Screenshot container — aspect ratio matches images (~3:2) */}
-                  <div className="relative aspect-[3/2] w-full overflow-hidden rounded-xl border border-white/6 bg-[#0a0c10]">
-                    <Image
-                      key={showcaseIndex}
-                      src={showcaseScreens[showcaseIndex].image}
-                      alt={showcaseScreens[showcaseIndex].alt}
-                      fill
-                      className="object-contain"
-                      sizes="(max-width: 1024px) 100vw, 55vw"
-                      priority={showcaseIndex === 0}
-                    />
                   </div>
                 </div>
+
+                {/* Right arrow */}
+                <button
+                  onClick={() => handleShowcaseClick((showcaseIndex + 1) % showcaseScreens.length)}
+                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 backdrop-blur-sm transition hover:bg-white/10 hover:text-white"
+                  aria-label="Next"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+          </div>
         </div>
       </section>
 
