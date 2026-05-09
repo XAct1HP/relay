@@ -101,25 +101,8 @@ const walkthroughSteps = [
 // ═══════════════════════════════════════════════════════════════════════
 
 export default function Home() {
-  // ── Showcase state (Section 2) ──
+  // ── Showcase state (Section 2) — manual only ──
   const [showcaseIndex, setShowcaseIndex] = useState(0);
-  const [showcasePaused, setShowcasePaused] = useState(false);
-  // Reset animation key when index changes so progress bar restarts
-  const [showcaseKey, setShowcaseKey] = useState(0);
-
-  useEffect(() => {
-    if (showcasePaused) return;
-    const id = setInterval(() => {
-      setShowcaseIndex((prev) => (prev + 1) % showcaseScreens.length);
-      setShowcaseKey((k) => k + 1);
-    }, 5000);
-    return () => clearInterval(id);
-  }, [showcasePaused]);
-
-  const handleShowcaseClick = (i: number) => {
-    setShowcaseIndex(i);
-    setShowcaseKey((k) => k + 1);
-  };
 
   // ── Walkthrough state (Section 4) — now click-driven ──
   const [activeWtStep, setActiveWtStep] = useState(0);
@@ -214,94 +197,78 @@ export default function Home() {
       </section>
 
       {/* ─────────────────────────────────────────────────────────────
-          SECTION 2 · VISUAL SHOWCASE (full-bleed background image)
+          SECTION 2 · VISUAL SHOWCASE (image left, text right)
       ───────────────────────────────────────────────────────────── */}
-      <section
-        className="relative overflow-hidden border-t border-white/[0.06]"
-        onMouseEnter={() => setShowcasePaused(true)}
-        onMouseLeave={() => setShowcasePaused(false)}
-      >
-        {/* Image container — capped height so it doesn't dominate the screen */}
-        <div className="relative aspect-[3/2] w-full max-h-[90vh]">
-          {/* Light overlay to soften the image */}
-          <div className="absolute inset-0 z-[1] bg-black/15" />
-
-          {/* Background images — crossfade */}
-          {showcaseScreens.map((screen, i) => (
-            <div
-              key={screen.label}
-              className={`absolute inset-0 transition-opacity duration-700 ${
-                i === showcaseIndex ? "opacity-100" : "opacity-0"
-              }`}
-            >
-              <Image
-                src={screen.image}
-                alt={screen.alt}
-                fill
-                className="object-cover"
-                sizes="100vw"
-                priority={i === 0}
-              />
-            </div>
-          ))}
-
-          {/* Text box + arrows — offset from bottom-right toward center */}
-          <div className="absolute bottom-[15%] right-[8%] z-10 flex items-center gap-3 sm:right-[10%] md:bottom-[18%] md:right-[12%]">
-            {/* Left arrow */}
-            <button
-              onClick={() => handleShowcaseClick((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 backdrop-blur-md transition hover:bg-black/80 hover:text-white"
-              aria-label="Previous"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            {/* Text card */}
-            <div className="max-w-md rounded-xl border border-white/10 bg-black/65 px-6 py-5 backdrop-blur-md sm:px-7 sm:py-6">
-              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-blue-300/70">
-                {showcaseScreens[showcaseIndex].label}
-              </p>
-              <h3 className="mt-2 text-lg font-semibold tracking-tight text-white sm:text-xl md:text-2xl">
-                {showcaseScreens[showcaseIndex].title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-white/55">
-                {showcaseScreens[showcaseIndex].description}
-              </p>
-
-              {/* Dots + progress */}
-              <div className="mt-4 flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  {showcaseScreens.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleShowcaseClick(i)}
-                      className={`h-1.5 rounded-full transition-all duration-300 ${
-                        i === showcaseIndex ? "w-6 bg-blue-400/70" : "w-1.5 bg-white/25 hover:bg-white/40"
-                      }`}
-                      aria-label={`Go to slide ${i + 1}`}
-                    />
-                  ))}
-                </div>
-                {!showcasePaused && (
-                  <div className="h-[2px] flex-1 overflow-hidden rounded-full bg-white/10">
-                    <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/50" />
-                  </div>
-                )}
+      <section className="relative overflow-hidden border-t border-white/[0.06]">
+        <div className="grid lg:grid-cols-[1.4fr_1fr]">
+          {/* Left — image, shows full screenshot */}
+          <div className="relative aspect-[3/2] w-full max-h-[90vh] bg-[#0a0c10]">
+            {showcaseScreens.map((screen, i) => (
+              <div
+                key={screen.label}
+                className={`absolute inset-0 transition-opacity duration-700 ${
+                  i === showcaseIndex ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                <Image
+                  src={screen.image}
+                  alt={screen.alt}
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 1024px) 100vw, 58vw"
+                  priority={i === 0}
+                />
               </div>
-            </div>
+            ))}
+          </div>
 
-            {/* Right arrow */}
-            <button
-              onClick={() => handleShowcaseClick((showcaseIndex + 1) % showcaseScreens.length)}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 backdrop-blur-md transition hover:bg-black/80 hover:text-white"
-              aria-label="Next"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+          {/* Right — text panel on solid black background */}
+          <div className="flex flex-col justify-center bg-[var(--relay-bg)] px-8 py-12 sm:px-10 md:px-12 lg:py-16">
+            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-blue-300/60">
+              {showcaseScreens[showcaseIndex].label}
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl md:text-4xl">
+              {showcaseScreens[showcaseIndex].title}
+            </h2>
+            <p className="mt-4 text-sm leading-relaxed text-white/50 sm:text-base">
+              {showcaseScreens[showcaseIndex].description}
+            </p>
+
+            {/* Navigation — arrows + dots */}
+            <div className="mt-8 flex items-center gap-4">
+              <button
+                onClick={() => setShowcaseIndex((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                aria-label="Previous"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              <div className="flex gap-2">
+                {showcaseScreens.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setShowcaseIndex(i)}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      i === showcaseIndex ? "w-8 bg-blue-400/70" : "w-2 bg-white/20 hover:bg-white/35"
+                    }`}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowcaseIndex((showcaseIndex + 1) % showcaseScreens.length)}
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                aria-label="Next"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>
