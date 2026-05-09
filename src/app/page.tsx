@@ -360,7 +360,21 @@ export default function Home() {
           SECTION 4 · HOW IT WORKS (Clickable stepper — no sticky scroll)
       ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-t border-white/[0.06]">
-        <div className="relay-container py-24 md:py-32">
+        {/* Background image */}
+        <div className="absolute inset-0">
+          <Image
+            src="/branding/home/howitworks-background.png"
+            alt=""
+            fill
+            className="object-cover"
+            sizes="100vw"
+          />
+        </div>
+
+        {/* Dark vignette overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,7,10,0.55)_0%,rgba(6,7,10,0.85)_60%,rgba(6,7,10,0.95)_100%)]" />
+
+        <div className="relay-container relative z-10 py-24 md:py-32">
           <Reveal>
             <div className="grid items-center gap-10 lg:grid-cols-[1fr_340px] lg:gap-16">
               {/* Left — title, subtitle, and clickable steps */}
