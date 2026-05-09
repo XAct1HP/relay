@@ -222,7 +222,10 @@ export default function Home() {
         onMouseLeave={() => setShowcasePaused(false)}
       >
         {/* Image container — capped height so it doesn't dominate the screen */}
-        <div className="relative aspect-[3/2] w-full max-h-[70vh]">
+        <div className="relative aspect-[3/2] w-full max-h-[90vh]">
+          {/* Light overlay to soften the image */}
+          <div className="absolute inset-0 z-[1] bg-black/15" />
+
           {/* Background images — crossfade */}
           {showcaseScreens.map((screen, i) => (
             <div
