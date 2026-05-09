@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { ChevronRight } from "lucide-react";
 
@@ -57,314 +58,43 @@ function Reveal({
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SHOWCASE MOCKUPS (Section 2)
-// All mockups render inside a fixed-height container to prevent layout shift
+// SHOWCASE DATA (Section 2) — real screenshots in browser frame
 // ═══════════════════════════════════════════════════════════════════════
-
-function ProfileMockup() {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 text-lg font-bold text-white">
-          V
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-white">@vaultedsoles</p>
-          <p className="text-xs text-white/40">Ann Arbor, MI</p>
-        </div>
-        <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-medium text-emerald-300">
-          Trusted
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { val: "4.9", label: "rating" },
-          { val: "128", label: "sales" },
-          { val: "2h", label: "response" },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-center">
-            <div className="text-base font-semibold text-white">{s.val}</div>
-            <div className="text-[10px] text-white/35">{s.label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="aspect-square rounded-xl border border-white/6 bg-gradient-to-br from-white/[0.04] to-white/[0.01]" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MarketplaceMockup() {
-  const items = [
-    { name: "Nike SB Dunk Low", size: "10", price: "$285" },
-    { name: "Jordan 4 Bred", size: "11", price: "$332" },
-    { name: "Yeezy 350 V2", size: "9.5", price: "$210" },
-    { name: "New Balance 9060", size: "10", price: "$168" },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
-        <svg className="h-4 w-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <span className="text-sm text-white/25">Search sneakers...</span>
-      </div>
-      <div className="flex gap-2">
-        {["All", "Nike", "Jordan", "Yeezy"].map((f) => (
-          <span
-            key={f}
-            className={`rounded-full px-3 py-1.5 text-[10px] font-medium ${
-              f === "All" ? "bg-white/10 text-white/70" : "border border-white/8 text-white/35"
-            }`}
-          >
-            {f}
-          </span>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div key={item.name} className="flex items-center justify-between rounded-xl border border-white/6 bg-white/[0.02] px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg border border-white/8 bg-gradient-to-br from-white/[0.05] to-transparent" />
-              <div>
-                <p className="text-xs font-medium text-white/80">{item.name}</p>
-                <p className="text-[10px] text-white/30">Size {item.size}</p>
-              </div>
-            </div>
-            <span className="text-sm font-semibold text-white">{item.price}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function OffersMockup() {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.03] p-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-300">M</div>
-        <div className="flex-1">
-          <p className="text-xs font-medium text-white/80">@mikebuys</p>
-          <p className="text-[10px] text-white/30">Re: Jordan 4 Bred</p>
-        </div>
-        <span className="h-2 w-2 rounded-full bg-blue-400" />
-      </div>
-      <div className="space-y-2 px-1">
-        <div className="ml-auto max-w-[75%] rounded-2xl rounded-br-md bg-white/[0.06] px-4 py-2.5">
-          <p className="text-xs text-white/60">Listed at $332 for the Breds</p>
-        </div>
-        <div className="max-w-[75%] rounded-2xl rounded-bl-md border border-white/8 bg-white/[0.03] px-4 py-2.5">
-          <p className="text-xs text-white/60">Would you take $310?</p>
-        </div>
-      </div>
-      <div className="rounded-xl border border-blue-400/20 bg-blue-500/[0.08] p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-blue-300/60">Offer received</p>
-            <p className="mt-1 text-xl font-bold text-white">$310</p>
-          </div>
-          <div className="flex gap-2">
-            <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-medium text-white/60">Counter</span>
-            <span className="rounded-lg bg-blue-500/30 px-3 py-1.5 text-[10px] font-semibold text-blue-200">Accept</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
-        <span className="text-xs text-white/25">Type a message...</span>
-      </div>
-    </div>
-  );
-}
 
 const showcaseScreens = [
   {
     label: "Your storefront",
     title: "A profile that works for you",
     description: "Public seller profiles with ratings, trust signals, and a curated sneaker grid. Buyers know who they are dealing with before they ever message you.",
-    mockup: "profile",
+    image: "/branding/home/showcase-profile.png",
+    alt: "Relay seller profile page",
   },
   {
     label: "Marketplace",
     title: "List it. Get discovered.",
     description: "Your listings live in a marketplace built for sneakers. Search, filter by size, brand, condition. Buyers find you without leaving the platform.",
-    mockup: "marketplace",
+    image: "/branding/home/showcase-marketplace.png",
+    alt: "Relay marketplace browse page",
   },
   {
     label: "Deals",
     title: "Negotiate and close, natively",
     description: "Messaging, offers, and counter-offers all happen inside Relay. No switching apps. No awkward DMs. Just clean deal flow from interest to checkout.",
-    mockup: "offers",
+    image: "/branding/home/showcase-offers.png",
+    alt: "Relay messaging and offers",
   },
 ];
 
-const mockupMap: Record<string, React.FC> = {
-  profile: ProfileMockup,
-  marketplace: MarketplaceMockup,
-  offers: OffersMockup,
-};
-
 // ═══════════════════════════════════════════════════════════════════════
-// WALKTHROUGH MOCKUPS (Section 4) — clickable stepper
+// WALKTHROUGH DATA (Section 4) — clickable stepper with real screenshots
 // ═══════════════════════════════════════════════════════════════════════
-
-function WtProfile() {
-  return (
-    <div className="space-y-4 p-5">
-      <div className="flex items-center gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/20 text-xl font-bold text-white">R</div>
-        <div>
-          <div className="h-3 w-32 rounded bg-white/15" />
-          <div className="mt-2 h-2 w-20 rounded bg-white/8" />
-        </div>
-      </div>
-      <div className="h-px bg-white/6" />
-      <div className="grid grid-cols-3 gap-3">
-        {["Rating", "Sales", "Response"].map((l) => (
-          <div key={l} className="rounded-xl bg-white/[0.04] p-3 text-center">
-            <div className="mx-auto h-5 w-8 rounded bg-white/12" />
-            <p className="mt-1.5 text-[9px] text-white/25">{l}</p>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-2">
-        <div className="h-2.5 w-full rounded bg-white/6" />
-        <div className="h-2.5 w-3/4 rounded bg-white/4" />
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="aspect-square rounded-lg bg-white/[0.04]" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function WtListing() {
-  return (
-    <div className="space-y-4 p-5">
-      <div className="flex aspect-[16/9] items-center justify-center rounded-xl border border-dashed border-white/12 bg-white/[0.02]">
-        <div className="text-center">
-          <svg className="mx-auto h-6 w-6 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          <p className="mt-1 text-[10px] text-white/20">Add photos</p>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2.5">
-          <p className="text-[9px] text-white/25">Sneaker name</p>
-          <p className="mt-0.5 text-xs text-white/50">Jordan 4 Bred Reimagined</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2.5">
-            <p className="text-[9px] text-white/25">Size</p>
-            <p className="mt-0.5 text-xs text-white/50">11</p>
-          </div>
-          <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2.5">
-            <p className="text-[9px] text-white/25">Price</p>
-            <p className="mt-0.5 text-xs text-white/50">$332</p>
-          </div>
-        </div>
-        <div className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2.5">
-          <p className="text-[9px] text-white/25">Condition</p>
-          <p className="mt-0.5 text-xs text-white/50">Deadstock</p>
-        </div>
-      </div>
-      <div className="w-full rounded-lg bg-white/10 py-2.5 text-center text-xs font-medium text-white/60">
-        Publish listing
-      </div>
-    </div>
-  );
-}
-
-function WtMessaging() {
-  return (
-    <div className="space-y-3 p-5">
-      <div className="flex items-center gap-3 border-b border-white/6 pb-3">
-        <div className="h-8 w-8 rounded-full bg-blue-500/20" />
-        <div>
-          <p className="text-xs font-medium text-white/70">@mikebuys</p>
-          <p className="text-[9px] text-white/25">Online</p>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-white/6 bg-white/[0.03] px-3 py-2">
-          <p className="text-[11px] text-white/45">Is the Jordan 4 still available?</p>
-        </div>
-        <div className="ml-auto max-w-[70%] rounded-2xl rounded-br-sm bg-white/[0.06] px-3 py-2">
-          <p className="text-[11px] text-white/55">Yes! Size 11 DS. Want to make an offer?</p>
-        </div>
-        <div className="rounded-xl border border-blue-400/15 bg-blue-500/[0.06] p-3">
-          <p className="text-[9px] uppercase tracking-wider text-blue-300/50">Offer</p>
-          <p className="mt-1 text-base font-bold text-white">$310</p>
-          <div className="mt-2 flex gap-2">
-            <span className="rounded-md bg-white/8 px-2 py-1 text-[9px] text-white/40">Decline</span>
-            <span className="rounded-md bg-blue-500/25 px-2 py-1 text-[9px] font-medium text-blue-200">Accept</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3">
-        <span className="text-xs text-white/25">Type a message...</span>
-      </div>
-    </div>
-  );
-}
-
-function WtCheckout() {
-  return (
-    <div className="space-y-4 p-5">
-      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-        <p className="text-[9px] uppercase tracking-wider text-white/25">Order summary</p>
-        <div className="mt-3 flex items-center gap-3">
-          <div className="h-12 w-12 rounded-lg bg-white/[0.05]" />
-          <div className="flex-1">
-            <p className="text-xs font-medium text-white/70">Jordan 4 Bred</p>
-            <p className="text-[10px] text-white/30">Size 11 - Deadstock</p>
-          </div>
-          <p className="text-sm font-semibold text-white">$310</p>
-        </div>
-      </div>
-      <div className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-        <p className="text-[9px] uppercase tracking-wider text-white/25">Shipping</p>
-        <div className="mt-3 flex items-center justify-between">
-          <p className="text-xs text-white/50">USPS Priority</p>
-          <p className="text-xs text-white/40">$12.50</p>
-        </div>
-      </div>
-      <div className="flex items-center justify-between border-t border-white/8 pt-4">
-        <p className="text-xs text-white/40">Total</p>
-        <p className="text-lg font-bold text-white">$322.50</p>
-      </div>
-      <div className="w-full rounded-xl bg-white py-3 text-center text-xs font-semibold text-black">
-        Complete purchase
-      </div>
-      <div className="flex items-center justify-center gap-4">
-        {["Buyer protection", "Tracked shipping", "Secure payment"].map((b) => (
-          <span key={b} className="text-[9px] text-white/20">{b}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 const walkthroughSteps = [
-  { number: "01", title: "Create your profile", description: "Set up your seller identity in minutes. Choose a username, add a bio, and start building a presence that buyers trust.", screen: "profile" },
-  { number: "02", title: "List your inventory", description: "Upload photos, set your price, and go live. Your listings appear in the marketplace and on your public profile automatically.", screen: "listing" },
-  { number: "03", title: "Connect with buyers", description: "Buyers message you, send offers, and negotiate directly. No middleman. Every deal flows through one conversation thread.", screen: "messaging" },
-  { number: "04", title: "Close and ship", description: "Accept the deal, generate a shipping label, and get paid. Relay handles checkout, tracking, and payout so you can focus on the next sale.", screen: "checkout" },
+  { number: "01", title: "Create your profile", description: "Set up your seller identity in minutes. Choose a username, add a bio, and start building a presence that buyers trust.", image: "/branding/home/walkthrough-profile.png", alt: "Relay profile creation screen" },
+  { number: "02", title: "List your inventory", description: "Upload photos, set your price, and go live. Your listings appear in the marketplace and on your public profile automatically.", image: "/branding/home/walkthrough-listing.png", alt: "Relay listing creation screen" },
+  { number: "03", title: "Connect with buyers", description: "Buyers message you, send offers, and negotiate directly. No middleman. Every deal flows through one conversation thread.", image: "/branding/home/walkthrough-messaging.png", alt: "Relay messaging screen" },
+  { number: "04", title: "Close and ship", description: "Accept the deal, generate a shipping label, and get paid. Relay handles checkout, tracking, and payout so you can focus on the next sale.", image: "/branding/home/walkthrough-checkout.png", alt: "Relay checkout screen" },
 ];
-
-const wtScreenMap: Record<string, React.FC> = {
-  profile: WtProfile,
-  listing: WtListing,
-  messaging: WtMessaging,
-  checkout: WtCheckout,
-};
 
 // ═══════════════════════════════════════════════════════════════════════
 // PAGE
@@ -391,11 +121,8 @@ export default function Home() {
     setShowcaseKey((k) => k + 1);
   };
 
-  const ActiveShowcaseMockup = mockupMap[showcaseScreens[showcaseIndex].mockup];
-
   // ── Walkthrough state (Section 4) — now click-driven ──
   const [activeWtStep, setActiveWtStep] = useState(0);
-  const ActiveWtScreen = wtScreenMap[walkthroughSteps[activeWtStep].screen];
 
   // ── Fee counter animation (Section 3) ──
   const feeRef = useRef<HTMLSpanElement>(null);
@@ -555,11 +282,17 @@ export default function Home() {
                       <span className="text-[10px] text-white/20">relay.app</span>
                     </div>
                   </div>
-                  {/* Fixed height wrapper — prevents page shift between mockups */}
-                  <div className="h-[420px] overflow-hidden rounded-xl border border-white/6 bg-[#0a0c10] p-4">
-                    <div className="h-full overflow-y-auto relay-scrollbar">
-                      <ActiveShowcaseMockup />
-                    </div>
+                  {/* Screenshot container — aspect ratio matches images (~3:2) */}
+                  <div className="relative aspect-[3/2] w-full overflow-hidden rounded-xl border border-white/6 bg-[#0a0c10]">
+                    <Image
+                      key={showcaseIndex}
+                      src={showcaseScreens[showcaseIndex].image}
+                      alt={showcaseScreens[showcaseIndex].alt}
+                      fill
+                      className="object-contain"
+                      sizes="(max-width: 1024px) 100vw, 55vw"
+                      priority={showcaseIndex === 0}
+                    />
                   </div>
                 </div>
               </div>
@@ -711,11 +444,16 @@ export default function Home() {
                     <div className="flex justify-center pb-1 pt-3">
                       <div className="h-5 w-24 rounded-full bg-black" />
                     </div>
-                    {/* Fixed height screen */}
-                    <div className="h-[480px] overflow-hidden">
-                      <div className="h-full overflow-y-auto relay-scrollbar">
-                        <ActiveWtScreen />
-                      </div>
+                    {/* Screenshot — phone aspect ratio */}
+                    <div className="relative aspect-[853/1844] w-full overflow-hidden">
+                      <Image
+                        key={activeWtStep}
+                        src={walkthroughSteps[activeWtStep].image}
+                        alt={walkthroughSteps[activeWtStep].alt}
+                        fill
+                        className="object-contain"
+                        sizes="(max-width: 1024px) 80vw, 384px"
+                      />
                     </div>
                     {/* Home indicator */}
                     <div className="flex justify-center py-3">
