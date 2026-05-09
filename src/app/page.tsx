@@ -221,8 +221,8 @@ export default function Home() {
         onMouseEnter={() => setShowcasePaused(true)}
         onMouseLeave={() => setShowcasePaused(false)}
       >
-        {/* Aspect-ratio container — matches showcase image proportions */}
-        <div className="relative aspect-[3/2] w-full">
+        {/* Image container — capped height so it doesn't dominate the screen */}
+        <div className="relative aspect-[3/2] w-full max-h-[70vh]">
           {/* Background images — crossfade */}
           {showcaseScreens.map((screen, i) => (
             <div
@@ -242,8 +242,8 @@ export default function Home() {
             </div>
           ))}
 
-          {/* Text box + arrows — bottom-right corner */}
-          <div className="absolute bottom-4 right-4 z-10 flex items-center gap-3 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8">
+          {/* Text box + arrows — offset from bottom-right toward center */}
+          <div className="absolute bottom-[15%] right-[8%] z-10 flex items-center gap-3 sm:right-[10%] md:bottom-[18%] md:right-[12%]">
             {/* Left arrow */}
             <button
               onClick={() => handleShowcaseClick((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
@@ -256,19 +256,19 @@ export default function Home() {
             </button>
 
             {/* Text card */}
-            <div className="max-w-sm rounded-xl border border-white/10 bg-black/65 px-5 py-4 backdrop-blur-md">
-              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-blue-300/70">
+            <div className="max-w-md rounded-xl border border-white/10 bg-black/65 px-6 py-5 backdrop-blur-md sm:px-7 sm:py-6">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-blue-300/70">
                 {showcaseScreens[showcaseIndex].label}
               </p>
-              <h3 className="mt-1.5 text-base font-semibold tracking-tight text-white sm:text-lg">
+              <h3 className="mt-2 text-lg font-semibold tracking-tight text-white sm:text-xl md:text-2xl">
                 {showcaseScreens[showcaseIndex].title}
               </h3>
-              <p className="mt-1 text-xs leading-relaxed text-white/50 sm:text-sm">
+              <p className="mt-2 text-sm leading-relaxed text-white/55">
                 {showcaseScreens[showcaseIndex].description}
               </p>
 
               {/* Dots + progress */}
-              <div className="mt-3 flex items-center gap-3">
+              <div className="mt-4 flex items-center gap-3">
                 <div className="flex gap-1.5">
                   {showcaseScreens.map((_, i) => (
                     <button
