@@ -130,12 +130,20 @@ export default function Home() {
           SECTION 1 · HERO
       ───────────────────────────────────────────────────────────── */}
       <section className="relative flex min-h-[100dvh] items-center overflow-hidden pt-[72px]">
-        {/* Ambient glow */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/[0.07] blur-[120px]" />
-          <div className="absolute right-[15%] top-[20%] h-[400px] w-[400px] rounded-full bg-violet-500/[0.05] blur-[100px]" />
-          <div className="absolute bottom-[10%] left-[20%] h-[300px] w-[300px] rounded-full bg-cyan-400/[0.04] blur-[80px]" />
+        {/* Background image */}
+        <div className="absolute inset-0">
+          <Image
+            src="/branding/home/hero-background.jpg"
+            alt=""
+            fill
+            className="object-cover"
+            sizes="100vw"
+            priority
+          />
         </div>
+
+        {/* Heavy dark gradient overlay — darker at edges */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,7,10,0.55)_0%,rgba(6,7,10,0.85)_60%,rgba(6,7,10,0.95)_100%)]" />
 
         <div className="relay-container relative z-10 py-24 md:py-32">
           <Reveal>
@@ -200,30 +208,32 @@ export default function Home() {
           SECTION 2 · VISUAL SHOWCASE (image left, text right)
       ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-t border-white/[0.06]">
-        <div className="grid lg:grid-cols-[1.4fr_1fr]">
-          {/* Left — image, shows full screenshot */}
-          <div className="relative aspect-[3/2] w-full max-h-[90vh] bg-[#0a0c10]">
-            {showcaseScreens.map((screen, i) => (
-              <div
-                key={screen.label}
-                className={`absolute inset-0 transition-opacity duration-700 ${
-                  i === showcaseIndex ? "opacity-100" : "opacity-0"
-                }`}
-              >
-                <Image
-                  src={screen.image}
-                  alt={screen.alt}
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 1024px) 100vw, 58vw"
-                  priority={i === 0}
-                />
-              </div>
-            ))}
+        <div className="flex flex-col lg:flex-row">
+          {/* Left — image at 75% width, height driven by aspect ratio */}
+          <div className="relative w-full lg:w-[75%]">
+            <div className="relative aspect-[3/2] w-full">
+              {showcaseScreens.map((screen, i) => (
+                <div
+                  key={screen.label}
+                  className={`absolute inset-0 transition-opacity duration-700 ${
+                    i === showcaseIndex ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <Image
+                    src={screen.image}
+                    alt={screen.alt}
+                    fill
+                    className="object-contain"
+                    sizes="(max-width: 1024px) 100vw, 75vw"
+                    priority={i === 0}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Right — text panel on solid black background */}
-          <div className="flex flex-col justify-center bg-[var(--relay-bg)] px-8 py-12 sm:px-10 md:px-12 lg:py-16">
+          {/* Right — text panel fills remaining 25% */}
+          <div className="flex flex-col justify-center bg-[var(--relay-bg)] px-8 py-12 sm:px-10 md:px-12 lg:w-[25%] lg:py-16">
             <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-blue-300/60">
               {showcaseScreens[showcaseIndex].label}
             </p>
