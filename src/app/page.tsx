@@ -217,94 +217,88 @@ export default function Home() {
           SECTION 2 · VISUAL SHOWCASE (full-bleed background image)
       ───────────────────────────────────────────────────────────── */}
       <section
-        className="relative min-h-[80vh] overflow-hidden border-t border-white/[0.06]"
+        className="relative overflow-hidden border-t border-white/[0.06]"
         onMouseEnter={() => setShowcasePaused(true)}
         onMouseLeave={() => setShowcasePaused(false)}
       >
-        {/* Background image — fills entire section */}
-        {showcaseScreens.map((screen, i) => (
-          <div
-            key={screen.label}
-            className={`absolute inset-0 transition-opacity duration-700 ${
-              i === showcaseIndex ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            <Image
-              src={screen.image}
-              alt={screen.alt}
-              fill
-              className="object-cover"
-              sizes="100vw"
-              priority={i === 0}
-            />
-          </div>
-        ))}
+        {/* Aspect-ratio container — matches showcase image proportions */}
+        <div className="relative aspect-[3/2] w-full">
+          {/* Background images — crossfade */}
+          {showcaseScreens.map((screen, i) => (
+            <div
+              key={screen.label}
+              className={`absolute inset-0 transition-opacity duration-700 ${
+                i === showcaseIndex ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <Image
+                src={screen.image}
+                alt={screen.alt}
+                fill
+                className="object-cover"
+                sizes="100vw"
+                priority={i === 0}
+              />
+            </div>
+          ))}
 
-        {/* Dark gradient overlay so text is always readable */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#06070a] via-[#06070a]/70 to-[#06070a]/40" />
+          {/* Text box + arrows — bottom-right corner */}
+          <div className="absolute bottom-4 right-4 z-10 flex items-center gap-3 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8">
+            {/* Left arrow */}
+            <button
+              onClick={() => handleShowcaseClick((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 backdrop-blur-md transition hover:bg-black/80 hover:text-white"
+              aria-label="Previous"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
 
-        {/* Content layer */}
-        <div className="relative z-10 flex min-h-[80vh] items-end">
-          <div className="relay-container w-full pb-16 pt-32 md:pb-24 md:pt-40">
-            <Reveal>
-              <div className="flex items-center gap-4 sm:gap-6">
-                {/* Left arrow */}
-                <button
-                  onClick={() => handleShowcaseClick((showcaseIndex - 1 + showcaseScreens.length) % showcaseScreens.length)}
-                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 backdrop-blur-sm transition hover:bg-white/10 hover:text-white"
-                  aria-label="Previous"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
+            {/* Text card */}
+            <div className="max-w-sm rounded-xl border border-white/10 bg-black/65 px-5 py-4 backdrop-blur-md">
+              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-blue-300/70">
+                {showcaseScreens[showcaseIndex].label}
+              </p>
+              <h3 className="mt-1.5 text-base font-semibold tracking-tight text-white sm:text-lg">
+                {showcaseScreens[showcaseIndex].title}
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-white/50 sm:text-sm">
+                {showcaseScreens[showcaseIndex].description}
+              </p>
 
-                {/* Text box */}
-                <div className="flex-1 rounded-2xl border border-white/10 bg-black/50 px-6 py-6 backdrop-blur-xl sm:px-8 sm:py-8">
-                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/70">
-                    {showcaseScreens[showcaseIndex].label}
-                  </p>
-                  <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl md:text-4xl">
-                    {showcaseScreens[showcaseIndex].title}
-                  </h2>
-                  <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/55 sm:text-base">
-                    {showcaseScreens[showcaseIndex].description}
-                  </p>
-
-                  {/* Progress bar + dots */}
-                  <div className="mt-6 flex items-center gap-4">
-                    <div className="flex gap-2">
-                      {showcaseScreens.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleShowcaseClick(i)}
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            i === showcaseIndex ? "w-8 bg-blue-400/70" : "w-2 bg-white/20 hover:bg-white/35"
-                          }`}
-                          aria-label={`Go to slide ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                    {!showcasePaused && (
-                      <div className="h-[2px] flex-1 overflow-hidden rounded-full bg-white/10">
-                        <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/50" />
-                      </div>
-                    )}
-                  </div>
+              {/* Dots + progress */}
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex gap-1.5">
+                  {showcaseScreens.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleShowcaseClick(i)}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        i === showcaseIndex ? "w-6 bg-blue-400/70" : "w-1.5 bg-white/25 hover:bg-white/40"
+                      }`}
+                      aria-label={`Go to slide ${i + 1}`}
+                    />
+                  ))}
                 </div>
-
-                {/* Right arrow */}
-                <button
-                  onClick={() => handleShowcaseClick((showcaseIndex + 1) % showcaseScreens.length)}
-                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 backdrop-blur-sm transition hover:bg-white/10 hover:text-white"
-                  aria-label="Next"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                {!showcasePaused && (
+                  <div className="h-[2px] flex-1 overflow-hidden rounded-full bg-white/10">
+                    <div key={showcaseKey} className="showcase-progress h-full rounded-full bg-blue-400/50" />
+                  </div>
+                )}
               </div>
-            </Reveal>
+            </div>
+
+            {/* Right arrow */}
+            <button
+              onClick={() => handleShowcaseClick((showcaseIndex + 1) % showcaseScreens.length)}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 backdrop-blur-md transition hover:bg-black/80 hover:text-white"
+              aria-label="Next"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </div>
       </section>
