@@ -362,7 +362,7 @@ export default function Home() {
       <section className="relative overflow-hidden border-t border-white/[0.06]">
         <div className="relay-container py-24 md:py-32">
           <Reveal>
-            <div className="grid items-center gap-10 lg:grid-cols-[1fr_380px] lg:gap-16">
+            <div className="grid items-center gap-10 lg:grid-cols-[1fr_340px] lg:gap-16">
               {/* Left — title, subtitle, and clickable steps */}
               <div className="flex flex-col justify-center">
                 <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
