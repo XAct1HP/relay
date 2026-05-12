@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Content Area */}
-        <div className="pt-[72px] lg:pt-8 pb-[80px] lg:pb-8 px-6 md:px-10">
+        <div className="pt-[72px] lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10">
           {children}
         </div>
       </main>

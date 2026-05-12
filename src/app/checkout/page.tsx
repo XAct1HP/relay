@@ -340,7 +340,7 @@ export default function CheckoutPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-relay-muted mb-1">City</label>
               <input
@@ -364,7 +364,7 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-relay-muted mb-1">ZIP Code</label>
               <input

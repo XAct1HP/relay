@@ -92,7 +92,7 @@ function OfferCard({
   const isDeclined = offer.status === "declined";
 
   return (
-    <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-sm">
+    <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-[calc(100vw-4rem)] sm:max-w-sm">
       <div className="flex items-center gap-2 mb-3">
         <Tag className="w-4 h-4 text-relay-accent" />
         <span className="text-xs font-semibold text-relay-accent uppercase tracking-wider">
@@ -184,12 +184,14 @@ function ConversationList({
   conversations,
   selectedId,
   onSelect,
+  onMobileSelect,
   searchQuery,
   onSearchChange,
 }: {
   conversations: ConversationData[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onMobileSelect: (id: string) => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
 }) {
@@ -199,7 +201,7 @@ function ConversationList({
   });
 
   return (
-    <div className="w-80 border-r border-white/10 flex flex-col max-h-[calc(100vh-200px)]">
+    <div className="w-full lg:w-80 lg:border-r border-white/10 flex flex-col max-h-[calc(100vh-200px)]">
       <div className="p-4 border-b border-white/10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -220,7 +222,10 @@ function ConversationList({
           return (
             <button
               key={conv.id}
-              onClick={() => onSelect(conv.id)}
+              onClick={() => {
+                onSelect(conv.id);
+                onMobileSelect(conv.id);
+              }}
               className={`w-full p-4 border-b border-white/5 hover:bg-white/[0.03] transition-colors text-left ${
                 selectedId === conv.id ? "bg-white/[0.06]" : ""
               }`}
@@ -855,20 +860,29 @@ export default function MessagesPage() {
             conversations={conversations}
             selectedId={selectedConversation}
             onSelect={setSelectedConversation}
+            onMobileSelect={(id) => {
+              // On mobile, navigate to the dedicated conversation page
+              if (window.innerWidth < 1024) {
+                router.push(`/messages/${id}`);
+              }
+            }}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
           />
 
-          <ChatArea
-            conversation={currentConv}
-            currentUserId={currentUser?.id || ""}
-            isSeller={isSeller}
-            onShowOfferModal={() => setShowOfferModal(true)}
-            onSendMessage={handleSendMessage}
-            onAcceptOffer={handleAcceptOffer}
-            onDeclineOffer={handleDeclineOffer}
-            onGoToCheckout={handleGoToCheckout}
-          />
+          {/* Chat area: hidden on mobile, visible on lg+ */}
+          <div className="hidden lg:flex flex-1">
+            <ChatArea
+              conversation={currentConv}
+              currentUserId={currentUser?.id || ""}
+              isSeller={isSeller}
+              onShowOfferModal={() => setShowOfferModal(true)}
+              onSendMessage={handleSendMessage}
+              onAcceptOffer={handleAcceptOffer}
+              onDeclineOffer={handleDeclineOffer}
+              onGoToCheckout={handleGoToCheckout}
+            />
+          </div>
         </div>
       ) : (
         <div className="relay-card p-12 text-center">

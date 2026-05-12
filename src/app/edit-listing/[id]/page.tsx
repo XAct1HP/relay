@@ -252,7 +252,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
             const fees = sizeRow.price ? calculateFees(sizeRow.price) : null;
             return (
               <div key={sizeRow.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
                     <div className="relative">

@@ -196,7 +196,7 @@ export default function DisputeDetailPage() {
               <p className="text-white/60 text-sm mb-1">Product</p>
               <p className="text-[#f5f7fb] font-medium">{dispute.listing?.model || 'Unknown Product'}</p>
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <div>
                 <p className="text-white/60 text-sm mb-1">Buyer</p>
                 <p className="text-[#f5f7fb] font-medium">{dispute.buyer?.full_name || dispute.buyer?.display_name || 'Unknown'}</p>
@@ -247,7 +247,7 @@ export default function DisputeDetailPage() {
                     <ImageIcon className="w-4 h-4" />
                     Buyer&apos;s Evidence ({dispute.dispute_evidence_buyer.length} photo{dispute.dispute_evidence_buyer.length > 1 ? 's' : ''})
                   </p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {dispute.dispute_evidence_buyer.map((url: string, i: number) => (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
                         <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer">
@@ -289,7 +289,7 @@ export default function DisputeDetailPage() {
                         <ImageIcon className="w-4 h-4" />
                         Seller&apos;s Evidence ({dispute.dispute_evidence_seller.length} photo{dispute.dispute_evidence_seller.length > 1 ? 's' : ''})
                       </p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {dispute.dispute_evidence_seller.map((url: string, i: number) => (
                           <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
                             <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-[#5f8fff]/50 transition-colors cursor-pointer">
@@ -337,7 +337,7 @@ export default function DisputeDetailPage() {
                   <Camera className="w-4 h-4" />
                   Authentication Photos ({dispute.auth_photos.length} photo{dispute.auth_photos.length > 1 ? 's' : ''})
                 </p>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {dispute.auth_photos.map((url: string, i: number) => (
                     <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
                       <div className="aspect-square rounded-lg bg-white/5 border border-white/10 overflow-hidden hover:border-purple-500/50 transition-colors cursor-pointer">
@@ -407,7 +407,7 @@ export default function DisputeDetailPage() {
                 />
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => setModalState("buyer")}
                   className="flex-1 relay-button-secondary bg-green-500/20 text-green-400 hover:bg-green-500/30"

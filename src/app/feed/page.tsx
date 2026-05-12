@@ -255,18 +255,18 @@ export default function FeedPage() {
       {posts.length > 0 ? (
         <div className="space-y-5">
           {posts.map((post) => (
-            <div key={post.id} className="relay-card p-5 hover:bg-white/[0.06] transition-colors relative overflow-visible">
+            <div key={post.id} className="relay-card p-4 sm:p-5 hover:bg-white/[0.06] transition-colors relative overflow-visible">
               {/* Like Badge — floats top-right corner */}
               <button
                 onClick={() => toggleLike(post.id)}
-                className={`absolute -top-4 -right-4 z-10 flex flex-col items-center justify-center w-16 h-16 rounded-2xl shadow-xl backdrop-blur-md border-2 transition-all duration-200 cursor-pointer group ${
+                className={`absolute -top-3 -right-3 sm:-top-4 sm:-right-4 z-10 flex flex-col items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl shadow-xl backdrop-blur-md border-2 transition-all duration-200 cursor-pointer group ${
                   post.isLiked
                     ? "bg-relay-accent/20 border-relay-accent/50 text-relay-accent shadow-relay-accent/25"
                     : "bg-relay-bg/90 border-white/15 text-white/50 hover:text-relay-accent hover:border-relay-accent/40 hover:shadow-relay-accent/15"
                 }`}
               >
-                <Heart size={22} className={`transition-transform duration-200 group-hover:scale-125 ${post.isLiked ? "fill-relay-accent" : ""}`} />
-                <span className="text-sm font-bold mt-0.5 leading-none">{post.likes}</span>
+                <Heart size={18} className={`sm:w-[22px] sm:h-[22px] transition-transform duration-200 group-hover:scale-125 ${post.isLiked ? "fill-relay-accent" : ""}`} />
+                <span className="text-xs sm:text-sm font-bold mt-0.5 leading-none">{post.likes}</span>
               </button>
 
               <div className="flex items-center gap-3 mb-4">
@@ -316,7 +316,7 @@ export default function FeedPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {post.images.map((img, idx) => (
                         <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-white/5">
                           <img src={img} alt={"Post " + (idx + 1)} className="w-full h-full object-cover" />

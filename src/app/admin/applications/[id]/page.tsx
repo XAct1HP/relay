@@ -533,7 +533,7 @@ export default function ApplicationDetailPage() {
 
       {/* Action Buttons */}
       {app.status === "pending" && (
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           <button
             onClick={() => setModalState("approve")}
             className="relay-button-accent flex items-center justify-center"

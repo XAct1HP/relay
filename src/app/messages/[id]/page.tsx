@@ -77,7 +77,7 @@ function OfferCard({
   const isDeclined = offer.status === "declined";
 
   return (
-    <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-sm">
+    <div className="bg-relay-accent-strong/15 border border-relay-accent-strong/30 rounded-2xl p-4 max-w-[calc(100vw-4rem)] sm:max-w-sm">
       <div className="flex items-center gap-2 mb-3">
         <Tag className="w-4 h-4 text-relay-accent" />
         <span className="text-xs font-semibold text-relay-accent uppercase tracking-wider">
@@ -481,7 +481,7 @@ export default function ConversationPage() {
         </div>
 
         {/* Messages */}
-        <div className="relay-card p-6 space-y-4 max-h-[500px] overflow-y-auto relay-scrollbar">
+        <div className="relay-card p-3 sm:p-6 space-y-4 max-h-[calc(100vh-380px)] sm:max-h-[500px] overflow-y-auto relay-scrollbar">
           {conversation.messages.map((msg, idx) => {
             const showTimestamp =
               idx === 0 ||
@@ -535,8 +535,8 @@ export default function ConversationPage() {
         </div>
 
         {/* Input area */}
-        <div className="relay-card p-6 space-y-3">
-          <div className="flex gap-3">
+        <div className="relay-card p-3 sm:p-6 space-y-3">
+          <div className="flex gap-2 sm:gap-3">
             <input
               type="text"
               placeholder="Type your message..."
@@ -549,7 +549,7 @@ export default function ConversationPage() {
               }}
               className="relay-input flex-1"
             />
-            <button className="relay-button-accent px-4 flex items-center gap-2">
+            <button className="relay-button-accent px-3 sm:px-4 flex items-center gap-2">
               <Send className="w-4 h-4" />
               <span className="hidden sm:inline">Send</span>
             </button>

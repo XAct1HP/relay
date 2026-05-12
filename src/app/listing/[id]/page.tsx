@@ -363,7 +363,7 @@ export default function ListingDetailPage({
               <h2 className="text-sm font-semibold text-relay-text mb-4 uppercase tracking-wide">
                 Select Size
               </h2>
-              <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {listing.sizes.map((sizeData) => (
                   <button
                     key={sizeData.size}
@@ -446,7 +446,7 @@ export default function ListingDetailPage({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/10">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/10">
                   <div>
                     <p className="text-relay-subtle text-xs">Sales</p>
                     <p className="text-relay-text font-semibold text-sm mt-1">

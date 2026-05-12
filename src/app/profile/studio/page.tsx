@@ -294,7 +294,7 @@ export default function ProfileStudioPage() {
               <input type="text" value={address.street} onChange={(e) => handleAddressChange('street', e.target.value)} placeholder="Street address" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
               <input type="text" value={address.street2} onChange={(e) => handleAddressChange('street2', e.target.value)} placeholder="Apt, Suite, etc. (optional)" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <input type="text" value={address.city} onChange={(e) => handleAddressChange('city', e.target.value)} placeholder="City" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
               <input type="text" value={address.state} onChange={(e) => handleAddressChange('state', e.target.value)} placeholder="State" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
               <input type="text" value={address.zip} onChange={(e) => handleAddressChange('zip', e.target.value)} placeholder="ZIP code" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
@@ -381,7 +381,7 @@ export default function ProfileStudioPage() {
               <h4 className="font-bold text-sm mb-1">{displayName || 'Shop Name'}</h4>
               <p className="text-xs text-white/50 mb-3">@{username || 'username'}</p>
               <p className="text-xs text-relay-text line-clamp-3 mb-4">{bio}</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                 <div className="bg-white/[0.04] rounded-lg p-2"><p className="text-xs text-white/50">Rating</p><p className="text-sm font-bold">4.9/5</p></div>
                 <div className="bg-white/[0.04] rounded-lg p-2"><p className="text-xs text-white/50">Sales</p><p className="text-sm font-bold">847</p></div>
               </div>

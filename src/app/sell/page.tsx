@@ -322,7 +322,7 @@ export default function SellPage() {
         </div>
 
         {/* Form Container */}
-        <div className="relay-card p-8">
+        <div className="relay-card p-4 sm:p-8">
           {/* Step 1: Shoe Details */}
           {currentStep === 1 && (
             <div className="space-y-6">
@@ -455,7 +455,7 @@ export default function SellPage() {
                     const fees = sizeRow.price ? calculateFees(sizeRow.price) : null;
                     return (
                       <div key={sizeRow.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
-                        <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                           {/* Size Dropdown */}
                           <div>
                             <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
@@ -687,7 +687,7 @@ export default function SellPage() {
                   <Package size={16} className="text-relay-accent" />
                   Shoe Details
                 </h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">Brand</p>
                     <p className="text-relay-text font-medium">{brand}</p>
@@ -759,7 +759,7 @@ export default function SellPage() {
                     <Camera size={16} className="text-relay-accent" />
                     Photos ({photos.length})
                   </h3>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {photos.map((photo, index) => (
                       <div
                         key={photo.id}

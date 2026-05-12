@@ -131,8 +131,8 @@ const ProgressTracker = ({ currentStatus, isAuthExempt }: { currentStatus: Order
   const stageIndex = stages.indexOf(currentStatus as any)
 
   return (
-    <div className="relay-card p-6 mb-6">
-      <div className="flex items-center justify-between">
+    <div className="relay-card p-3 sm:p-6 mb-6 overflow-x-auto">
+      <div className="flex items-center justify-between min-w-[480px] sm:min-w-0">
         {stages.map((stage, idx) => {
           const isCompleted = idx < stageIndex
           const isCurrent = idx === stageIndex
@@ -141,7 +141,7 @@ const ProgressTracker = ({ currentStatus, isAuthExempt }: { currentStatus: Order
             <div key={stage} className="flex items-center flex-1">
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
                     isCompleted
                       ? "bg-emerald-500/30 text-emerald-300"
                       : isCurrent
@@ -155,7 +155,7 @@ const ProgressTracker = ({ currentStatus, isAuthExempt }: { currentStatus: Order
                     <span className="text-xs font-bold">{idx + 1}</span>
                   )}
                 </div>
-                <p className="text-xs font-medium text-[#7ca6ff] mt-2 text-center">
+                <p className="text-[10px] sm:text-xs font-medium text-[#7ca6ff] mt-1 sm:mt-2 text-center">
                   {labels[stage]}
                 </p>
               </div>
@@ -383,7 +383,7 @@ const DisputeForm = ({
           />
 
           {evidencePreviews.length > 0 && (
-            <div className="grid grid-cols-5 gap-2 mb-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
               {evidencePreviews.map((url, i) => (
                 <div key={i} className="relative aspect-square">
                   <img src={url} alt={`Evidence ${i + 1}`} className="w-full h-full object-cover rounded-lg" />
@@ -1319,7 +1319,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                 )}
               </p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={() => setShowRatingModal(true)}
                   className="relay-button-success flex items-center justify-center"
@@ -1379,7 +1379,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               {order.disputeEvidenceBuyer && order.disputeEvidenceBuyer.length > 0 && (
                 <div className="mb-4">
                   <p className="text-xs font-semibold text-white/50 mb-2">YOUR EVIDENCE</p>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                     {order.disputeEvidenceBuyer.map((url, i) => (
                       <img key={i} src={url} alt={`Evidence ${i + 1}`} className="aspect-square object-cover rounded-lg" />
                     ))}
@@ -1411,7 +1411,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                 {order.disputeEvidenceBuyer && order.disputeEvidenceBuyer.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-white/50 mb-2">BUYER&apos;S EVIDENCE</p>
-                    <div className="grid grid-cols-5 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                       {order.disputeEvidenceBuyer.map((url, i) => (
                         <img key={i} src={url} alt={`Buyer evidence ${i + 1}`} className="aspect-square object-cover rounded-lg" />
                       ))}
@@ -1428,7 +1428,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                     <p className="text-[#f5f7fb] text-sm">{order.disputeTextSeller}</p>
                   </div>
                   {order.disputeEvidenceSeller && order.disputeEvidenceSeller.length > 0 && (
-                    <div className="grid grid-cols-5 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                       {order.disputeEvidenceSeller.map((url, i) => (
                         <img key={i} src={url} alt={`Your evidence ${i + 1}`} className="aspect-square object-cover rounded-lg" />
                       ))}
@@ -1457,7 +1457,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                   />
 
                   {sellerEvidencePreviews.length > 0 && (
-                    <div className="grid grid-cols-5 gap-2 mb-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
                       {sellerEvidencePreviews.map((url, i) => (
                         <div key={i} className="relative aspect-square">
                           <img src={url} alt={`Evidence ${i + 1}`} className="w-full h-full object-cover rounded-lg" />

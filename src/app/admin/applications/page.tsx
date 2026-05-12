@@ -32,12 +32,12 @@ function ApplicationRow({ app }: any) {
 
   return (
     <Link href={`/admin/applications/${app.id}`}>
-      <div className="flex items-center justify-between py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group">
-        <div className="flex-1">
-          <p className="text-[#f5f7fb] font-medium">{app.name}</p>
-          <p className="text-white/40 text-sm">{app.email}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-[#f5f7fb] font-medium truncate">{app.name}</p>
+          <p className="text-white/40 text-sm truncate">{app.email}</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <span className="text-white/40 text-sm">{app.date}</span>
           <div className={`flex items-center gap-2 px-3 py-1 rounded-lg ${statusColor}`}>
             <StatusIcon className="w-4 h-4" />

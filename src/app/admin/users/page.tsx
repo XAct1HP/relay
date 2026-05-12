@@ -81,7 +81,7 @@ function UserRow({ user, onActionClick, onMessageClick }: {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
         <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${roleColor}`}>
           {user.role === "seller" ? "Seller" : user.role === "admin" ? "Admin" : "Buyer"}
         </div>
@@ -482,7 +482,7 @@ export default function UsersPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-white/40 text-sm">
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount}
+            <span className="hidden sm:inline">Showing </span>{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)}<span className="hidden sm:inline"> of {totalCount}</span>
           </p>
           <div className="flex items-center gap-2">
             <button

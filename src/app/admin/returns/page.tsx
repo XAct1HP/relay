@@ -202,8 +202,8 @@ export default function AdminReturnsPage() {
                 className="relay-card p-4 space-y-3"
               >
                 {/* Top row: Packing slip ID + Status */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className="font-mono text-lg font-bold text-[#f5f7fb] tracking-wider">
                       {ret.return_packing_slip_id}
                     </span>
@@ -228,7 +228,7 @@ export default function AdminReturnsPage() {
                 </div>
 
                 {/* Details row */}
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm">
                   <div className="space-y-1">
                     <p className="text-[#f5f7fb] font-medium">
                       {brand} {model}{" "}

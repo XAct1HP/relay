@@ -304,7 +304,7 @@ export default function ListingReviewsPage() {
                     {/* Details Grid */}
                     <div>
                       <h4 className="text-sm font-semibold text-[#f5f7fb] mb-3">Listing Details</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                         <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5">
                           <p className="text-white/40 text-xs mb-1">Brand</p>
                           <p className="text-[#f5f7fb] text-sm font-medium">{listing.brand}</p>
@@ -337,7 +337,7 @@ export default function ListingReviewsPage() {
                     {/* Sizes & Pricing */}
                     <div>
                       <h4 className="text-sm font-semibold text-[#f5f7fb] mb-3">Sizes & Pricing</h4>
-                      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                         {listing.sizes?.map((s, idx) => (
                           <div key={idx} className="p-2 rounded-lg bg-white/[0.02] border border-white/5 text-center">
                             <p className="text-[#f5f7fb] text-sm font-bold">{s.size}</p>

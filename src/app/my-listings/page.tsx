@@ -257,7 +257,7 @@ export default function MyListingsPage() {
               {paginatedListings.map((listing) => (
                 <div
                   key={listing.id}
-                  className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-6 hover:bg-white/[0.06] transition-colors"
+                  className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-4 sm:p-6 hover:bg-white/[0.06] transition-colors"
                 >
                   <div className="flex flex-col sm:flex-row gap-6">
                     {/* Image */}
@@ -299,7 +299,7 @@ export default function MyListingsPage() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                         <div>
                           <p className="text-white/50 text-xs uppercase tracking-wide mb-1">
                             Sizes

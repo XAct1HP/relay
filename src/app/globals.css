@@ -27,6 +27,7 @@
   body {
     margin: 0;
     padding: 0;
+    overflow-x: hidden;
   }
 
   html {
@@ -218,6 +219,13 @@
   background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
+}
+
+/* iOS safe-area support for PWA standalone mode */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .relay-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 /* Showcase tab progress bar */

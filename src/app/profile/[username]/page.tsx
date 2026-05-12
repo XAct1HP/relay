@@ -216,7 +216,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
   return (
     <div>
-      <div className="h-56 w-full bg-cover bg-center relative" style={{ backgroundImage: profile.profile_banner_url ? 'url(' + profile.profile_banner_url + ')' : theme.bannerGradient, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <div className="h-40 sm:h-56 w-full bg-cover bg-center relative" style={{ backgroundImage: profile.profile_banner_url ? 'url(' + profile.profile_banner_url + ')' : theme.bannerGradient, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <div className="absolute inset-0 opacity-10" style={{ background: 'linear-gradient(to right, transparent, ' + theme.accent + ', transparent)' }} />
       </div>
 
@@ -247,7 +247,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
             </span>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             {currentUser?.id !== profile.id && (
               <button onClick={handleFollow} disabled={followLoading} className={"flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors disabled:opacity-50 " + (isFollowing ? "bg-white/[0.08] border border-white/20 hover:bg-white/[0.12] text-relay-text" : "text-relay-bg")} style={!isFollowing ? { backgroundColor: theme.accent } : undefined}>
                 {isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}
@@ -293,8 +293,8 @@ export default function SellerProfilePage({ params }: { params: { username: stri
           </div>
         </div>
 
-        <div className="border-b border-white/10 mb-8">
-          <div className="flex gap-8">
+        <div className="border-b border-white/10 mb-8 overflow-x-auto">
+          <div className="flex gap-4 sm:gap-8">
             {TABS.map((tab) => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={"py-4 px-2 text-sm font-semibold border-b-2 transition-colors " + (activeTab === tab.id ? '' : 'text-white/60 border-transparent hover:text-relay-text')} style={activeTab === tab.id ? { color: theme.accent, borderColor: theme.accent } : undefined}>
                 {tab.label}
@@ -354,7 +354,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
             {posts.length > 0 ? (
               <div className="space-y-6">
                 {posts.map((post) => (
-                  <div key={post.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-6 hover:bg-white/[0.08] transition-colors">
+                  <div key={post.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-4 sm:p-6 hover:bg-white/[0.08] transition-colors">
                     <div className="flex items-start gap-4">
                       <div className="h-12 w-12 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(135deg, ' + theme.accentLight + ', ' + theme.accent + ')' }}>
                         {profile.avatar_url ? (
@@ -382,7 +382,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
                         {post.images && post.images.length > 0 && (
                           <div className="mb-4">
-                            <div className={"grid gap-2 " + (post.images.length === 1 ? 'grid-cols-1' : post.images.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+                            <div className={"grid gap-2 " + (post.images.length === 1 ? 'grid-cols-1' : post.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3')}>
                               {post.images.map((img, idx) => (
                                 <div key={idx} className={"rounded-xl overflow-hidden border border-white/5 " + (post.images!.length === 1 ? 'aspect-video' : 'aspect-square')}>
                                   <img src={img} alt={"Post image " + (idx + 1)} className="w-full h-full object-cover" />

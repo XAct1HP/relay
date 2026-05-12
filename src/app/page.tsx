@@ -149,7 +149,7 @@ export default function Home() {
           <Reveal>
             <div className="mx-auto max-w-4xl text-center">
               {/* Headline */}
-              <h1 className="text-5xl font-bold leading-[1.0] tracking-[-0.04em] sm:text-7xl md:text-8xl">
+              <h1 className="text-4xl font-bold leading-[1.0] tracking-[-0.04em] sm:text-7xl md:text-8xl">
                 <span className="relay-text-gradient">Where resellers</span>
                 <br />
                 <span className="text-white">build empires.</span>
@@ -165,7 +165,7 @@ export default function Home() {
               <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
                 <Link
                   href="/auth/signup"
-                  className="group relative inline-flex items-center justify-center overflow-hidden rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_32px_rgba(124,166,255,0.25)]"
+                  className="group relative inline-flex w-full sm:w-auto items-center justify-center overflow-hidden rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_32px_rgba(124,166,255,0.25)]"
                 >
                   <span className="relative z-10">Get started</span>
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -313,7 +313,7 @@ export default function Home() {
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-6 backdrop-blur">
                     <p className="text-xs uppercase tracking-[0.15em] text-white/30">Traditional platforms</p>
                     <div className="mt-3 flex items-baseline gap-1">
-                      <span className="text-5xl font-bold tracking-tight text-white/25 md:text-6xl">9%</span>
+                      <span className="text-4xl font-bold tracking-tight text-white/25 sm:text-5xl md:text-6xl">9%</span>
                       <span className="text-lg text-white/15">+</span>
                     </div>
                     <p className="mt-2 text-sm text-white/25">Average seller fee on major resale platforms</p>
@@ -328,7 +328,7 @@ export default function Home() {
                     <div className="mt-3 flex items-baseline gap-1">
                       <span
                         ref={feeRef}
-                        className={`text-5xl font-bold tracking-tight text-white transition-all duration-700 md:text-6xl ${
+                        className={`text-4xl font-bold tracking-tight text-white transition-all duration-700 sm:text-5xl md:text-6xl ${
                           feeVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
                         }`}
                       >
@@ -376,7 +376,7 @@ export default function Home() {
 
         <div className="relay-container relative z-10 py-24 md:py-32">
           <Reveal>
-            <div className="grid items-center gap-10 lg:grid-cols-[1fr_340px] lg:gap-16">
+            <div className="grid items-center gap-10 lg:grid-cols-[1fr_340px] lg:gap-16 overflow-hidden">
               {/* Left — title, subtitle, and clickable steps */}
               <div className="flex flex-col justify-center">
                 <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
@@ -426,7 +426,7 @@ export default function Home() {
               {/* Right — phone frame */}
               <div className="relative">
                 <div className="absolute -inset-8 rounded-[3rem] bg-gradient-to-b from-blue-500/[0.05] via-transparent to-violet-500/[0.04] blur-3xl" />
-                <div className="relative mx-auto w-full max-w-sm">
+                <div className="relative mx-auto w-full max-w-[260px] sm:max-w-sm">
                   <div className="overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0a0c10] shadow-2xl">
                     {/* Notch */}
                     <div className="flex justify-center pb-1 pt-3">
@@ -456,7 +456,7 @@ export default function Home() {
       ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-t border-white/[0.06]">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/[0.06] blur-[100px]" />
+          <div className="absolute left-1/2 top-1/2 h-[400px] w-[400px] sm:h-[600px] sm:w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/[0.06] blur-[100px]" />
         </div>
 
         <div className="relay-container relative z-10 py-28 md:py-36">
