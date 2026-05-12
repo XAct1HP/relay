@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import {
   Search,
-  MoreVertical,
-  Shield,
   Lock,
   Unlock,
   AlertTriangle,
@@ -51,99 +49,81 @@ function UserRow({ user, onActionClick, onMessageClick }: {
     : "bg-green-500/20 text-green-300";
   const statusLabel = user.is_banned ? "Banned" : "Active";
 
-  const [showMenu, setShowMenu] = useState(false);
+  const profileHref = user.username ? `/profile/${user.username}` : `/profile/${user.id}`;
 
   return (
     <div
-      className={`flex items-center justify-between py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors group ${
+      className={`py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors ${
         user.dispute_flags_count > 0 ? "bg-red-500/[0.03] border-l-2 border-l-red-500/50" : ""
       }`}
     >
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5f8fff] to-[#7ca6ff] flex items-center justify-center text-sm font-semibold text-white flex-shrink-0">
-          {(user.display_name || user.full_name || "U").substring(0, 2).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-[#f5f7fb] font-medium truncate">{user.display_name || user.full_name || "Unknown"}</p>
-            {user.dispute_flags_count > 0 && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-300 text-xs rounded-full font-semibold flex-shrink-0">
-                <Flag className="w-3 h-3" />
-                {user.dispute_flags_count}
-              </span>
-            )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        {/* User info - left side */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5f8fff] to-[#7ca6ff] flex items-center justify-center text-sm font-semibold text-white flex-shrink-0">
+            {(user.display_name || user.full_name || "U").substring(0, 2).toUpperCase()}
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            {user.username && <span className="text-white/40 text-sm">@{user.username}</span>}
-            {user.username && <span className="text-white/40 text-sm">·</span>}
-            <span className="text-white/40 text-sm truncate">{user.email}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <a href={profileHref} className="text-[#f5f7fb] font-medium truncate hover:text-[#5f8fff] hover:underline transition-colors cursor-pointer">
+                {user.display_name || user.full_name || "Unknown"}
+              </a>
+              <div className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold ${roleColor}`}>
+                {user.role === "seller" ? "Seller" : user.role === "admin" ? "Admin" : "Buyer"}
+              </div>
+              <div className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold ${statusColor}`}>
+                {statusLabel}
+              </div>
+              {user.dispute_flags_count > 0 && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-300 text-[11px] rounded-full font-semibold flex-shrink-0">
+                  <Flag className="w-3 h-3" />
+                  {user.dispute_flags_count}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              {user.username && <span className="text-white/40 text-sm">@{user.username}</span>}
+              {user.username && <span className="text-white/20 text-sm">·</span>}
+              <span className="text-white/40 text-sm truncate">{user.email}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
-        <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${roleColor}`}>
-          {user.role === "seller" ? "Seller" : user.role === "admin" ? "Admin" : "Buyer"}
-        </div>
-
-        <div className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${statusColor}`}>
-          {statusLabel}
-        </div>
-
-        {/* Message button */}
-        <button
-          onClick={() => onMessageClick(user)}
-          className="p-2 rounded-lg text-white/40 hover:text-[#5f8fff] hover:bg-[#5f8fff]/10 transition-colors"
-          title="Open conversation"
-        >
-          <MessageSquare className="w-4 h-4" />
-        </button>
-
-        <div className="relative">
+        {/* Action buttons - right side on desktop, underneath on mobile */}
+        <div className="flex items-center gap-2 flex-shrink-0 pl-[52px] sm:pl-0">
           <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors opacity-0 group-hover:opacity-100"
+            onClick={() => onMessageClick(user)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#5f8fff] bg-[#5f8fff]/10 hover:bg-[#5f8fff]/20 border border-[#5f8fff]/20 transition-colors"
           >
-            <MoreVertical className="w-4 h-4" />
+            <MessageSquare className="w-3.5 h-3.5" />
+            Message
           </button>
 
-          {showMenu && (
+          {!user.is_banned ? (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 mt-2 w-48 relay-card p-0 rounded-lg border border-white/10 shadow-xl z-50 py-1">
-                <button className="w-full text-left px-4 py-2 text-white/60 hover:text-[#f5f7fb] hover:bg-white/5 transition-colors text-sm flex items-center gap-2">
-                  <Shield className="w-4 h-4" />
-                  View Profile
-                </button>
-
-                {!user.is_banned ? (
-                  <>
-                    <button
-                      onClick={() => { setShowMenu(false); onActionClick(user, "ban"); }}
-                      className="w-full text-left px-4 py-2 text-orange-300 hover:bg-orange-500/10 transition-colors text-sm flex items-center gap-2"
-                    >
-                      <AlertTriangle className="w-4 h-4" />
-                      Temp Ban
-                    </button>
-                    <button
-                      onClick={() => { setShowMenu(false); onActionClick(user, "ban"); }}
-                      className="w-full text-left px-4 py-2 text-red-300 hover:bg-red-500/10 transition-colors text-sm flex items-center gap-2"
-                    >
-                      <Lock className="w-4 h-4" />
-                      Permanent Ban
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => { setShowMenu(false); onActionClick(user, "unban"); }}
-                    className="w-full text-left px-4 py-2 text-green-300 hover:bg-green-500/10 transition-colors text-sm flex items-center gap-2"
-                  >
-                    <Unlock className="w-4 h-4" />
-                    Unban
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => onActionClick(user, "ban")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 transition-colors"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Temp Ban
+              </button>
+              <button
+                onClick={() => onActionClick(user, "ban")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Perm Ban
+              </button>
             </>
+          ) : (
+            <button
+              onClick={() => onActionClick(user, "unban")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-green-300 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 transition-colors"
+            >
+              <Unlock className="w-3.5 h-3.5" />
+              Unban
+            </button>
           )}
         </div>
       </div>
