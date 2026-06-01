@@ -1,102 +1,431 @@
-# Relay — The Sneaker Marketplace
+# Relay
 
-A full-stack shoe reselling marketplace built with Next.js 14, Supabase, Stripe, and Shippo.
+### Building a Marketplace Where Sneaker Resellers Can Build a Business
 
-## Tech Stack
+**Status:** Active MVP  
+**Role:** Founder & Full-Stack Developer  
+**Tech Stack:** Next.js, TypeScript, Supabase, Stripe Connect, Shippo, Vercel  
+**Live Demo:** https://relayco.app
 
-- **Frontend:** Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS
-- **Backend:** Next.js API Routes, Supabase (Auth, Database, Realtime, Storage)
-- **Payments:** Stripe (Checkout, Connect for seller payouts)
-- **Shipping:** Shippo (Quotes, Labels, Tracking)
-- **State Management:** Zustand
-- **Charts:** Recharts
-- **Icons:** Lucide React
+---
 
-## Getting Started
+## Overview
 
-### 1. Install dependencies
+Relay is a full-stack sneaker marketplace designed around a simple idea:
 
-```bash
-cd relay-app
-npm install
+**The biggest problem facing sneaker resellers isn't marketplace fees—it's the inability to build a lasting business.**
+
+Traditional marketplaces are optimized for transactions. Sellers list products, make sales, pay fees, and repeat the process. Very little value accumulates for the seller over time. Customer relationships belong to the platform, seller identities are largely hidden, and every sale begins with the same challenge: convincing a new buyer to trust them.
+
+Relay was built to change that.
+
+Rather than focusing exclusively on transactions, Relay combines marketplace infrastructure with seller storefronts, messaging, offers, profile customization, and community-driven discovery tools. The goal is to give independent resellers the ability to build recognizable brands, develop repeat customers, and create long-term trust while still providing a seamless buying experience.
+
+---
+
+## The Problem
+
+While researching the sneaker resale industry, I initially believed marketplace fees were the primary pain point for sellers. However, after speaking with resellers and gathering feedback from the community, a more important issue became clear.
+
+Most platforms treat sellers as inventory suppliers rather than business owners.
+
+A seller can complete hundreds of successful transactions and still have very little to show for it outside of a rating score. They cannot effectively showcase their brand, establish a meaningful presence, or build direct relationships with customers.
+
+The result is that sellers continuously start from zero. Every transaction is isolated, and very little trust compounds over time.
+
+### Existing Marketplace Experience
+
+```text
+Seller
+   ↓
+List Product
+   ↓
+Make Sale
+   ↓
+Pay Fees
+   ↓
+Start Over
 ```
 
-### 2. Set up environment variables
+### Relay's Vision
 
-```bash
-cp .env.local.example .env.local
+```text
+Seller
+   ↓
+Storefront
+   ↓
+Discovery
+   ↓
+Messaging
+   ↓
+Trust
+   ↓
+Sales
+   ↓
+Repeat Customers
 ```
 
-Then fill in your keys in `.env.local`:
+Relay is designed as a hybrid between a marketplace and a seller growth platform, helping resellers build long-term business value rather than simply facilitating transactions.
 
-- **Supabase:** Create a project at [supabase.com](https://supabase.com), copy URL and anon key
-- **Stripe:** Get keys from [dashboard.stripe.com](https://dashboard.stripe.com)
-- **Shippo:** Get API key from [goshippo.com](https://goshippo.com)
+---
 
-### 3. Set up the database
+## Platform Overview
 
-Run the schema SQL in your Supabase SQL editor:
+### Seller Storefronts
 
-1. Go to your Supabase dashboard → SQL Editor
-2. Copy and run `supabase/schema.sql`
-3. Optionally run `supabase/seed.sql` for sample data
+Every seller receives a customizable public profile that serves as their digital storefront.
 
-### 4. Run the dev server
+**Purpose:** Allow sellers to establish a recognizable brand and showcase inventory beyond individual product listings.
 
-```bash
-npm run dev
+**Features:**
+
+- Custom profile banners and avatars
+- Personalized storefront layouts
+- Seller posts and updates
+- Public inventory showcase
+- Seller-specific branding options
+- Follower-focused discovery model
+
+---
+
+### Marketplace Listings
+
+Relay provides a marketplace where sellers can create and manage sneaker listings.
+
+**Purpose:** Create a structured environment for inventory discovery while supporting the needs of professional resellers.
+
+**Features:**
+
+- Multi-image listings
+- Product descriptions and condition information
+- Brand and model categorization
+- Listing activation and deactivation
+- Seller inventory management tools
+- Marketplace browsing and search
+
+---
+
+### Multi-Size Inventory Management
+
+Sneaker sellers frequently own multiple sizes of the same product.
+
+**Purpose:** Reduce duplicate listings while providing accurate inventory tracking.
+
+**Features:**
+
+- Variant-based inventory architecture
+- Size-specific pricing
+- Per-size quantity tracking
+- Variant-aware checkout flows
+- Automatic inventory updates after purchase
+
+---
+
+### Messaging & Negotiation
+
+Buyers and sellers can communicate directly through Relay.
+
+**Purpose:** Encourage trust-building and facilitate negotiations that commonly occur within sneaker resale transactions.
+
+**Features:**
+
+- Direct messaging
+- Listing-specific conversations
+- Real-time conversation management
+- Seller-generated offers
+- Offer acceptance and decline workflows
+- Unread notification tracking
+
+---
+
+### Checkout & Payments
+
+Relay uses Stripe Connect to manage marketplace transactions.
+
+**Purpose:** Provide secure payment processing while supporting platform fees and seller payouts.
+
+**Features:**
+
+- Secure checkout sessions
+- Seller onboarding through Stripe Connect
+- Marketplace payment routing
+- Platform fee collection
+- Seller payout workflows
+
+---
+
+### Order Management
+
+Orders continue to be managed after checkout through delivery and completion.
+
+**Purpose:** Create a complete transaction lifecycle that protects both buyers and sellers.
+
+**Features:**
+
+- Shipping workflow management
+- Tracking integration
+- Delivery confirmation
+- Review windows
+- Dispute handling
+- Automated order completion logic
+
+---
+
+### Seller Vetting System
+
+New sellers complete an onboarding process before receiving marketplace access.
+
+**Purpose:** Maintain marketplace quality and trust while onboarding an initial seller community.
+
+**Features:**
+
+- Seller application workflow
+- Verification questions
+- Shipping information collection
+- Stripe onboarding requirements
+- Admin review process
+- Approval and rejection management
+
+---
+
+### Administrative Dashboard
+
+Relay includes a complete moderation and operations dashboard.
+
+**Purpose:** Give marketplace operators the tools necessary to manage growth, trust, and platform quality.
+
+**Features:**
+
+- Seller application review
+- User moderation
+- Listing moderation
+- Order monitoring
+- Dispute management
+- Marketplace availability controls
+- Operational analytics
+
+---
+
+## Technical Architecture
+
+Relay is built as a modern full-stack web application using a serverless architecture.
+
+```text
+                        ┌─────────────────┐
+                        │     Next.js     │
+                        │  React + TS     │
+                        └────────┬────────┘
+                                 │
+                                 ▼
+                        ┌─────────────────┐
+                        │    Supabase     │
+                        └────────┬────────┘
+                                 │
+        ┌───────────────┬────────┼────────┬───────────────┐
+        ▼               ▼        ▼        ▼               ▼
+
+     Auth          PostgreSQL  Storage  Realtime      Security
+
+                                 │
+                                 ▼
+
+        ┌─────────────────────────────────────────────┐
+        │             Third Party Services            │
+        ├─────────────────────────────────────────────┤
+        │ Stripe Connect │ Shippo │ Vercel Hosting   │
+        └─────────────────────────────────────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see Relay.
+### Frontend
 
-### 5. Build for production
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
 
-```bash
-npm run build
-npm start
+### Backend
+
+- Next.js App Router
+- Server Actions
+- Supabase PostgreSQL
+
+### Infrastructure
+
+- Vercel
+- Supabase Storage
+- Supabase Realtime
+
+### Integrations
+
+- Stripe Connect
+- Shippo
+
+---
+
+## Engineering Challenges
+
+### Marketplace Payment Infrastructure
+
+Marketplaces introduce significantly more complexity than traditional e-commerce applications because funds must be routed between buyers, sellers, and the platform itself.
+
+Relay uses Stripe Connect to manage:
+
+- Seller onboarding
+- Payment routing
+- Platform fee collection
+- Delayed seller payouts
+- Marketplace compliance requirements
+
+---
+
+### Variant-Based Inventory Architecture
+
+Many sneaker listings contain multiple sizes and quantities under a single product.
+
+To support this, Relay implements a variant-based inventory system that tracks stock, pricing, and purchases at the size level while preserving a clean seller experience.
+
+**Challenges Solved:**
+
+- Size-specific inventory tracking
+- Variant-aware checkout
+- Dynamic marketplace pricing
+- Automatic inventory updates
+- Listing consistency across variants
+
+---
+
+### Seller Access Control
+
+The platform includes a gated onboarding process where sellers must complete verification and platform setup before gaining marketplace access.
+
+This required the development of:
+
+- Multi-stage onboarding flows
+- Administrative review systems
+- Approval workflows
+- Access restrictions
+- Role-based permissions
+
+---
+
+### Marketplace Order Lifecycle
+
+Orders move through multiple stages including checkout, fulfillment, shipment, delivery, review, dispute resolution, and completion.
+
+Relay implements a structured order state machine that automates transitions while preserving administrative oversight.
+
+**Order Flow:**
+
+```text
+Checkout
+    ↓
+Paid
+    ↓
+Seller Fulfillment
+    ↓
+Shipped
+    ↓
+Delivered
+    ↓
+Review Window
+    ↓
+Completed
 ```
 
-## Deploying to Vercel
+---
 
-1. Push your code to a GitHub repo
-2. Go to [vercel.com](https://vercel.com) → New Project → Import your repo
-3. Add all environment variables from `.env.local` to Vercel's Environment Variables settings
-4. Deploy
+## Implemented Systems
 
-Set up webhook endpoints in Stripe and Shippo pointing to:
-- Stripe: `https://your-domain.com/api/stripe/webhook`
-- Shippo: `https://your-domain.com/api/shippo/webhook`
+| System | Status |
+| --- | --- |
+| Authentication | ✅ |
+| Seller Profiles | ✅ |
+| Marketplace Listings | ✅ |
+| Multi-Size Inventory | ✅ |
+| Messaging | ✅ |
+| Offer Negotiation | ✅ |
+| Stripe Payments | ✅ |
+| Shipping Workflow | ✅ |
+| Order Management | ✅ |
+| Seller Onboarding | ✅ |
+| Seller Vetting | ✅ |
+| Administrative Dashboard | ✅ |
+| Marketplace Moderation | ✅ |
+| Mobile Responsive UI | ✅ |
+| Progressive Web App Support | ✅ |
 
-## Project Structure
+---
 
-```
-relay-app/
-├── src/
-│   ├── app/                    # Next.js App Router pages
-│   │   ├── page.tsx            # Landing page
-│   │   ├── auth/               # Login & Signup
-│   │   ├── onboarding/         # Seller onboarding flow
-│   │   ├── dashboard/          # Seller dashboard
-│   │   ├── feed/               # Buyer feed
-│   │   ├── marketplace/        # Listing grid with search/filters
-│   │   ├── listing/[id]/       # Listing detail page
-│   │   ├── sell/               # Create listing form
-│   │   ├── messages/           # Chat inbox & conversations
-│   │   ├── orders/             # Order list & detail with full flow
-│   │   ├── profile/[username]/ # Public seller profile
-│   │   ├── profile/studio/     # Profile customization
-│   │   ├── my-listings/        # Seller inventory manager
-│   │   ├── settings/           # Account settings
-│   │   ├── admin/              # Admin dashboard & moderation
-│   │   └── api/                # API routes (Stripe, Shippo, etc.)
-│   ├── components/
-│   │   ├── layout/             # AppShell, Navbar, Sidebar, Pagination
-│   │   └── messages/           # CustomOfferModal
-│   ├── hooks/                  # useAuth
-│   ├── lib/                    # Supabase client, utils, constants
-│   ├── store/                  # Zustand stores
-│   └── types/                  # TypeScript interfaces
-└── supabase/
-    ├── schema.sql              # Database schema with RLS policies
-    └── seed.sql                # Sample data
-```
+## Project Scope
+
+Relay extends far beyond a traditional CRUD application and contains multiple interconnected systems that work together to support a two-sided marketplace.
+
+Major systems include:
+
+- User authentication and authorization
+- Seller onboarding and vetting
+- Customizable seller storefronts
+- Marketplace listing infrastructure
+- Variant inventory management
+- Buyer-seller messaging
+- Offer negotiation workflows
+- Stripe Connect marketplace payments
+- Shipping and fulfillment workflows
+- Order lifecycle management
+- Review and dispute systems
+- Administrative moderation tools
+- Mobile-responsive user experience
+
+---
+
+## Lessons Learned
+
+Building Relay provided experience across both technical and product domains.
+
+### Product Development
+
+- Validating assumptions through customer conversations
+- Discovering root problems instead of surface-level problems
+- Designing marketplace growth strategies
+- Balancing user experience with operational requirements
+
+### Engineering
+
+- Building scalable relational database architectures
+- Implementing Stripe Connect marketplace systems
+- Managing complex application state
+- Designing role-based access control systems
+- Creating reliable order lifecycle workflows
+- Integrating multiple third-party services into a cohesive platform
+
+Perhaps the most important lesson was that product development is often about discovering the real problem rather than solving the first one you identify.
+
+What began as an effort to reduce marketplace fees ultimately evolved into a platform focused on helping resellers build businesses.
+
+---
+
+## Future Development
+
+Planned areas of expansion include:
+
+- Advanced seller analytics
+- Enhanced discovery systems
+- Seller follower networks
+- Livestream selling functionality
+- Native mobile applications
+- Expanded authentication workflows
+- Reputation and trust systems
+- Seller growth tools
+- AI-powered pricing insights
+
+---
+
+## About The Project
+
+Relay was designed, architected, and developed as an independent startup project.
+
+The platform represents a complete end-to-end marketplace implementation covering everything from user onboarding and seller management to payments, fulfillment, moderation, and post-purchase workflows.
+
+More importantly, it reflects a belief that marketplaces should help sellers build lasting value, not simply process transactions.
+
+As both the founder and lead developer, I was responsible for product strategy, UX design, database architecture, backend systems, frontend implementation, payment infrastructure, marketplace workflows, deployment, and ongoing platform development.
