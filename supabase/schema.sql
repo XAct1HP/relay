@@ -14,6 +14,8 @@ CREATE TABLE profiles (
   is_verified_seller BOOLEAN DEFAULT false,
   seller_application_status TEXT NOT NULL DEFAULT 'none'
     CHECK (seller_application_status IN ('none', 'pending', 'approved', 'rejected', 'rejected_final')),
+  customer_messaging_enabled BOOLEAN NOT NULL DEFAULT false,
+  offers_enabled BOOLEAN NOT NULL DEFAULT false,
   stripe_account_id TEXT,
   ship_from_address JSONB,
   profile_banner_url TEXT,
@@ -626,7 +628,17 @@ CREATE POLICY "Users can read conversations they're in" ON conversations
 
 -- Users can insert conversations
 CREATE POLICY "Users can insert conversations" ON conversations
-  FOR INSERT WITH CHECK (auth.uid() = ANY(participant_ids));
+  FOR INSERT WITH CHECK (
+    auth.uid() = ANY(participant_ids)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM profiles
+      WHERE id = ANY(participant_ids)
+        AND id <> auth.uid()
+        AND role IN ('seller', 'admin')
+        AND customer_messaging_enabled = false
+    )
+  );
 
 -- Users can update conversations they're part of
 CREATE POLICY "Users can update conversations they're in" ON conversations
@@ -662,6 +674,14 @@ CREATE POLICY "Users can insert messages to their conversations" ON messages
       SELECT 1 FROM conversations
       WHERE id = conversation_id AND auth.uid() = ANY(participant_ids)
     )
+    AND (
+      message_type <> 'custom_offer'
+      OR EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = auth.uid()
+          AND (role = 'admin' OR offers_enabled = true)
+      )
+    )
   );
 
 -- ============================================================================
@@ -685,6 +705,11 @@ CREATE POLICY "Users can insert custom offers to their conversations" ON custom_
     EXISTS (
       SELECT 1 FROM conversations
       WHERE id = conversation_id AND auth.uid() = ANY(participant_ids)
+    )
+    AND EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid()
+        AND (role = 'admin' OR offers_enabled = true)
     )
   );
 

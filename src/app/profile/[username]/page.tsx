@@ -33,6 +33,8 @@ interface SellerProfile {
   sales_count?: number;
   avg_rating?: number;
   instagram_url?: string;
+  customer_messaging_enabled?: boolean;
+  offers_enabled?: boolean;
 }
 
 interface ThemeColors {
@@ -169,6 +171,10 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       const supabase = createClient();
       const { data: existingConvos } = await supabase.from('conversations').select('*').contains('participant_ids', [currentUser!.id, profile.id]);
       if (existingConvos && existingConvos.length > 0) { router.push('/messages'); return; }
+      if (!profile.customer_messaging_enabled) {
+        alert('This seller is not accepting new customer messages right now.');
+        return;
+      }
       const { error } = await supabase.from('conversations').insert({ participant_ids: [currentUser!.id, profile.id], listing_id: null, last_message: null, last_message_at: new Date().toISOString() });
       if (error) throw error;
       router.push('/messages');

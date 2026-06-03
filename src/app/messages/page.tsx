@@ -47,6 +47,7 @@ interface ConversationData {
     full_name: string;
     avatar_url: string | null;
     is_verified_seller: boolean;
+    offers_enabled: boolean;
   } | null;
   messages: MessageData[];
 }
@@ -74,6 +75,7 @@ function OfferCard({
   onAccept,
   onDecline,
   onGoToCheckout,
+  actionsEnabled = true,
 }: {
   offer: {
     originalPrice: number;
@@ -86,6 +88,7 @@ function OfferCard({
   onAccept?: () => void;
   onDecline?: () => void;
   onGoToCheckout?: () => void;
+  actionsEnabled?: boolean;
 }) {
   const isPending = offer.status === "pending";
   const isAccepted = offer.status === "accepted";
@@ -131,7 +134,7 @@ function OfferCard({
           <span className="text-relay-accent">Pending</span>
         </div>
       )}
-      {isPending && !isSender && (
+      {isPending && !isSender && actionsEnabled && (
         <div className="flex gap-2">
           <button
             onClick={onAccept}
@@ -149,6 +152,11 @@ function OfferCard({
           </button>
         </div>
       )}
+      {isPending && !isSender && !actionsEnabled && (
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <span className="text-white/50">Offers unavailable</span>
+        </div>
+      )}
 
       {/* Accepted — show status + "Go to Checkout" for the buyer */}
       {isAccepted && (
@@ -157,7 +165,7 @@ function OfferCard({
             <Check className="w-4 h-4 text-green-400" />
             <span className="text-green-400">Accepted</span>
           </div>
-          {!isSender && onGoToCheckout && (
+          {!isSender && onGoToCheckout && actionsEnabled && (
             <button
               onClick={onGoToCheckout}
               className="w-full bg-relay-accent-strong/20 hover:bg-relay-accent-strong/30 text-relay-accent py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
@@ -272,7 +280,7 @@ function ConversationList({
 function ChatArea({
   conversation,
   currentUserId,
-  isSeller,
+  canSendOffers,
   onShowOfferModal,
   onSendMessage,
   onAcceptOffer,
@@ -281,7 +289,7 @@ function ChatArea({
 }: {
   conversation: ConversationData | null;
   currentUserId: string;
-  isSeller: boolean;
+  canSendOffers: boolean;
   onShowOfferModal: () => void;
   onSendMessage: (conversationId: string, content: string) => Promise<void>;
   onAcceptOffer: (messageId: string) => Promise<void>;
@@ -406,6 +414,7 @@ function ChatArea({
                     onAccept={() => onAcceptOffer(msg.id)}
                     onDecline={() => onDeclineOffer(msg.id)}
                     onGoToCheckout={() => onGoToCheckout(msg)}
+                    actionsEnabled={conversation.otherUser?.offers_enabled !== false}
                   />
                 </div>
               ) : msg.content ? (
@@ -452,7 +461,7 @@ function ChatArea({
           </button>
         </div>
 
-        {isSeller && (
+        {canSendOffers && (
           <button
             onClick={onShowOfferModal}
             className="relay-button-secondary w-full flex items-center justify-center gap-2"
@@ -522,7 +531,7 @@ export default function MessagesPage() {
           if (otherUserId) {
             const { data: profile } = await supabase
               .from("profiles")
-              .select("id, display_name, full_name, avatar_url, is_verified_seller")
+              .select("id, display_name, full_name, avatar_url, is_verified_seller, offers_enabled")
               .eq("id", otherUserId)
               .maybeSingle();
             otherUser = profile;
@@ -842,6 +851,7 @@ export default function MessagesPage() {
 
   const currentConv = conversations.find((c) => c.id === selectedConversation) || null;
   const isSeller = currentUser?.role === "seller" || currentUser?.role === "admin";
+  const canSendOffers = isSeller && !!currentUser?.offers_enabled;
 
   if (loading) {
     return <div className="relay-empty text-center">Loading...</div>;
@@ -875,7 +885,7 @@ export default function MessagesPage() {
             <ChatArea
               conversation={currentConv}
               currentUserId={currentUser?.id || ""}
-              isSeller={isSeller}
+              canSendOffers={canSendOffers}
               onShowOfferModal={() => setShowOfferModal(true)}
               onSendMessage={handleSendMessage}
               onAcceptOffer={handleAcceptOffer}

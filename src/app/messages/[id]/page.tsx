@@ -31,6 +31,7 @@ interface Conversation {
   name: string;
   avatar: string;
   isVerified: boolean;
+  offersEnabled: boolean;
   lastMessage: string;
   time: string;
   unread: boolean;
@@ -56,6 +57,7 @@ function OfferCard({
   onAccept,
   onDecline,
   onGoToCheckout,
+  actionsEnabled = true,
 }: {
   offer: {
     originalPrice: number;
@@ -71,6 +73,7 @@ function OfferCard({
   onAccept?: () => void;
   onDecline?: () => void;
   onGoToCheckout?: () => void;
+  actionsEnabled?: boolean;
 }) {
   const isPending = offer.status === "pending";
   const isAccepted = offer.status === "accepted";
@@ -108,7 +111,7 @@ function OfferCard({
           <span className="text-relay-accent">Pending</span>
         </div>
       )}
-      {isPending && !isSender && (
+      {isPending && !isSender && actionsEnabled && (
         <div className="flex gap-2">
           <button
             onClick={onAccept}
@@ -126,6 +129,11 @@ function OfferCard({
           </button>
         </div>
       )}
+      {isPending && !isSender && !actionsEnabled && (
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <span className="text-white/50">Offers unavailable</span>
+        </div>
+      )}
 
       {/* Accepted — show status + "Go to Checkout" for receiver */}
       {isAccepted && (
@@ -134,7 +142,7 @@ function OfferCard({
             <Check className="w-4 h-4 text-green-400" />
             <span className="text-green-400">Accepted</span>
           </div>
-          {!isSender && onGoToCheckout && (
+          {!isSender && onGoToCheckout && actionsEnabled && (
             <button
               onClick={onGoToCheckout}
               className="w-full bg-relay-accent-strong/20 hover:bg-relay-accent-strong/30 text-relay-accent py-2.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
@@ -184,6 +192,9 @@ export default function ConversationPage() {
   const [inputValue, setInputValue] = useState("");
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const canSendOffers =
+    (currentUser?.role === "seller" || currentUser?.role === "admin") &&
+    !!currentUser?.offers_enabled;
 
   const handleAcceptOffer = async (offer: Message["offer"]) => {
     console.log("[ACCEPT] called with offer:", JSON.stringify(offer));
@@ -363,7 +374,7 @@ export default function ConversationPage() {
       if (otherUserId) {
         const { data } = await supabase
           .from("profiles")
-          .select("id, display_name, full_name, avatar_url, is_verified_seller")
+          .select("id, display_name, full_name, avatar_url, is_verified_seller, offers_enabled")
           .eq("id", otherUserId)
           .maybeSingle();
         otherUserData = data;
@@ -374,6 +385,7 @@ export default function ConversationPage() {
         name: otherUserData?.display_name || "Unknown",
         avatar: (otherUserData?.display_name || "U").substring(0, 2).toUpperCase(),
         isVerified: otherUserData?.is_verified_seller || false,
+        offersEnabled: otherUserData?.offers_enabled !== false,
         lastMessage: messagesData?.[messagesData.length - 1]?.content || "",
         time: messagesData?.length ? new Date(messagesData[messagesData.length - 1].created_at).toLocaleTimeString() : "",
         unread: convData.unread,
@@ -512,6 +524,7 @@ export default function ConversationPage() {
                       onAccept={() => handleAcceptOffer(msg.offer)}
                       onDecline={() => handleDeclineOffer(msg.offer)}
                       onGoToCheckout={() => handleGoToCheckout(msg.offer)}
+                      actionsEnabled={conversation.offersEnabled}
                     />
                   </div>
                 ) : msg.content ? (
@@ -555,13 +568,15 @@ export default function ConversationPage() {
             </button>
           </div>
 
-          <button
-            onClick={() => setShowOfferModal(true)}
-            className="relay-button-secondary w-full flex items-center justify-center gap-2"
-          >
-            <DollarSign className="w-4 h-4" />
-            Send Custom Offer
-          </button>
+          {canSendOffers && (
+            <button
+              onClick={() => setShowOfferModal(true)}
+              className="relay-button-secondary w-full flex items-center justify-center gap-2"
+            >
+              <DollarSign className="w-4 h-4" />
+              Send Custom Offer
+            </button>
+          )}
         </div>
 
       {/* Custom Offer Modal */}

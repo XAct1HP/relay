@@ -40,6 +40,8 @@ interface ListingDetail {
     displayName: string;
     avatar: string;
     isVerified: boolean;
+    customerMessagingEnabled: boolean;
+    offersEnabled: boolean;
     totalSales: number;
     rating: number;
     joinedDate: string;
@@ -122,6 +124,8 @@ export default function ListingDetailPage({
                 data.seller?.avatar_url ||
                 "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
               isVerified: data.seller?.is_verified_seller || false,
+              customerMessagingEnabled: data.seller?.customer_messaging_enabled ?? false,
+              offersEnabled: data.seller?.offers_enabled ?? false,
               totalSales: 847,
               rating: 4.9,
               joinedDate: new Date(data.seller?.created_at).toLocaleDateString(
@@ -170,6 +174,11 @@ export default function ListingDetailPage({
 
       if (existingConvos && existingConvos.length > 0) {
         router.push("/messages");
+        return;
+      }
+
+      if (!listing?.seller.customerMessagingEnabled) {
+        alert("This seller is not accepting new customer messages right now.");
         return;
       }
 

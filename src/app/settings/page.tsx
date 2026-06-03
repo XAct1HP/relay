@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const [instagramUrl, setInstagramUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [sellerApplicationStatus, setSellerApplicationStatus] = useState<string | null>(null)
+  const [customerMessagingEnabled, setCustomerMessagingEnabled] = useState(false)
+  const [offersEnabled, setOffersEnabled] = useState(false)
 
   // Handle return from Stripe onboarding
   useEffect(() => {
@@ -55,6 +57,8 @@ export default function SettingsPage() {
         if (data.avatar_url) setAvatar(data.avatar_url)
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
         if (data.instagram_url) setInstagramUrl(data.instagram_url)
+        setCustomerMessagingEnabled(!!data.customer_messaging_enabled)
+        setOffersEnabled(!!data.offers_enabled)
         // Check if Stripe account is connected based on profile data
         if (data.stripe_account_id) {
           setStripeConnected(true)
@@ -108,6 +112,8 @@ export default function SettingsPage() {
         full_name: fullName,
         avatar_url: avatarUrl,
         instagram_url: instagramUrl || null,
+        customer_messaging_enabled: customerMessagingEnabled,
+        offers_enabled: offersEnabled,
       })
 
       setAvatarFile(null)
@@ -158,6 +164,8 @@ export default function SettingsPage() {
       <div className="text-center text-white/40 py-12">Loading...</div>
     )
   }
+
+  const isApprovedSeller = sellerApplicationStatus === 'approved' && currentUser?.role === 'seller'
 
   return (
     <div className="space-y-6 pb-12">
@@ -406,6 +414,50 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {isApprovedSeller && (
+          <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-6">Seller Settings</h2>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-4 border-b border-white/10">
+                <div>
+                  <p className="text-white font-medium">Customer Messaging</p>
+                  <p className="text-white/50 text-sm">
+                    Let buyers start new conversations from your listings and profile
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customerMessagingEnabled}
+                    onChange={(e) => setCustomerMessagingEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white/50 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5f8fff]"></div>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-white font-medium">Offers</p>
+                  <p className="text-white/50 text-sm">
+                    Let buyers interact with offer actions tied to your listings
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={offersEnabled}
+                    onChange={(e) => setOffersEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white/50 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5f8fff]"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Connected Accounts — only show for sellers or users with an active seller application */}
         {(currentUser?.role === 'seller' || currentUser?.role === 'admin' || (sellerApplicationStatus && sellerApplicationStatus !== 'none')) && (
           <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
@@ -491,6 +543,8 @@ export default function SettingsPage() {
               setFullName(currentUser?.display_name || '')
               setAvatar(currentUser?.avatar_url || '')
               setAvatarFile(null)
+              setCustomerMessagingEnabled(!!currentUser?.customer_messaging_enabled)
+              setOffersEnabled(!!currentUser?.offers_enabled)
             }}
             className="px-6 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] font-medium rounded-lg transition-colors border border-white/10"
           >

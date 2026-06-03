@@ -85,6 +85,10 @@ export function CustomOfferModal({
 
   const handleSubmit = async () => {
     if (!canSubmit || !currentUser?.id || !selectedListing) return;
+    if (!currentUser.offers_enabled) {
+      alert("Enable offers in seller settings before sending custom offers.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
