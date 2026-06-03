@@ -30,10 +30,20 @@ export default function LoginPage() {
         .from('profiles')
         .select('role, seller_application_status')
         .eq('id', session.user.id)
-        .single() : { data: null };
+        .maybeSingle() : { data: null };
 
       const role = profile?.role;
       const sellerStatus = profile?.seller_application_status;
+      const isTestSellerEmail = session?.user.email?.toLowerCase() === 'test-seller@relay.local';
+      let isStagingTestSeller = false;
+
+      if (session && isTestSellerEmail) {
+        const statusRes = await fetch('/api/test-mode/status', { cache: 'no-store' });
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          isStagingTestSeller = !!status?.enabled && !!status?.isTestSeller;
+        }
+      }
 
       // Check localStorage for intended role (from signup as seller)
       const intendedRole = typeof window !== 'undefined' ? localStorage.getItem('relay_intended_role') : null;
@@ -42,7 +52,9 @@ export default function LoginPage() {
       const hasIncompleteApplication = typeof window !== 'undefined' && localStorage.getItem('relay_onboarding_form_data');
 
       // Redirect based on role and onboarding status
-      if (intendedRole === 'seller' && (!sellerStatus || sellerStatus === 'none')) {
+      if (isStagingTestSeller && (!sellerStatus || sellerStatus === 'none')) {
+        router.push('/onboarding');
+      } else if (intendedRole === 'seller' && (!sellerStatus || sellerStatus === 'none')) {
         // New seller signup - needs onboarding
         if (typeof window !== 'undefined') localStorage.removeItem('relay_intended_role');
         router.push('/onboarding');

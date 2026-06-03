@@ -6,6 +6,7 @@ import useAuth from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase';
 import { ShippingAddress } from '@/types';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { RELAY_TEST_ADDRESS, RELAY_TEST_QUESTIONNAIRE } from '@/lib/test-mode';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
 
@@ -18,6 +19,12 @@ interface OnboardingFormData {
   stripe_connected: boolean;
   // Step 4: Terms
   terms_accepted: boolean;
+}
+
+interface TestModeStatus {
+  enabled: boolean;
+  isTestSeller: boolean;
+  bannerText: string | null;
 }
 
 export default function OnboardingPage() {
@@ -38,6 +45,11 @@ export default function OnboardingPage() {
   const [error, setError] = useState('');
   const [stripeConnected, setStripeConnected] = useState(false);
   const [authenticityAccepted, setAuthenticityAccepted] = useState(false);
+  const [testModeStatus, setTestModeStatus] = useState<TestModeStatus>({
+    enabled: false,
+    isTestSeller: false,
+    bannerText: null,
+  });
 
   const [formData, setFormData] = useState<OnboardingFormData>(() => {
     // Restore saved form data from localStorage (persisted before Stripe redirect)
@@ -74,6 +86,7 @@ export default function OnboardingPage() {
       terms_accepted: false,
     };
   });
+  const isStagingTestSeller = testModeStatus.enabled && testModeStatus.isTestSeller;
 
   // Persist form data to localStorage whenever it changes (protects against redirect loss)
   useEffect(() => {
@@ -107,6 +120,82 @@ export default function OnboardingPage() {
       router.push('/auth/login');
     }
   }, [currentUser, router]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let ignore = false;
+
+    async function loadTestModeStatus() {
+      try {
+        const response = await fetch('/api/test-mode/status', { cache: 'no-store' });
+        if (!response.ok) return;
+
+        const status = (await response.json()) as TestModeStatus;
+        if (ignore) return;
+
+        setTestModeStatus(status);
+
+        if (status.enabled && status.isTestSeller) {
+          setStripeConnected(true);
+          setFormData((prev) => ({
+            ...prev,
+            ship_from_address: {
+              ...RELAY_TEST_ADDRESS,
+              ...prev.ship_from_address,
+              name: prev.ship_from_address.name || RELAY_TEST_ADDRESS.name,
+              street: prev.ship_from_address.street || RELAY_TEST_ADDRESS.street,
+              street2: prev.ship_from_address.street2 || RELAY_TEST_ADDRESS.street2,
+              city: prev.ship_from_address.city || RELAY_TEST_ADDRESS.city,
+              state: prev.ship_from_address.state || RELAY_TEST_ADDRESS.state,
+              zip: prev.ship_from_address.zip || RELAY_TEST_ADDRESS.zip,
+              country: prev.ship_from_address.country || RELAY_TEST_ADDRESS.country,
+            },
+            questionnaire_responses: {
+              ...RELAY_TEST_QUESTIONNAIRE,
+              ...prev.questionnaire_responses,
+              primary_shoe_type:
+                prev.questionnaire_responses.primary_shoe_type ||
+                RELAY_TEST_QUESTIONNAIRE.primary_shoe_type,
+              reselling_duration:
+                prev.questionnaire_responses.reselling_duration ||
+                RELAY_TEST_QUESTIONNAIRE.reselling_duration,
+              previous_platforms:
+                prev.questionnaire_responses.previous_platforms ||
+                RELAY_TEST_QUESTIONNAIRE.previous_platforms,
+              authenticity_verification:
+                prev.questionnaire_responses.authenticity_verification ||
+                RELAY_TEST_QUESTIONNAIRE.authenticity_verification,
+              monthly_volume:
+                prev.questionnaire_responses.monthly_volume ||
+                RELAY_TEST_QUESTIONNAIRE.monthly_volume,
+              why_relay:
+                prev.questionnaire_responses.why_relay ||
+                RELAY_TEST_QUESTIONNAIRE.why_relay,
+              own_brand:
+                prev.questionnaire_responses.own_brand ||
+                RELAY_TEST_QUESTIONNAIRE.own_brand,
+              instagram_url:
+                prev.questionnaire_responses.instagram_url ||
+                RELAY_TEST_QUESTIONNAIRE.instagram_url,
+              other_links:
+                prev.questionnaire_responses.other_links ||
+                RELAY_TEST_QUESTIONNAIRE.other_links,
+            },
+            stripe_connected: true,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load test mode status', err);
+      }
+    }
+
+    loadTestModeStatus();
+
+    return () => {
+      ignore = true;
+    };
+  }, [currentUser?.id]);
 
   const handleAddressChange = (field: keyof ShippingAddress, value: string) => {
     setFormData((prev) => ({
@@ -192,6 +281,13 @@ export default function OnboardingPage() {
         throw new Error(data.error || 'Failed to connect Stripe account');
       }
 
+      if (data.bypassed) {
+        setStripeConnected(true);
+        setFormData((prev) => ({ ...prev, stripe_connected: true }));
+        setIsLoading(false);
+        return;
+      }
+
       if (data.url) {
         // Redirect to Stripe's onboarding flow
         window.location.href = data.url;
@@ -260,6 +356,12 @@ export default function OnboardingPage() {
   return (
     <div className="relay-page min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-2xl">
+        {isStagingTestSeller && testModeStatus.bannerText && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm font-medium text-amber-300">{testModeStatus.bannerText}</p>
+          </div>
+        )}
+
         {/* Step Indicator */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
@@ -622,7 +724,11 @@ export default function OnboardingPage() {
                   <div className="relay-subcard p-4 border-emerald-500/30 bg-emerald-500/5">
                     <div className="flex items-center gap-3">
                       <CheckCircle2 className="text-emerald-400" size={20} />
-                      <p className="text-sm text-emerald-400 font-medium">Stripe account connected successfully!</p>
+                      <p className="text-sm text-emerald-400 font-medium">
+                        {isStagingTestSeller
+                          ? 'Stripe bypass enabled for staging test seller.'
+                          : 'Stripe account connected successfully!'}
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -705,7 +811,7 @@ export default function OnboardingPage() {
                 <div className="relay-subcard p-4 border-emerald-500/30 bg-emerald-500/5">
                   <div className="flex items-center gap-2 text-sm text-emerald-400">
                     <CheckCircle2 size={18} />
-                    <span>Stripe account connected</span>
+                    <span>{isStagingTestSeller ? 'Stripe bypass active in staging' : 'Stripe account connected'}</span>
                   </div>
                 </div>
 

@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { isRelayTestModeEnabled, isRelayTestSellerEmail } from '@/lib/test-mode'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -38,6 +39,13 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (isRelayTestModeEnabled() && isRelayTestSellerEmail(user.email)) {
+      return NextResponse.json({
+        bypassed: true,
+        stripeConnected: true,
+      })
     }
 
     // Get or create Stripe Connect account

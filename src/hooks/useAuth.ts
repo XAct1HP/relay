@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { User } from '@/types';
 import { createClient } from '@/lib/supabase';
+import { buildFallbackUsername } from '@/lib/test-mode';
 
 interface AuthState {
   currentUser: User | null;
@@ -12,6 +13,72 @@ interface AuthState {
   signOut: () => Promise<void>;
   fetchUser: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
+}
+
+async function ensureProfileExists(supabase: ReturnType<typeof createClient>, sessionUser: any) {
+  const { data: existingProfile, error: existingError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', sessionUser.id)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existingProfile) return existingProfile as User;
+
+  const fullName =
+    sessionUser.user_metadata?.full_name ||
+    sessionUser.user_metadata?.name ||
+    sessionUser.email?.split('@')[0] ||
+    'Relay User';
+
+  let insertError: any = null;
+  for (let i = 0; i < 3; i++) {
+    const { error } = await supabase.from('profiles').insert({
+      id: sessionUser.id,
+      email: sessionUser.email,
+      full_name: fullName,
+      username: buildFallbackUsername(sessionUser.email),
+      role: 'buyer' as const,
+      customer_messaging_enabled: false,
+      offers_enabled: false,
+    });
+
+    if (!error) {
+      insertError = null;
+      break;
+    }
+
+    insertError = error;
+    if (
+      String(error.message || '').toLowerCase().includes('duplicate') ||
+      String(error.message || '').toLowerCase().includes('unique')
+    ) {
+      const { data: racedProfile, error: racedProfileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', sessionUser.id)
+        .maybeSingle();
+
+      if (racedProfileError) throw racedProfileError;
+      if (racedProfile) return racedProfile as User;
+    }
+
+    if (!String(error.message || '').toLowerCase().includes('username')) {
+      break;
+    }
+  }
+
+  if (insertError) throw insertError;
+
+  const { data: repairedProfile, error: repairedError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', sessionUser.id)
+    .single();
+
+  if (repairedError) throw repairedError;
+
+  return repairedProfile as User;
 }
 
 /**
@@ -125,18 +192,8 @@ const useAuthStore = create<AuthState>((set) => ({
         return;
       }
 
-      // Fetch user profile from database
-      const { data, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      if (data) {
-        set({ currentUser: data as User });
-      }
+      const profile = await ensureProfileExists(supabase, session.user);
+      set({ currentUser: profile });
     } catch (error) {
       console.error('Fetch user error:', error);
       set({ currentUser: null });
