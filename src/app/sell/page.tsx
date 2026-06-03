@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BRANDS, BRANDS_REQUIRING_REVIEW, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
 import { buildLegacySizes, isManualListingBrand, mergeListingVariants, normalizeSku } from "@/lib/listings";
+import { getCatalogProductSeed } from "@/lib/catalog";
 import { calculateFees, formatCurrency } from "@/lib/utils";
-import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight } from "lucide-react";
+import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight, ScanSearch, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 
@@ -23,14 +24,21 @@ interface UploadedPhoto {
 }
 
 type Step = 1 | 2 | 3 | 4;
+type ListingMode = "catalog" | "manual";
 
-const STEP_LABELS = ["Shoe Details", "Sizes & Pricing", "Photos & Description", "Review & Publish"];
+const STEP_LABELS: Record<ListingMode, string[]> = {
+  catalog: ["Catalog Product", "Sizes & Pricing", "Media & Notes", "Review & Publish"],
+  manual: ["Shoe Details", "Sizes & Pricing", "Photos & Description", "Review & Publish"],
+};
 
 export default function SellPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [listingMode, setListingMode] = useState<ListingMode>("catalog");
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogHint, setCatalogHint] = useState<string | null>(null);
 
   // Step 1: Shoe Details
   const [brand, setBrand] = useState("");
@@ -56,23 +64,26 @@ export default function SellPage() {
   const [publishedWasMerged, setPublishedWasMerged] = useState(false);
   const dragOverCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isManualListing = isManualListingBrand(brand);
+  const isCatalogListing = listingMode === "catalog";
+  const isManualListing = listingMode === "manual";
+  const requiresReview = isManualListing && isManualListingBrand(brand);
+  const currentStepLabels = STEP_LABELS[listingMode];
 
   // Step 1 Validation
   const normalizedSku = normalizeSku(sku);
   const isStep1Valid =
-    brand &&
-    modelName &&
     condition &&
     boxCondition &&
     approximateSizing &&
-    (isManualListing || !!normalizedSku);
+    !!modelName &&
+    !!brand &&
+    (isCatalogListing ? !!normalizedSku : true);
 
   // Step 2 Validation
   const isStep2Valid = sizes.length > 0 && sizes.every(s => s.size && s.price > 0 && s.quantity > 0);
 
   // Step 3 Validation
-  const isStep3Valid = photos.length > 0 && description.trim().length >= 4;
+  const isStep3Valid = description.trim().length >= 4 && (isCatalogListing || photos.length > 0);
 
   const handleNextStep = () => {
     if (currentStep === 1 && isStep1Valid) {
@@ -87,6 +98,57 @@ export default function SellPage() {
   const handlePreviousStep = () => {
     if (currentStep > 1) {
       setCurrentStep((currentStep - 1) as Step);
+    }
+  };
+
+  const switchListingMode = (nextMode: ListingMode) => {
+    setListingMode(nextMode);
+    setCurrentStep(1);
+    setCatalogHint(null);
+    setPublishSuccess(false);
+    setPublishedWasMerged(false);
+
+    if (nextMode === "catalog") {
+      if (isManualListingBrand(brand)) {
+        setBrand("");
+      }
+    } else {
+      setSku("");
+      setCatalogHint(null);
+      if (!brand) {
+        setBrand("Custom");
+      }
+    }
+  };
+
+  const handleLoadCatalogDetails = async () => {
+    if (!normalizedSku) {
+      setCatalogHint("Enter a valid SKU to prefill the catalog listing.");
+      return;
+    }
+
+    setCatalogLoading(true);
+    setCatalogHint(null);
+
+    try {
+      const seed = await getCatalogProductSeed(sku);
+
+      if (!seed) {
+        setCatalogHint("We couldn't build catalog placeholder data for that SKU yet.");
+        return;
+      }
+
+      setSku(seed.sku);
+      setBrand(seed.brand);
+      setModelName(seed.model);
+      setNickname(seed.nickname);
+      setDescription((current) => current.trim() || seed.description);
+      setCatalogHint("Placeholder catalog details loaded. Swap this helper for a real catalog API later.");
+    } catch (error) {
+      console.error("Catalog seed error:", error);
+      setCatalogHint("Failed to generate placeholder catalog details. You can still enter the title manually.");
+    } finally {
+      setCatalogLoading(false);
     }
   };
 
@@ -169,11 +231,12 @@ export default function SellPage() {
     try {
       const supabase = createClient();
       let existingListingId: string | null = null;
+      let existingListingImages: string[] = [];
 
-      if (!isManualListing && normalizedSku) {
+      if (isCatalogListing && normalizedSku) {
         const { data: existingListing, error: existingListingError } = await supabase
           .from("listings")
-          .select("id")
+          .select("id, images")
           .eq("seller_id", currentUser!.id)
           .eq("sku_normalized", normalizedSku)
           .neq("status", "removed")
@@ -185,26 +248,29 @@ export default function SellPage() {
         }
 
         existingListingId = existingListing?.id || null;
+        existingListingImages = existingListing?.images || [];
       }
 
       // Upload photos to storage
       const imageUrls: string[] = [];
-      for (const photo of photos) {
-        const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from("listing-images")
-          .upload(fileName, photo.file);
+      if (photos.length > 0) {
+        for (const photo of photos) {
+          const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.jpg`;
+          const { error: uploadError } = await supabase.storage
+            .from("listing-images")
+            .upload(fileName, photo.file);
 
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-          continue;
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            continue;
+          }
+
+          const { data } = supabase.storage
+            .from("listing-images")
+            .getPublicUrl(fileName);
+
+          imageUrls.push(data?.publicUrl || "");
         }
-
-        const { data } = supabase.storage
-          .from("listing-images")
-          .getPublicUrl(fileName);
-
-        imageUrls.push(data?.publicUrl || "");
       }
 
       const legacySizes = buildLegacySizes(
@@ -226,7 +292,7 @@ export default function SellPage() {
             box_condition: boxCondition,
             approx_sizing: approximateSizing,
             description,
-            images: imageUrls,
+            images: imageUrls.length > 0 ? imageUrls : existingListingImages,
             sku: normalizedSku,
             sizes: legacySizes,
           })
@@ -263,8 +329,8 @@ export default function SellPage() {
             description,
             images: imageUrls,
             sizes: legacySizes,
-            sku: isManualListing ? null : normalizedSku,
-            status: BRANDS_REQUIRING_REVIEW.has(brand) ? "pending_review" : "active",
+            sku: isCatalogListing ? normalizedSku : null,
+            status: requiresReview ? "pending_review" : "active",
           })
           .select()
           .single();
@@ -288,7 +354,7 @@ export default function SellPage() {
       }
 
       // Success
-      setPublishedNeedsReview(BRANDS_REQUIRING_REVIEW.has(brand));
+      setPublishedNeedsReview(requiresReview);
       setPublishSuccess(true);
     } catch (error) {
       console.error("Publish error:", error);
@@ -299,6 +365,7 @@ export default function SellPage() {
   };
 
   const resetForm = () => {
+    setListingMode("catalog");
     setBrand("");
     setSku("");
     setModelName("");
@@ -313,6 +380,7 @@ export default function SellPage() {
     setCurrentStep(1);
     setPublishSuccess(false);
     setPublishedWasMerged(false);
+    setCatalogHint(null);
   };
 
   // Calculate total potential earnings
@@ -372,12 +440,63 @@ export default function SellPage() {
         <div className="mb-8">
           <div className="relay-eyebrow text-relay-accent">NEW LISTING</div>
           <h1 className="relay-title text-relay-text mt-2">Sell Your Shoes</h1>
+          <p className="text-relay-subtle mt-3 max-w-2xl">
+            Choose a catalog sneaker listing for SKU-based inventory, or keep the existing manual flow for customs and non-standard products.
+          </p>
+        </div>
+
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => switchListingMode("catalog")}
+            className={`text-left rounded-2xl border p-5 transition-all ${
+              isCatalogListing
+                ? "border-relay-accent bg-relay-accent/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-relay-accent/15 text-relay-accent flex items-center justify-center">
+                <ScanSearch size={20} />
+              </div>
+              <div>
+                <h2 className="text-relay-text font-semibold">Catalog Sneaker Listing</h2>
+                <p className="text-xs text-relay-subtle">SKU-first inventory</p>
+              </div>
+            </div>
+            <p className="text-sm text-relay-muted leading-relaxed">
+              Enter a SKU, load placeholder product details, and list multiple sizes with separate prices and quantities. Photos are optional for now.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => switchListingMode("manual")}
+            className={`text-left rounded-2xl border p-5 transition-all ${
+              isManualListing
+                ? "border-relay-accent bg-relay-accent/10"
+                : "border-white/10 bg-white/[0.02] hover:border-white/20"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-white/10 text-relay-text flex items-center justify-center">
+                <Camera size={20} />
+              </div>
+              <div>
+                <h2 className="text-relay-text font-semibold">Custom / Manual Listing</h2>
+                <p className="text-xs text-relay-subtle">Photo-led product setup</p>
+              </div>
+            </div>
+            <p className="text-sm text-relay-muted leading-relaxed">
+              Preserve the current upload flow for customs, independent brands, or any item that is not tied to a standard sneaker catalog SKU.
+            </p>
+          </button>
         </div>
 
         {/* Step Indicator */}
         <div className="mb-8">
           <div className="flex justify-between mb-6">
-            {STEP_LABELS.map((label, index) => {
+            {currentStepLabels.map((label, index) => {
               const stepNum = (index + 1) as Step;
               const isActive = stepNum === currentStep;
               const isCompleted = stepNum < currentStep;
@@ -398,7 +517,7 @@ export default function SellPage() {
                   <div className={`hidden sm:block text-xs font-medium ml-2 ${isActive ? "text-relay-accent" : "text-relay-subtle"}`}>
                     {label}
                   </div>
-                  {index < STEP_LABELS.length - 1 && (
+                  {index < currentStepLabels.length - 1 && (
                     <div
                       className={`flex-1 h-1 mx-2 rounded-full ${
                         isCompleted ? "bg-emerald-500/30" : "bg-white/10"
@@ -416,60 +535,98 @@ export default function SellPage() {
           {/* Step 1: Shoe Details */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">Brand</label>
-                <div className="relative">
-                  <select
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    className="relay-select pr-10 appearance-none"
-                  >
-                    <option value="">Select a brand...</option>
-                    <optgroup label="Special Categories">
-                      <option value="Individual Brand">Individual Brand</option>
-                      <option value="Custom">Custom</option>
-                    </optgroup>
-                    <optgroup label="Brands">
-                      {BRANDS.filter(b => b !== 'Individual Brand' && b !== 'Custom').map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
-                </div>
-                {BRANDS_REQUIRING_REVIEW.has(brand) && (
-                  <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <p className="text-amber-300 text-sm font-medium mb-1">Admin Approval Required</p>
-                    <p className="text-amber-200/60 text-xs leading-relaxed">
-                      {brand === 'Individual Brand'
-                        ? 'Listings for individual/independent brands are exempt from third-party authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'
-                        : 'Custom-made shoes are unique and cannot go through standard authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'}
+              {isCatalogListing ? (
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-relay-accent/20 bg-relay-accent/5 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles size={16} className="text-relay-accent" />
+                      <p className="text-sm font-semibold text-relay-text">Catalog Placeholder Helper</p>
+                    </div>
+                    <p className="text-sm text-relay-muted leading-relaxed">
+                      Relay does not have a live catalog API wired in yet. Use the SKU helper below to seed clean placeholder title and description data that we can replace with a real catalog lookup later.
                     </p>
                   </div>
-                )}
-              </div>
 
-              {!isManualListing && (
+                  <div>
+                    <label className="block text-sm font-medium text-relay-text mb-2">SKU *</label>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <input
+                        type="text"
+                        placeholder="e.g., DZ5485-612"
+                        value={sku}
+                        onChange={(e) => setSku(e.target.value.toUpperCase())}
+                        className="relay-input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLoadCatalogDetails}
+                        disabled={!normalizedSku || catalogLoading}
+                        className="relay-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {catalogLoading ? "Loading..." : "Load Product Details"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-relay-subtle mt-1">
+                      Relay uses SKU to keep one listing per seller for each sneaker.
+                    </p>
+                    {catalogHint && (
+                      <p className="text-xs text-relay-accent mt-2">{catalogHint}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-relay-text mb-2">Brand *</label>
+                    <input
+                      type="text"
+                      placeholder="Auto-filled from catalog helper"
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      className="relay-input"
+                    />
+                  </div>
+                </div>
+              ) : (
                 <div>
-                  <label className="block text-sm font-medium text-relay-text mb-2">SKU *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., DZ5485-612"
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value.toUpperCase())}
-                    className="relay-input"
-                  />
-                  <p className="text-xs text-relay-subtle mt-1">
-                    Relay uses SKU to keep one listing per seller for each sneaker.
-                  </p>
+                  <label className="block text-sm font-medium text-relay-text mb-2">Brand</label>
+                  <div className="relative">
+                    <select
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      className="relay-select pr-10 appearance-none"
+                    >
+                      <option value="">Select a brand...</option>
+                      <optgroup label="Special Categories">
+                        <option value="Individual Brand">Individual Brand</option>
+                        <option value="Custom">Custom</option>
+                      </optgroup>
+                      <optgroup label="Brands">
+                        {BRANDS.filter(b => b !== 'Individual Brand' && b !== 'Custom').map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+                  </div>
+                  {requiresReview && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-amber-300 text-sm font-medium mb-1">Admin Approval Required</p>
+                      <p className="text-amber-200/60 text-xs leading-relaxed">
+                        {brand === 'Individual Brand'
+                          ? 'Listings for individual/independent brands are exempt from third-party authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'
+                          : 'Custom-made shoes are unique and cannot go through standard authentication. Your listing will be reviewed by Relay admin before going live on the marketplace.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">Model Name *</label>
+                <label className="block text-sm font-medium text-relay-text mb-2">
+                  {isCatalogListing ? "Product Title *" : "Model Name *"}
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g., Air Jordan 1 Retro High OG"
+                  placeholder={isCatalogListing ? "Auto-filled from catalog helper" : "e.g., Air Jordan 1 Retro High OG"}
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
                   className="relay-input"
@@ -477,15 +634,30 @@ export default function SellPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">Nickname (Optional)</label>
+                <label className="block text-sm font-medium text-relay-text mb-2">
+                  {isCatalogListing ? "Style / Colorway (Optional)" : "Nickname (Optional)"}
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g., Chicago, Bred, etc."
+                  placeholder={isCatalogListing ? "e.g., Chicago, Panda, Onyx" : "e.g., Chicago, Bred, etc."}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="relay-input"
                 />
               </div>
+
+              {isCatalogListing && (
+                <div>
+                  <label className="block text-sm font-medium text-relay-text mb-2">Catalog Description *</label>
+                  <textarea
+                    placeholder="The placeholder helper can fill this, or you can write your own description."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    className="relay-textarea"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-relay-text mb-2">Shoe Condition *</label>
@@ -658,7 +830,17 @@ export default function SellPage() {
             <div className="space-y-6">
               {/* Photo Upload Area */}
               <div>
-                <label className="block text-sm font-medium text-relay-text mb-3">Photos *</label>
+                <label className="block text-sm font-medium text-relay-text mb-3">
+                  Photos {isManualListing ? "*" : "(Optional)"}
+                </label>
+                {isCatalogListing && (
+                  <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                    <p className="text-sm text-relay-text font-medium mb-1">Catalog images are optional for now</p>
+                    <p className="text-xs text-relay-subtle leading-relaxed">
+                      You can upload your own photos, but catalog listings can publish without them. Once a real catalog lookup is connected, these images can be refreshed from official product data.
+                    </p>
+                  </div>
+                )}
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -682,8 +864,12 @@ export default function SellPage() {
                     className="w-full flex flex-col items-center justify-center gap-2 text-center"
                   >
                     <Camera size={32} className="text-relay-accent" />
-                    <span className="font-medium text-relay-text">Drag & drop photos or click to upload</span>
-                    <span className="text-sm text-relay-subtle">Up to 10 photos. First photo is cover.</span>
+                    <span className="font-medium text-relay-text">
+                      {isCatalogListing ? "Add optional photos or leave this empty" : "Drag & drop photos or click to upload"}
+                    </span>
+                    <span className="text-sm text-relay-subtle">
+                      Up to 10 photos. First photo is cover.
+                    </span>
                   </button>
                 </div>
               </div>
@@ -748,9 +934,15 @@ export default function SellPage() {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">Description *</label>
+                <label className="block text-sm font-medium text-relay-text mb-2">
+                  {isCatalogListing ? "Catalog Description *" : "Description *"}
+                </label>
                 <textarea
-                  placeholder="Describe the condition, any defects, original packaging, etc. (minimum 4 characters)"
+                  placeholder={
+                    isCatalogListing
+                      ? "Describe the product, release, sizing notes, or leave the catalog placeholder text."
+                      : "Describe the condition, any defects, original packaging, etc. (minimum 4 characters)"
+                  }
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   minLength={4}
@@ -766,7 +958,7 @@ export default function SellPage() {
               <div>
                 <label className="block text-sm font-medium text-relay-text mb-2">Additional Notes (Optional)</label>
                 <textarea
-                  placeholder="Any other details about the shoes..."
+                  placeholder={isCatalogListing ? "Any extra selling notes for this catalog listing..." : "Any other details about the shoes..."}
                   value={additionalNotes}
                   onChange={(e) => setAdditionalNotes(e.target.value)}
                   rows={3}
@@ -779,7 +971,7 @@ export default function SellPage() {
           {/* Step 4: Review & Publish */}
           {currentStep === 4 && (
             <div className="space-y-8">
-              {BRANDS_REQUIRING_REVIEW.has(brand) && (
+              {requiresReview && (
                 <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <p className="text-amber-300 text-sm font-semibold mb-1">This listing requires admin approval</p>
                   <p className="text-amber-200/60 text-xs leading-relaxed">
@@ -791,19 +983,23 @@ export default function SellPage() {
               <div>
                 <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                   <Package size={16} className="text-relay-accent" />
-                  Shoe Details
+                  {isCatalogListing ? "Catalog Product" : "Shoe Details"}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                    <p className="text-relay-subtle mb-1">Listing Type</p>
+                    <p className="text-relay-text font-medium">{isCatalogListing ? "Catalog sneaker listing" : "Custom / manual listing"}</p>
+                  </div>
+                  <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">SKU</p>
-                    <p className="text-relay-text font-medium">{isManualListing ? "Manual listing" : normalizedSku}</p>
+                    <p className="text-relay-text font-medium">{isCatalogListing ? normalizedSku : "Not used"}</p>
                   </div>
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">Brand</p>
                     <p className="text-relay-text font-medium">{brand}</p>
                   </div>
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
-                    <p className="text-relay-subtle mb-1">Model</p>
+                    <p className="text-relay-subtle mb-1">{isCatalogListing ? "Product Title" : "Model"}</p>
                     <p className="text-relay-text font-medium">{modelName}</p>
                   </div>
                   {nickname && (
@@ -890,6 +1086,14 @@ export default function SellPage() {
                   </div>
                 </div>
               )}
+              {isCatalogListing && photos.length === 0 && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">No product photos attached</p>
+                  <p className="text-xs text-relay-subtle">
+                    This is okay for catalog listings. The product can later be hydrated with catalog images, or you can edit the listing and add your own photos anytime.
+                  </p>
+                </div>
+              )}
 
               {/* Description Preview */}
               {/* Description Preview */}
@@ -946,7 +1150,7 @@ export default function SellPage() {
                 disabled={isPublishing}
                 className="relay-button-accent flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isPublishing ? "Publishing..." : BRANDS_REQUIRING_REVIEW.has(brand) ? "Submit for Review" : "Publish Listing"}
+                {isPublishing ? "Publishing..." : requiresReview ? "Submit for Review" : "Publish Listing"}
               </button>
             )}
 
