@@ -14,6 +14,8 @@ import {
   Package,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { usePublicTestMode } from "@/hooks/usePublicTestMode";
+import { getRelayTestMarketplaceListing } from "@/lib/test-marketplace";
 import { Listing } from "@/types";
 import useAuth from "@/hooks/useAuth";
 
@@ -57,24 +59,31 @@ export default function ListingDetailPage({
 }) {
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { enabled: testModeEnabled, loading: testModeLoading } = usePublicTestMode();
   const [selectedSize, setSelectedSize] = useState<number | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [messagingLoading, setMessagingLoading] = useState(false);
   const [sellerId, setSellerId] = useState<string | null>(null);
+  const [isPreviewListing, setIsPreviewListing] = useState(false);
 
   useEffect(() => {
+    if (testModeLoading) {
+      return;
+    }
+
     async function fetchListing() {
       const supabase = createClient();
       setLoading(true);
+      setIsPreviewListing(false);
 
       try {
         const { data } = await supabase
           .from("listings")
           .select("*, seller:profiles(*), listing_variants(id, size, quantity, price, is_active)")
           .eq("id", params.id)
-          .single();
+          .maybeSingle();
 
         if (data) {
           const conditions: Record<string, ListingDetail["condition"]> = {
@@ -157,6 +166,47 @@ export default function ListingDetailPage({
 
           setSellerId(data.seller_id);
           setListing(formatted);
+          setIsPreviewListing(false);
+          return;
+        }
+
+        if (testModeEnabled) {
+          const previewListing = getRelayTestMarketplaceListing(params.id);
+          if (previewListing) {
+            setListing({
+              id: previewListing.id,
+              brand: previewListing.brand,
+              model: previewListing.model,
+              nickname: previewListing.nickname,
+              condition: previewListing.condition,
+              boxCondition: previewListing.boxCondition,
+              description: previewListing.description,
+              sizes: previewListing.sizes.map((size) => ({
+                id: size.id,
+                size: size.size,
+                quantity: size.quantity,
+                price: size.price,
+              })),
+              images: previewListing.images,
+              averageRating: 4.8,
+              reviewCount: 12,
+              seller: {
+                username: previewListing.seller.username,
+                displayName: previewListing.seller.displayName,
+                avatar: previewListing.seller.avatar,
+                isVerified: previewListing.seller.isVerified,
+                customerMessagingEnabled: false,
+                offersEnabled: false,
+                totalSales: previewListing.seller.totalSales,
+                rating: previewListing.seller.rating,
+                joinedDate: previewListing.seller.joinedDate,
+              },
+              gradient: previewListing.gradient,
+            });
+            setSellerId(null);
+            setIsPreviewListing(true);
+            return;
+          }
         }
       } catch (error) {
         console.error("Error fetching listing:", error);
@@ -166,7 +216,7 @@ export default function ListingDetailPage({
     }
 
     fetchListing();
-  }, [params.id]);
+  }, [params.id, testModeEnabled, testModeLoading]);
 
   const handleMessageSeller = async () => {
     if (!currentUser?.id || !sellerId) {
@@ -221,7 +271,7 @@ export default function ListingDetailPage({
     }
   };
 
-  if (loading) {
+  if (loading || testModeLoading) {
     return (
       <div className="relay-empty text-center">Loading...</div>
     );
@@ -236,9 +286,15 @@ export default function ListingDetailPage({
   }
 
   const selectedSizeData = listing.sizes.find((s) => s.size === selectedSize);
+  const availableSizes = listing.sizes.filter((s) => s.quantity > 0);
+  const lowestAvailablePrice = availableSizes.length > 0
+    ? Math.min(...availableSizes.map((s) => s.price))
+    : (listing.sizes.length > 0 ? Math.min(...listing.sizes.map((s) => s.price)) : 0);
   const displayPrice = selectedSizeData
     ? `$${selectedSizeData.price}`
-    : `From $${Math.min(...listing.sizes.map((s) => s.price))}`;
+    : lowestAvailablePrice > 0
+    ? `From $${lowestAvailablePrice}`
+    : "Sold out";
 
   const handleThumbnailClick = (index: number) => {
     setCurrentImageIndex(index);
@@ -419,7 +475,7 @@ export default function ListingDetailPage({
                 {displayPrice}
               </div>
               <p className="text-xs text-relay-subtle">
-                1% platform fee included
+                {isPreviewListing ? "Preview listing for staging test mode" : "1% platform fee included"}
               </p>
             </div>
 
@@ -436,23 +492,77 @@ export default function ListingDetailPage({
                     : "";
                   router.push(`/checkout?listing=${params.id}&size=${selectedSize}${variantParam}`);
                 }}
-                disabled={selectedSize === null}
+                disabled={selectedSize === null || isPreviewListing}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingCart size={20} />
-                Buy Now
+                {isPreviewListing ? "Preview Only" : "Buy Now"}
               </button>
               <button
                 onClick={handleMessageSeller}
-                disabled={messagingLoading}
+                disabled={messagingLoading || isPreviewListing}
                 className="relay-button-secondary w-full py-3 text-base flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <MessageSquare size={20} />
-                {messagingLoading ? "Opening..." : "Message Seller"}
+                {isPreviewListing ? "Messaging Disabled in Preview" : messagingLoading ? "Opening..." : "Message Seller"}
               </button>
+              {isPreviewListing && (
+                <p className="text-xs text-relay-subtle text-center mt-1">
+                  Preview listings are staging-only and let you review the listing page layout without a live checkout flow.
+                </p>
+              )}
             </div>
 
             {/* SELLER INFO CARD */}
+            {isPreviewListing ? (
+              <div className="relay-subcard p-4 border border-white/10">
+                <div className="flex items-center gap-3 mb-4">
+                  <img
+                    src={listing.seller.avatar}
+                    alt={listing.seller.displayName}
+                    className="w-12 h-12 rounded-full border border-white/10"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-relay-text">
+                        {listing.seller.displayName}
+                      </p>
+                      {listing.seller.isVerified && (
+                        <BadgeCheck size={16} className="text-relay-accent flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-sm text-relay-subtle">
+                      @{listing.seller.username}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/10">
+                  <div>
+                    <p className="text-relay-subtle text-xs">Sales</p>
+                    <p className="text-relay-text font-semibold text-sm mt-1">
+                      {listing.seller.totalSales.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-relay-subtle text-xs">Rating</p>
+                    <p className="text-relay-text font-semibold text-sm mt-1">
+                      {listing.seller.rating}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-relay-subtle text-xs">Joined</p>
+                    <p className="text-relay-text font-semibold text-sm mt-1">
+                      {listing.seller.joinedDate}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-full mt-4 relay-button-secondary text-sm text-center opacity-70">
+                  Preview Seller Card
+                </div>
+              </div>
+            ) : (
             <Link href={`/profile/${listing.seller.username}`}>
               <div className="relay-subcard p-4 hover:border-white/20 transition-colors cursor-pointer">
                 <div className="flex items-center gap-3 mb-4">
@@ -502,6 +612,7 @@ export default function ListingDetailPage({
                 </button>
               </div>
             </Link>
+            )}
           </div>
         </div>
 

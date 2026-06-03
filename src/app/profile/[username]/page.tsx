@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from '@/lib/listing-display';
 import useAuth from '@/hooks/useAuth';
 import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { Star, MessageCircle, TrendingUp, UserPlus, UserCheck, Heart, Instagram } from 'lucide-react';
@@ -59,10 +60,29 @@ const THEME_MAP: Record<string, ThemeColors> = {
 
 interface Listing {
   id: string;
+  seller_id?: string;
+  listing_type?: 'manual' | 'sku';
+  sku_normalized?: string | null;
   brand: string;
   model: string;
+  nickname?: string | null;
   images?: string[];
   sizes: any[];
+  listing_variants?: Array<{
+    id: string;
+    size: string;
+    price: number;
+    quantity: number;
+    is_active: boolean;
+  }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface InventoryCardListing extends Listing {
+  availableSizes: number[];
+  availableSizeLabels: string[];
+  lowestPrice: number;
 }
 
 interface Post {
@@ -99,7 +119,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
   const [loading, setLoading] = useState(true);
   const [messagingLoading, setMessagingLoading] = useState(false);
   const [profile, setProfile] = useState<SellerProfile | null>(null);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [listings, setListings] = useState<InventoryCardListing[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [averageRating, setAverageRating] = useState('0');
@@ -124,8 +144,22 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       if (!profileData) { setLoading(false); return; }
       setProfile(profileData);
 
-      const { data: listingsData } = await supabase.from('listings').select('*').eq('seller_id', profileData.id).eq('status', 'active');
-      setListings(listingsData || []);
+      const { data: listingsData } = await supabase
+        .from('listings')
+        .select('*, listing_variants(id, size, price, quantity, is_active)')
+        .eq('seller_id', profileData.id)
+        .eq('status', 'active');
+
+      const formattedListings = dedupeSkuListings((listingsData || []) as Listing[]).map((listing) => {
+        const metrics = getListingDisplayMetrics(listing);
+        return {
+          ...listing,
+          availableSizes: metrics.sizes,
+          availableSizeLabels: metrics.sizeLabels,
+          lowestPrice: metrics.lowestPrice,
+        };
+      });
+      setListings(formattedListings);
 
       const { data: postsData } = await supabase.from('posts').select('*, related_listing:listings(id, brand, model, images, sizes)').eq('seller_id', profileData.id).order('created_at', { ascending: false });
       setPosts(postsData || []);
@@ -331,8 +365,8 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                       <div className="p-4">
                         <h3 className="font-semibold text-relay-text mb-2 line-clamp-2">{listing.brand} {listing.model}</h3>
                         <div className="flex items-baseline justify-between">
-                          <p className="text-2xl font-bold" style={{ color: theme.accent }}>{"$" + (listing.sizes?.[0]?.price || 0)}</p>
-                          <p className="text-xs text-white/50">{listing.sizes?.length || 0} size{listing.sizes?.length !== 1 ? 's' : ''}</p>
+                          <p className="text-2xl font-bold" style={{ color: theme.accent }}>{`From $${listing.lowestPrice || 0}`}</p>
+                          <p className="text-xs text-white/50 text-right">{formatSizeDisplay(listing.availableSizes, listing.availableSizeLabels)}</p>
                         </div>
                       </div>
                     </>

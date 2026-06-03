@@ -5,8 +5,11 @@ import Link from "next/link";
 import { Pagination } from "@/components/layout/Pagination";
 import { Search, BadgeCheck, ChevronDown, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
+import { usePublicTestMode } from "@/hooks/usePublicTestMode";
 import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import { BRANDS as ALL_BRANDS } from "@/lib/constants";
+import { getRelayTestMarketplaceListings } from "@/lib/test-marketplace";
 import { Listing } from "@/types";
 
 interface ListingDisplay {
@@ -15,6 +18,7 @@ interface ListingDisplay {
   model: string;
   nickname?: string;
   sizes: number[];
+  sizeLabels: string[];
   price: number;
   image: string;
   condition: "New" | "Like New" | "Used - Excellent" | "Used - Good" | "Used - Fair";
@@ -24,30 +28,30 @@ interface ListingDisplay {
     isVerified: boolean;
   };
   gradient: string;
+  createdAt: string;
 }
 
 const BRANDS = ALL_BRANDS;
 const CONDITIONS = ["New", "Like New", "Used - Excellent", "Used - Good", "Used - Fair"];
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
+] as const;
 const SIZES = Array.from({ length: 31 }, (_, i) => {
   const baseSize = 3.5 + i * 0.5;
   return parseFloat(baseSize.toFixed(1));
 });
 
-function formatSizeDisplay(sizes: number[]): string {
-  if (sizes.length === 0) return "";
-  if (sizes.length === 1) return `Size ${sizes[0]}`;
-  if (sizes.length <= 3) return `Size ${sizes.join(", ")}`;
-  if (Math.max(...sizes) - Math.min(...sizes) < 1) return `Size ${Math.min(...sizes)}-${Math.max(...sizes)}`;
-  return `Size ${Math.min(...sizes)}, ${sizes[1]}, ${sizes[2]}`;
-}
-
 export default function MarketplacePage() {
   const { onboardingActive, loading: onboardingLoading } = useOnboardingPhase();
+  const { enabled: testModeEnabled, loading: testModeLoading } = usePublicTestMode();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedCondition, setSelectedCondition] = useState("");
   const [selectedSeller, setSelectedSeller] = useState("");
+  const [selectedSort, setSelectedSort] = useState<(typeof SORT_OPTIONS)[number]["value"]>("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const [allListings, setAllListings] = useState<ListingDisplay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +64,7 @@ export default function MarketplacePage() {
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, seller:profiles(full_name, display_name, is_verified_seller, avatar_url)")
+          .select("*, listing_variants(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url)")
           .eq("status", "active");
 
         if (data) {
@@ -72,7 +76,8 @@ export default function MarketplacePage() {
             used_fair: "Used - Fair",
           };
 
-          const formatted: ListingDisplay[] = data.map((listing: Listing) => {
+          const dedupedListings = dedupeSkuListings(data as Listing[]);
+          const formatted: ListingDisplay[] = dedupedListings.map((listing: Listing) => {
             const gradients: { [key: string]: string } = {
               Nike: "from-red-500/20 to-orange-500/20",
               Adidas: "from-gray-600/20 to-slate-600/20",
@@ -80,26 +85,16 @@ export default function MarketplacePage() {
               Jordan: "from-gray-700/20 to-slate-700/20",
               Puma: "from-purple-500/20 to-pink-500/20",
             };
-
-            // Extract sizes from the sizes array
-            const sizes = (listing.sizes as any[])
-              ?.map((s) => (typeof s === "object" ? s.size : s))
-              .filter((s) => s)
-              .map(Number) || [];
-
-            // Find min price
-            const prices = (listing.sizes as any[])?.map((s) =>
-              typeof s === "object" ? s.price : 0
-            ) || [0];
-            const minPrice = Math.min(...prices.filter((p) => p > 0)) || 0;
+            const metrics = getListingDisplayMetrics(listing);
 
             return {
               id: listing.id,
               brand: listing.brand,
               model: listing.model,
               nickname: listing.nickname ?? undefined,
-              sizes,
-              price: minPrice,
+              sizes: metrics.sizes,
+              sizeLabels: metrics.sizeLabels,
+              price: metrics.lowestPrice,
               image: listing.images?.[0] || "default",
               condition: conditionMap[listing.condition] || "Used - Good" as ListingDisplay["condition"],
               seller: {
@@ -110,6 +105,7 @@ export default function MarketplacePage() {
                 isVerified: listing.seller?.is_verified_seller || false,
               },
               gradient: gradients[listing.brand] || "from-blue-500/20 to-indigo-500/20",
+              createdAt: listing.created_at,
             };
           });
 
@@ -126,7 +122,29 @@ export default function MarketplacePage() {
   }, []);
 
   const filteredListings = useMemo(() => {
-    return allListings.filter((listing) => {
+    const previewListings: ListingDisplay[] = testModeEnabled
+      ? getRelayTestMarketplaceListings().map((listing) => ({
+          id: listing.id,
+          brand: listing.brand,
+          model: listing.model,
+          nickname: listing.nickname,
+          sizes: listing.sizes.map((size) => size.size).sort((a, b) => a - b),
+          sizeLabels: listing.sizes.map((size) => String(size.size)),
+          price: Math.min(...listing.sizes.filter((size) => size.quantity > 0).map((size) => size.price)),
+          image: listing.images[0] || "default",
+          condition: listing.condition,
+          seller: {
+            name: listing.seller.displayName,
+            avatar: listing.seller.avatar,
+            isVerified: listing.seller.isVerified,
+          },
+          gradient: listing.gradient,
+          createdAt: listing.createdAt,
+        }))
+      : [];
+
+    const sourceListings = [...allListings, ...previewListings];
+    const filtered = sourceListings.filter((listing) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         listing.brand.toLowerCase().includes(searchLower) ||
@@ -141,15 +159,22 @@ export default function MarketplacePage() {
 
       return matchesSearch && matchesBrand && matchesSize && matchesCondition && matchesSeller;
     });
-  }, [allListings, searchTerm, selectedBrand, selectedSize, selectedCondition, selectedSeller]);
 
-  const hasActiveFilters = selectedBrand || selectedSize || selectedCondition || selectedSeller;
+    return [...filtered].sort((a, b) => {
+      if (selectedSort === "price_asc") return a.price - b.price;
+      if (selectedSort === "price_desc") return b.price - a.price;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [allListings, searchTerm, selectedBrand, selectedSize, selectedCondition, selectedSeller, selectedSort, testModeEnabled]);
+
+  const hasActiveFilters = selectedBrand || selectedSize || selectedCondition || selectedSeller || selectedSort !== "newest";
 
   const clearFilters = () => {
     setSelectedBrand("");
     setSelectedSize("");
     setSelectedCondition("");
     setSelectedSeller("");
+    setSelectedSort("newest");
     setCurrentPage(1);
   };
 
@@ -160,13 +185,13 @@ export default function MarketplacePage() {
   );
   const totalPages = Math.ceil(filteredListings.length / itemsPerPage);
 
-  if (onboardingLoading || loading) {
+  if (onboardingLoading || loading || testModeLoading) {
     return (
       <div className="relay-empty text-center">Loading...</div>
     );
   }
 
-  if (onboardingActive) {
+  if (onboardingActive && !testModeEnabled) {
     return (
       <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
         <div className="p-4 bg-white/5 rounded-2xl mb-6">
@@ -188,6 +213,17 @@ export default function MarketplacePage() {
           <div className="relay-eyebrow text-relay-accent">BROWSE</div>
           <h1 className="relay-title text-relay-text mt-2">Marketplace</h1>
         </div>
+
+        {testModeEnabled && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm font-medium text-amber-300">
+              STAGING TEST MODE - marketplace preview listings are enabled.
+            </p>
+            <p className="text-xs text-amber-200/70 mt-1">
+              These placeholder cards are only for previewing marketplace and listing-page layouts in staging.
+            </p>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="mb-4">
@@ -281,6 +317,24 @@ export default function MarketplacePage() {
             className="relay-input flex-1 min-w-[180px]"
           />
 
+          <div className="relative min-w-fit">
+            <select
+              value={selectedSort}
+              onChange={(e) => {
+                setSelectedSort(e.target.value as (typeof SORT_OPTIONS)[number]["value"]);
+                setCurrentPage(1);
+              }}
+              className="relay-select pr-10 appearance-none"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} />
+          </div>
+
           {/* Clear Filters Button */}
           {hasActiveFilters && (
             <button
@@ -358,7 +412,7 @@ export default function MarketplacePage() {
 
                       {/* Size Display */}
                       <p className="text-relay-muted text-xs mb-3 mt-auto pt-2">
-                        {formatSizeDisplay(listing.sizes)}
+                        {formatSizeDisplay(listing.sizes, listing.sizeLabels)}
                       </p>
 
                       {/* Price */}
