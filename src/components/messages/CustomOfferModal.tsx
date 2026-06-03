@@ -8,7 +8,7 @@ import useAuth from "@/hooks/useAuth";
 interface ListingOption {
   id: string;
   name: string;
-  sizes: { size: string; price: number; quantity: number }[];
+  sizes: { id?: string; size: string; price: number; quantity: number }[];
 }
 
 const RELAY_FEE_PERCENTAGE = 0.01; // 1% platform fee
@@ -42,7 +42,7 @@ export function CustomOfferModal({
 
       const { data, error } = await supabase
         .from("listings")
-        .select("id, brand, model, nickname, sizes")
+        .select("id, brand, model, nickname, sizes, listing_variants(id, size, price, quantity, is_active)")
         .eq("seller_id", currentUser!.id)
         .eq("status", "active")
         .order("created_at", { ascending: false });
@@ -51,11 +51,21 @@ export function CustomOfferModal({
         const formatted: ListingOption[] = data.map((listing: any) => ({
           id: listing.id,
           name: `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}`,
-          sizes: (listing.sizes as any[])?.map((s: any) => ({
-            size: s.size?.toString() || "",
-            price: s.price || 0,
-            quantity: s.quantity || 0,
-          })).filter((s: any) => s.size && s.quantity > 0) || [],
+          sizes: ((listing.listing_variants as any[])?.length
+            ? (listing.listing_variants as any[])
+                .filter((variant: any) => variant.is_active !== false)
+                .map((variant: any) => ({
+                  id: variant.id,
+                  size: variant.size?.toString() || "",
+                  price: Number(variant.price) || 0,
+                  quantity: variant.quantity || 0,
+                }))
+            : (listing.sizes as any[])?.map((s: any) => ({
+                size: s.size?.toString() || "",
+                price: s.price || 0,
+                quantity: s.quantity || 0,
+              })) || []
+          ).filter((s: any) => s.size && s.quantity > 0),
         }));
         setListings(formatted);
       }
@@ -103,6 +113,7 @@ export function CustomOfferModal({
           conversation_id: conversationId,
           sender_id: currentUser!.id,
           listing_id: selectedListingId,
+          listing_variant_id: selectedSizeData?.id || null,
           size: selectedSize,
           original_price: originalPrice,
           offer_price: offerPriceNum,
@@ -149,6 +160,7 @@ export function CustomOfferModal({
           _offerOriginalPrice: originalPrice,
           _offerListingId: selectedListingId,
           _offerCustomOfferId: offerData?.id,
+          _offerVariantId: selectedSizeData?.id,
         };
         onOfferSent(conversationId, enrichedMessage);
       }

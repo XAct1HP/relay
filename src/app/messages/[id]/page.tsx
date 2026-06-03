@@ -20,6 +20,7 @@ interface Message {
     size: string;
     listingName: string;
     listingId: string;
+    listingVariantId?: string;
     customOfferId: string;
     status: "pending" | "accepted" | "declined";
     messageId: string;
@@ -244,7 +245,10 @@ export default function ConversationPage() {
     console.log("[CHECKOUT] called with offer:", JSON.stringify(offer));
     if (!offer) return;
 
-    const url = `/checkout?listing=${encodeURIComponent(offer.listingId)}&size=${encodeURIComponent(offer.size)}&customOffer=${encodeURIComponent(offer.customOfferId || "true")}`;
+    const variantParam = offer.listingVariantId
+      ? `&variant=${encodeURIComponent(offer.listingVariantId)}`
+      : "";
+    const url = `/checkout?listing=${encodeURIComponent(offer.listingId)}&size=${encodeURIComponent(offer.size)}${variantParam}&customOffer=${encodeURIComponent(offer.customOfferId || "true")}`;
     console.log("[CHECKOUT] navigating to:", url);
 
     // Use window.location for guaranteed navigation
@@ -351,6 +355,7 @@ export default function ConversationPage() {
             size: msg.custom_offer_size || "",
             listingName,
             listingId: matchingOffer?.listing_id || "",
+            listingVariantId: matchingOffer?.listing_variant_id || undefined,
             customOfferId: matchingOffer?.id || "",
             status: msg.custom_offer_status || "pending",
             messageId: msg.id,

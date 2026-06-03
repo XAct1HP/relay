@@ -32,10 +32,24 @@ export interface SizeOption {
   quantity: number;
 }
 
+export interface ListingVariant {
+  id: string;
+  listing_id: string;
+  size: string;
+  price: number;
+  quantity: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Shoe listing
 export interface Listing {
   id: string;
   seller_id: string;
+  listing_type: 'manual' | 'sku';
+  sku: string | null;
+  sku_normalized: string | null;
   brand: string;
   model: string;
   nickname: string | null;
@@ -51,6 +65,7 @@ export interface Listing {
   created_at: string;
   updated_at: string;
   seller?: User;
+  listing_variants?: ListingVariant[];
 }
 
 // Social feed post
@@ -80,6 +95,7 @@ export interface Follow {
 export interface Order {
   id: string;
   listing_id: string;
+  listing_variant_id?: string | null;
   buyer_id: string;
   seller_id: string;
   size: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import useAuth from '@/hooks/useAuth';
 import { Listing } from '@/types';
@@ -26,13 +26,20 @@ interface ShippingRate {
   estimated_days: number;
 }
 
+interface ResolvedVariant {
+  id: string;
+  size: string;
+  price: number;
+  quantity: number;
+}
+
 export default function CheckoutPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useAuth();
 
   const listingId = searchParams.get('listing');
   const size = searchParams.get('size');
+  const variantId = searchParams.get('variant');
   const customOfferId = searchParams.get('customOffer');
 
   const [listing, setListing] = useState<Listing | null>(null);
@@ -54,13 +61,17 @@ export default function CheckoutPage() {
 
   const [shippingRate, setShippingRate] = useState<ShippingRate | null>(null);
   const [resolvedPrice, setResolvedPrice] = useState<number | null>(null);
+  const [resolvedVariant, setResolvedVariant] = useState<ResolvedVariant | null>(null);
 
   // Fetch listing details and resolve price from database
   useEffect(() => {
     async function fetchListing() {
-      if (!listingId || !size) return;
+      if (!listingId || (!size && !variantId)) return;
       const supabase = createClient();
       setLoading(true);
+      setError(null);
+      setResolvedVariant(null);
+      setResolvedPrice(null);
 
       try {
         const { data, error: fetchError } = await supabase
@@ -77,11 +88,13 @@ export default function CheckoutPage() {
             setSellerAddress(data.seller.ship_from_address);
           }
 
+          let resolvedVariantRow: ResolvedVariant | null = null;
+
           // Resolve price from custom offer or listing sizes
           if (customOfferId && customOfferId !== 'true') {
             const { data: offer, error: offerError } = await supabase
               .from('custom_offers')
-              .select('offer_price, status')
+              .select('offer_price, status, size, listing_variant_id')
               .eq('id', customOfferId)
               .single();
 
@@ -93,16 +106,107 @@ export default function CheckoutPage() {
               setError('This offer is no longer valid.');
               return;
             }
+
+            if (offer.listing_variant_id) {
+              const { data: variant, error: variantError } = await supabase
+                .from('listing_variants')
+                .select('id, size, price, quantity, is_active')
+                .eq('id', offer.listing_variant_id)
+                .single();
+
+              if (variantError || !variant || variant.is_active === false) {
+                setError('This offer references a size that is no longer available.');
+                return;
+              }
+
+              resolvedVariantRow = {
+                id: variant.id,
+                size: variant.size,
+                price: Number(variant.price) || 0,
+                quantity: variant.quantity || 0,
+              };
+            } else if (offer.size) {
+              const { data: variant, error: variantError } = await supabase
+                .from('listing_variants')
+                .select('id, size, price, quantity, is_active')
+                .eq('listing_id', listingId)
+                .eq('size', offer.size)
+                .single();
+
+              if (!variantError && variant && variant.is_active !== false) {
+                resolvedVariantRow = {
+                  id: variant.id,
+                  size: variant.size,
+                  price: Number(variant.price) || 0,
+                  quantity: variant.quantity || 0,
+                };
+              }
+            }
+
+            if (resolvedVariantRow) {
+              setResolvedVariant(resolvedVariantRow);
+            }
             setResolvedPrice(parseFloat(offer.offer_price));
           } else {
-            // Look up price from listing sizes
-            const sizes = data.sizes as any[];
-            const sizeEntry = sizes?.find((s: any) => String(s.size) === String(size));
-            if (!sizeEntry) {
+            if (variantId) {
+              const { data: variant, error: variantError } = await supabase
+                .from('listing_variants')
+                .select('id, size, price, quantity, is_active')
+                .eq('id', variantId)
+                .eq('listing_id', listingId)
+                .single();
+
+              if (variantError || !variant || variant.is_active === false) {
+                setError('Selected size is no longer available.');
+                return;
+              }
+
+              resolvedVariantRow = {
+                id: variant.id,
+                size: variant.size,
+                price: Number(variant.price) || 0,
+                quantity: variant.quantity || 0,
+              };
+            } else {
+              const { data: variant, error: variantError } = await supabase
+                .from('listing_variants')
+                .select('id, size, price, quantity, is_active')
+                .eq('listing_id', listingId)
+                .eq('size', String(size))
+                .single();
+
+              if (!variantError && variant && variant.is_active !== false) {
+                resolvedVariantRow = {
+                  id: variant.id,
+                  size: variant.size,
+                  price: Number(variant.price) || 0,
+                  quantity: variant.quantity || 0,
+                };
+              }
+            }
+
+            if (!resolvedVariantRow) {
+              const sizes = data.sizes as any[];
+              const sizeEntry = sizes?.find((s: any) => String(s.size) === String(size));
+              if (!sizeEntry) {
+                setError('Selected size is no longer available.');
+                return;
+              }
+              resolvedVariantRow = {
+                id: variantId || `${listingId}:${size}`,
+                size: String(sizeEntry.size),
+                price: Number(sizeEntry.price) || 0,
+                quantity: sizeEntry.quantity || 0,
+              };
+            }
+
+            if (resolvedVariantRow.quantity <= 0) {
               setError('Selected size is no longer available.');
               return;
             }
-            setResolvedPrice(sizeEntry.price);
+
+            setResolvedVariant(resolvedVariantRow);
+            setResolvedPrice(resolvedVariantRow.price);
           }
         }
       } catch (err) {
@@ -114,7 +218,7 @@ export default function CheckoutPage() {
     }
 
     fetchListing();
-  }, [listingId, size, customOfferId]);
+  }, [listingId, size, variantId, customOfferId]);
 
   // Pre-fill buyer name from profile
   useEffect(() => {
@@ -200,7 +304,8 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listingId,
-          size,
+          size: resolvedVariant?.size || size,
+          listingVariantId: resolvedVariant?.id,
           price: resolvedPrice,
           shippingCost: parseFloat(shippingRate.amount),
           buyerAddress: {
@@ -241,7 +346,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!listing || resolvedPrice === null || !size) {
+  if (!listing || resolvedPrice === null || (!size && !resolvedVariant)) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center">
         <p className="text-relay-muted mb-4">Missing checkout information.</p>
@@ -255,6 +360,7 @@ export default function CheckoutPage() {
   const shoePrice = resolvedPrice;
   const shippingCost = shippingRate ? parseFloat(shippingRate.amount) : 0;
   const total = shoePrice + shippingCost;
+  const displaySize = resolvedVariant?.size || size;
 
   return (
     <div className="max-w-2xl mx-auto py-8">
@@ -289,7 +395,7 @@ export default function CheckoutPage() {
             {listing.nickname && (
               <p className="text-sm text-relay-subtle">{listing.nickname}</p>
             )}
-            <p className="text-sm text-relay-muted mt-1">Size: {size}</p>
+            <p className="text-sm text-relay-muted mt-1">Size: {displaySize}</p>
           </div>
           <div className="text-right">
             <p className="text-xl font-bold text-relay-text">${shoePrice.toFixed(2)}</p>

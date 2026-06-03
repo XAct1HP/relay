@@ -18,6 +18,7 @@ import { Listing } from "@/types";
 import useAuth from "@/hooks/useAuth";
 
 interface SizeInventory {
+  id?: string;
   size: number;
   quantity: number;
   price: number;
@@ -71,7 +72,7 @@ export default function ListingDetailPage({
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, seller:profiles(*)")
+          .select("*, seller:profiles(*), listing_variants(id, size, quantity, price, is_active)")
           .eq("id", params.id)
           .single();
 
@@ -99,6 +100,22 @@ export default function ListingDetailPage({
             Puma: "from-purple-500/20 to-pink-500/20",
           };
 
+          const variantRows = (data.listing_variants as any[]) || [];
+          const sizeSource: Array<{ id?: string; size: any; quantity: number; price: number }> = variantRows.length > 0
+            ? variantRows
+                .filter((variant) => variant.is_active !== false)
+                .map((variant) => ({
+                  id: variant.id,
+                  size: variant.size,
+                  quantity: variant.quantity || 0,
+                  price: Number(variant.price) || 0,
+                }))
+            : (data.sizes as any[])?.map((s) => ({
+                size: s.size,
+                quantity: s.quantity || 0,
+                price: Number(s.price) || 0,
+              })) || [];
+
           const formatted: ListingDetail = {
             id: data.id,
             brand: data.brand,
@@ -107,13 +124,14 @@ export default function ListingDetailPage({
             condition: conditions[data.condition] || "Used - Good",
             boxCondition: boxConditions[data.box_condition] || "No Box",
             description: data.description,
-            sizes: (data.sizes as any[])
-              ?.map((s) => ({
-                size: s.size,
+            sizes: sizeSource
+              .map((s) => ({
+                id: s.id,
+                size: Number(s.size),
                 quantity: s.quantity || 0,
-                price: s.price,
+                price: Number(s.price) || 0,
               }))
-              .filter((s) => s.size) || [],
+              .filter((s) => Number.isFinite(s.size)),
             images: data.images || [],
             averageRating: 4.8,
             reviewCount: 0,
@@ -413,7 +431,10 @@ export default function ListingDetailPage({
                     router.push('/auth/login');
                     return;
                   }
-                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}`);
+                  const variantParam = selectedSizeData?.id
+                    ? `&variant=${encodeURIComponent(selectedSizeData.id)}`
+                    : "";
+                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}${variantParam}`);
                 }}
                 disabled={selectedSize === null}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

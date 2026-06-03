@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BRANDS, BRANDS_REQUIRING_REVIEW, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { buildLegacySizes, isManualListingBrand, mergeListingVariants, normalizeSku } from "@/lib/listings";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -33,6 +34,7 @@ export default function SellPage() {
 
   // Step 1: Shoe Details
   const [brand, setBrand] = useState("");
+  const [sku, setSku] = useState("");
   const [modelName, setModelName] = useState("");
   const [nickname, setNickname] = useState("");
   const [condition, setCondition] = useState("");
@@ -51,11 +53,20 @@ export default function SellPage() {
   // UI State
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishedNeedsReview, setPublishedNeedsReview] = useState(false);
+  const [publishedWasMerged, setPublishedWasMerged] = useState(false);
   const dragOverCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isManualListing = isManualListingBrand(brand);
 
   // Step 1 Validation
-  const isStep1Valid = brand && modelName && condition && boxCondition && approximateSizing;
+  const normalizedSku = normalizeSku(sku);
+  const isStep1Valid =
+    brand &&
+    modelName &&
+    condition &&
+    boxCondition &&
+    approximateSizing &&
+    (isManualListing || !!normalizedSku);
 
   // Step 2 Validation
   const isStep2Valid = sizes.length > 0 && sizes.every(s => s.size && s.price > 0 && s.quantity > 0);
@@ -157,6 +168,24 @@ export default function SellPage() {
 
     try {
       const supabase = createClient();
+      let existingListingId: string | null = null;
+
+      if (!isManualListing && normalizedSku) {
+        const { data: existingListing, error: existingListingError } = await supabase
+          .from("listings")
+          .select("id")
+          .eq("seller_id", currentUser!.id)
+          .eq("sku_normalized", normalizedSku)
+          .neq("status", "removed")
+          .limit(1)
+          .maybeSingle();
+
+        if (existingListingError) {
+          throw existingListingError;
+        }
+
+        existingListingId = existingListing?.id || null;
+      }
 
       // Upload photos to storage
       const imageUrls: string[] = [];
@@ -178,33 +207,84 @@ export default function SellPage() {
         imageUrls.push(data?.publicUrl || "");
       }
 
-      // Create listing in database
-      const { data, error } = await supabase
-        .from("listings")
-        .insert({
-          seller_id: currentUser!.id,
-          brand,
-          model: modelName,
-          nickname: nickname || null,
-          condition,
-          box_condition: boxCondition,
-          approx_sizing: approximateSizing,
-          description,
-          images: imageUrls,
-          sizes: sizes.map((s) => ({
+      const legacySizes = buildLegacySizes(
+        sizes.map((s) => ({
+          size: s.size,
+          price: s.price,
+          quantity: s.quantity,
+        }))
+      );
+
+      if (existingListingId) {
+        const { error } = await supabase
+          .from("listings")
+          .update({
+            brand,
+            model: modelName,
+            nickname: nickname || null,
+            condition,
+            box_condition: boxCondition,
+            approx_sizing: approximateSizing,
+            description,
+            images: imageUrls,
+            sku: normalizedSku,
+            sizes: legacySizes,
+          })
+          .eq("id", existingListingId)
+          .eq("seller_id", currentUser!.id);
+
+        if (error) {
+          console.error("Database error:", error);
+          alert("Failed to update your existing SKU listing. Please try again.");
+          return;
+        }
+
+        await mergeListingVariants(
+          supabase,
+          existingListingId,
+          sizes.map((s) => ({
             size: s.size,
             price: s.price,
             quantity: s.quantity,
-          })),
-          status: BRANDS_REQUIRING_REVIEW.has(brand) ? "pending_review" : "active",
-        })
-        .select()
-        .single();
+          }))
+        );
+        setPublishedWasMerged(true);
+      } else {
+        const { data, error } = await supabase
+          .from("listings")
+          .insert({
+            seller_id: currentUser!.id,
+            brand,
+            model: modelName,
+            nickname: nickname || null,
+            condition,
+            box_condition: boxCondition,
+            approx_sizing: approximateSizing,
+            description,
+            images: imageUrls,
+            sizes: legacySizes,
+            sku: isManualListing ? null : normalizedSku,
+            status: BRANDS_REQUIRING_REVIEW.has(brand) ? "pending_review" : "active",
+          })
+          .select()
+          .single();
 
-      if (error) {
-        console.error("Database error:", error);
-        alert("Failed to publish listing. Please try again.");
-        return;
+        if (error || !data) {
+          console.error("Database error:", error);
+          alert("Failed to publish listing. Please try again.");
+          return;
+        }
+
+        await mergeListingVariants(
+          supabase,
+          data.id,
+          sizes.map((s) => ({
+            size: s.size,
+            price: s.price,
+            quantity: s.quantity,
+          }))
+        );
+        setPublishedWasMerged(false);
       }
 
       // Success
@@ -220,6 +300,7 @@ export default function SellPage() {
 
   const resetForm = () => {
     setBrand("");
+    setSku("");
     setModelName("");
     setNickname("");
     setCondition("");
@@ -231,6 +312,7 @@ export default function SellPage() {
     setAdditionalNotes("");
     setCurrentStep(1);
     setPublishSuccess(false);
+    setPublishedWasMerged(false);
   };
 
   // Calculate total potential earnings
@@ -251,10 +333,18 @@ export default function SellPage() {
                 <Check size={32} className={publishedNeedsReview ? 'text-amber-400' : 'text-emerald-400'} />
               </div>
             </div>
-            <h2 className="relay-title text-relay-text mb-2">{publishedNeedsReview ? 'Listing Submitted for Review' : 'Listing Published!'}</h2>
+            <h2 className="relay-title text-relay-text mb-2">
+              {publishedNeedsReview
+                ? "Listing Submitted for Review"
+                : publishedWasMerged
+                ? "Listing Updated"
+                : "Listing Published!"}
+            </h2>
             <p className="text-relay-muted mb-8">
               {publishedNeedsReview
                 ? 'Your listing has been submitted and is pending admin approval. You\'ll be notified once it\'s reviewed and goes live on the marketplace.'
+                : publishedWasMerged
+                ? "We found an existing listing for this SKU and merged your new sizes, quantities, and prices into it."
                 : 'Your shoe listing is now live on Relay. Buyers can start viewing and purchasing.'}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -358,6 +448,22 @@ export default function SellPage() {
                   </div>
                 )}
               </div>
+
+              {!isManualListing && (
+                <div>
+                  <label className="block text-sm font-medium text-relay-text mb-2">SKU *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., DZ5485-612"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value.toUpperCase())}
+                    className="relay-input"
+                  />
+                  <p className="text-xs text-relay-subtle mt-1">
+                    Relay uses SKU to keep one listing per seller for each sneaker.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-relay-text mb-2">Model Name *</label>
@@ -688,6 +794,10 @@ export default function SellPage() {
                   Shoe Details
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                    <p className="text-relay-subtle mb-1">SKU</p>
+                    <p className="text-relay-text font-medium">{isManualListing ? "Manual listing" : normalizedSku}</p>
+                  </div>
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">Brand</p>
                     <p className="text-relay-text font-medium">{brand}</p>

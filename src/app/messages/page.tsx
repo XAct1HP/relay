@@ -32,6 +32,7 @@ interface MessageData {
   _offerOriginalPrice?: number;
   _offerListingId?: string;
   _offerCustomOfferId?: string;
+  _offerVariantId?: string;
 }
 
 interface ConversationData {
@@ -574,6 +575,7 @@ export default function MessagesPage() {
                     _offerOriginalPrice: parseFloat(matchingOffer.original_price),
                     _offerListingId: matchingOffer.listing_id,
                     _offerCustomOfferId: matchingOffer.id,
+                    _offerVariantId: matchingOffer.listing_variant_id || undefined,
                   };
                 }
                 return msg;
@@ -830,7 +832,10 @@ export default function MessagesPage() {
       alert("Could not find listing details for this offer.");
       return;
     }
-    const url = `/checkout?listing=${encodeURIComponent(msg._offerListingId)}&size=${encodeURIComponent(msg.custom_offer_size || "")}&customOffer=${encodeURIComponent(msg._offerCustomOfferId || "true")}`;
+    const variantParam = msg._offerVariantId
+      ? `&variant=${encodeURIComponent(msg._offerVariantId)}`
+      : "";
+    const url = `/checkout?listing=${encodeURIComponent(msg._offerListingId)}&size=${encodeURIComponent(msg.custom_offer_size || "")}${variantParam}&customOffer=${encodeURIComponent(msg._offerCustomOfferId || "true")}`;
     window.location.href = url;
   };
 

@@ -45,6 +45,10 @@ CREATE INDEX idx_profiles_role ON profiles(role);
 CREATE TABLE listings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   seller_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  listing_type TEXT NOT NULL DEFAULT 'manual'
+    CHECK (listing_type IN ('manual', 'sku')),
+  sku TEXT,
+  sku_normalized TEXT,
   brand TEXT NOT NULL,
   model TEXT NOT NULL,
   nickname TEXT,
@@ -68,6 +72,28 @@ CREATE INDEX idx_listings_seller_id ON listings(seller_id);
 CREATE INDEX idx_listings_status ON listings(status);
 CREATE INDEX idx_listings_created_at ON listings(created_at);
 CREATE INDEX idx_listings_brand ON listings(brand);
+CREATE UNIQUE INDEX idx_listings_unique_seller_sku
+  ON listings(seller_id, sku_normalized)
+  WHERE sku_normalized IS NOT NULL
+    AND status <> 'removed';
+
+-- ============================================================================
+-- LISTING_VARIANTS TABLE
+-- ============================================================================
+CREATE TABLE listing_variants (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  size TEXT NOT NULL,
+  price NUMERIC(10, 2) NOT NULL CHECK (price > 0),
+  quantity INT NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(listing_id, size)
+);
+
+CREATE INDEX idx_listing_variants_listing_id ON listing_variants(listing_id);
+CREATE INDEX idx_listing_variants_active ON listing_variants(listing_id, is_active);
 
 -- ============================================================================
 -- FOLLOWS TABLE
@@ -167,6 +193,7 @@ CREATE TABLE custom_offers (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  listing_variant_id UUID REFERENCES listing_variants(id) ON DELETE SET NULL,
   size TEXT NOT NULL,
   original_price NUMERIC(10, 2) NOT NULL,
   offer_price NUMERIC(10, 2) NOT NULL,
@@ -180,6 +207,7 @@ CREATE TABLE custom_offers (
 CREATE INDEX idx_custom_offers_conversation_id ON custom_offers(conversation_id);
 CREATE INDEX idx_custom_offers_sender_id ON custom_offers(sender_id);
 CREATE INDEX idx_custom_offers_listing_id ON custom_offers(listing_id);
+CREATE INDEX idx_custom_offers_listing_variant_id ON custom_offers(listing_variant_id);
 CREATE INDEX idx_custom_offers_status ON custom_offers(status);
 
 -- ============================================================================
@@ -188,6 +216,7 @@ CREATE INDEX idx_custom_offers_status ON custom_offers(status);
 CREATE TABLE orders (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE RESTRICT,
+  listing_variant_id UUID REFERENCES listing_variants(id) ON DELETE SET NULL,
   buyer_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   seller_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   custom_offer_id UUID REFERENCES custom_offers(id) ON DELETE SET NULL,
@@ -239,6 +268,7 @@ CREATE TABLE orders (
 
 -- Create indexes for frequently queried columns
 CREATE INDEX idx_orders_listing_id ON orders(listing_id);
+CREATE INDEX idx_orders_listing_variant_id ON orders(listing_variant_id);
 CREATE INDEX idx_orders_buyer_id ON orders(buyer_id);
 CREATE INDEX idx_orders_seller_id ON orders(seller_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -316,6 +346,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION public.normalize_listing_sku(raw_sku TEXT)
+RETURNS TEXT AS $$
+DECLARE
+  cleaned TEXT;
+BEGIN
+  IF raw_sku IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  cleaned := regexp_replace(upper(trim(raw_sku)), '[^A-Z0-9]', '', 'g');
+
+  IF cleaned = '' THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN cleaned;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
 -- Function to automatically create a profile when a new auth user is created
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -346,6 +395,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION public.prepare_listing_identity()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.sku_normalized := public.normalize_listing_sku(NEW.sku);
+
+  IF NEW.sku_normalized IS NULL THEN
+    NEW.listing_type := 'manual';
+  ELSE
+    NEW.listing_type := 'sku';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Triggers for updated_at columns
 CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON profiles
@@ -355,6 +419,14 @@ CREATE TRIGGER update_listings_updated_at
   BEFORE UPDATE ON listings
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+CREATE TRIGGER prepare_listing_identity_before_write
+  BEFORE INSERT OR UPDATE OF sku, listing_type ON listings
+  FOR EACH ROW EXECUTE FUNCTION public.prepare_listing_identity();
+
+CREATE TRIGGER update_listing_variants_updated_at
+  BEFORE UPDATE ON listing_variants
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 CREATE TRIGGER update_orders_updated_at
   BEFORE UPDATE ON orders
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -362,6 +434,61 @@ CREATE TRIGGER update_orders_updated_at
 CREATE TRIGGER update_seller_applications_updated_at
   BEFORE UPDATE ON seller_applications
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE OR REPLACE FUNCTION public.sync_listing_from_variants(target_listing_id UUID)
+RETURNS VOID AS $$
+DECLARE
+  aggregated_sizes JSONB;
+  available_variant_count INT;
+BEGIN
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'size', size,
+          'price', price,
+          'quantity', quantity
+        )
+        ORDER BY size
+      ) FILTER (WHERE is_active = true),
+      '[]'::jsonb
+    ),
+    COUNT(*) FILTER (WHERE is_active = true AND quantity > 0)
+  INTO aggregated_sizes, available_variant_count
+  FROM listing_variants
+  WHERE listing_id = target_listing_id;
+
+  UPDATE listings
+  SET
+    sizes = aggregated_sizes,
+    status = CASE
+      WHEN status = 'sold_out' AND available_variant_count > 0 THEN 'active'
+      WHEN status = 'active' AND available_variant_count <= 0 THEN 'sold_out'
+      ELSE status
+    END
+  WHERE id = target_listing_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE FUNCTION public.on_listing_variant_changed()
+RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM public.sync_listing_from_variants(COALESCE(NEW.listing_id, OLD.listing_id));
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE TRIGGER listing_variants_sync_after_insert
+  AFTER INSERT ON listing_variants
+  FOR EACH ROW EXECUTE FUNCTION public.on_listing_variant_changed();
+
+CREATE TRIGGER listing_variants_sync_after_update
+  AFTER UPDATE ON listing_variants
+  FOR EACH ROW EXECUTE FUNCTION public.on_listing_variant_changed();
+
+CREATE TRIGGER listing_variants_sync_after_delete
+  AFTER DELETE ON listing_variants
+  FOR EACH ROW EXECUTE FUNCTION public.on_listing_variant_changed();
 
 -- Function to increment post likes count
 CREATE OR REPLACE FUNCTION public.increment_post_likes(post_id UUID)
@@ -479,6 +606,7 @@ $$ LANGUAGE plpgsql;
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE listing_variants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
@@ -554,6 +682,72 @@ CREATE POLICY "Sellers can update their own listings" ON listings
 -- Sellers can delete their own listings
 CREATE POLICY "Sellers can delete their own listings" ON listings
   FOR DELETE USING (auth.uid() = seller_id);
+
+CREATE POLICY "Everyone can read listing variants" ON listing_variants
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_variants.listing_id
+        AND (
+          listings.status = 'active'
+          OR listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+          OR EXISTS (
+            SELECT 1 FROM orders
+            WHERE orders.listing_id = listings.id
+              AND (orders.buyer_id = auth.uid() OR orders.seller_id = auth.uid())
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can insert listing variants" ON listing_variants
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_variants.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can update listing variants" ON listing_variants
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_variants.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can delete listing variants" ON listing_variants
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_variants.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
 
 -- ============================================================================
 -- FOLLOWS POLICIES

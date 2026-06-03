@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { buildLegacySizes, fetchListingVariants, isManualListingBrand, normalizeSku, replaceListingVariants } from "@/lib/listings";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { Camera, Plus, X, DollarSign, ChevronRight, ChevronLeft, ChevronRight as ChevronRightIcon, Save, ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -23,6 +24,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
 
   // Listing fields
   const [brand, setBrand] = useState("");
+  const [sku, setSku] = useState("");
   const [modelName, setModelName] = useState("");
   const [nickname, setNickname] = useState("");
   const [condition, setCondition] = useState("");
@@ -56,6 +58,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
       }
 
       setBrand(data.brand);
+      setSku(data.sku || "");
       setModelName(data.model);
       setNickname(data.nickname || "");
       setCondition(data.condition);
@@ -63,13 +66,15 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
       setApproximateSizing(data.approx_sizing || "");
       setDescription(data.description || "");
       setExistingImages(data.images || []);
+      const variantRows = await fetchListingVariants(supabase, params.id);
+      const sourceRows = variantRows.length > 0 ? variantRows : ((data.sizes as any[]) || []);
       setSizes(
-        (data.sizes as any[])?.map((s: any, i: number) => ({
-          id: `existing-${i}`,
+        sourceRows.map((s: any, i: number) => ({
+          id: s.id || `existing-${i}`,
           size: s.size?.toString() || "",
-          price: s.price || 0,
-          quantity: s.quantity || 1,
-        })) || []
+          price: Number(s.price) || 0,
+          quantity: Number(s.quantity) || 1,
+        }))
       );
       setLoading(false);
     }
@@ -125,9 +130,47 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
 
     try {
       const supabase = createClient();
+      const isManualListing = isManualListingBrand(brand);
+      const normalizedSku = normalizeSku(sku);
+
+      if (!isManualListing && !normalizedSku) {
+        alert("SKU is required for standard sneaker listings.");
+        return;
+      }
+
+      if (!isManualListing && normalizedSku) {
+        const { data: existingListing, error: existingListingError } = await supabase
+          .from("listings")
+          .select("id")
+          .eq("seller_id", currentUser!.id)
+          .eq("sku_normalized", normalizedSku)
+          .neq("status", "removed")
+          .neq("id", params.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingListingError) {
+          throw existingListingError;
+        }
+
+        if (existingListing?.id) {
+          alert("You already have another listing with this SKU. Edit that listing instead of creating a duplicate.");
+          return;
+        }
+      }
+
+      const legacySizes = buildLegacySizes(
+        sizes.map((s) => ({
+          size: s.size,
+          price: s.price,
+          quantity: s.quantity,
+        }))
+      );
+
       const { error } = await supabase
         .from("listings")
         .update({
+          sku: isManualListing ? null : normalizedSku,
           brand,
           model: modelName,
           nickname: nickname || null,
@@ -136,16 +179,22 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
           approx_sizing: approximateSizing,
           description,
           images: existingImages,
-          sizes: sizes.map((s) => ({
-            size: s.size,
-            price: s.price,
-            quantity: s.quantity,
-          })),
+          sizes: legacySizes,
         })
         .eq("id", params.id)
         .eq("seller_id", currentUser!.id);
 
       if (error) throw error;
+
+      await replaceListingVariants(
+        supabase,
+        params.id,
+        sizes.map((s) => ({
+          size: s.size,
+          price: s.price,
+          quantity: s.quantity,
+        }))
+      );
 
       router.push("/my-listings");
     } catch (error) {
@@ -159,6 +208,8 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
   if (loading) {
     return <div className="relay-empty text-center">Loading listing...</div>;
   }
+
+  const isManualListing = isManualListingBrand(brand);
 
   return (
     <div className="max-w-3xl mx-auto pb-12">
@@ -193,6 +244,19 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
               <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: "translateY(-50%) rotate(90deg)" }} />
             </div>
           </div>
+
+          {!isManualListing && (
+            <div>
+              <label className="block text-sm font-medium text-relay-text mb-2">SKU</label>
+              <input
+                type="text"
+                value={sku}
+                onChange={(e) => setSku(e.target.value.toUpperCase())}
+                className="relay-input"
+                placeholder="e.g., DZ5485-612"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-relay-text mb-2">Model Name</label>

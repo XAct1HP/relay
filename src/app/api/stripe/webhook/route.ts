@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
-    // Use service role client — webhooks have no user session
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -43,10 +42,10 @@ export async function POST(request: NextRequest) {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
-
       const metadata = session.metadata as Record<string, string>
 
       const listingId = metadata.listingId
+      const listingVariantId = metadata.listingVariantId || null
       const size = metadata.size
       const buyerId = metadata.buyerId
       const sellerId = metadata.sellerId
@@ -56,11 +55,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid metadata' }, { status: 400 })
       }
 
-      // Parse prices from metadata (stored during checkout session creation)
       const shoePrice = parseFloat(metadata.shoePrice || '0')
       const shippingCost = parseFloat(metadata.shippingCost || '0')
 
-      // Parse buyer address from metadata
       let buyerShippingAddress = null
       if (metadata.buyerAddress) {
         try {
@@ -70,22 +67,20 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const platformFee = shoePrice * 0.01 // 1% platform fee
-      const stripeFee = shoePrice * 0.03 + 0.3 // 3% + $0.30
+      const platformFee = shoePrice * 0.01
+      const stripeFee = shoePrice * 0.03 + 0.3
       const sellerEarnings = shoePrice - platformFee - stripeFee
 
-      // Calculate shipping deadline (5 days from now)
       const shippingDeadline = new Date()
       shippingDeadline.setDate(shippingDeadline.getDate() + 5)
 
-      // Generate challenge code for authentication
       const challengeCode = generateChallengeCode()
 
-      // Create order
-      const { data: order, error: orderError } = await supabase
+      const { error: orderError } = await supabase
         .from('orders')
         .insert({
           listing_id: listingId,
+          listing_variant_id: listingVariantId,
           buyer_id: buyerId,
           seller_id: sellerId,
           custom_offer_id: customOfferId || null,
@@ -101,56 +96,102 @@ export async function POST(request: NextRequest) {
           buyer_shipping_address: buyerShippingAddress,
           shipping_deadline: shippingDeadline.toISOString(),
         })
-        .select()
-        .single()
 
       if (orderError) {
         console.error('Order creation error:', orderError)
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
 
-      // Decrement listing size quantity and check for sold out
-      const { data: listing, error: listingFetchError } = await supabase
-        .from('listings')
-        .select('sizes, status')
-        .eq('id', listingId)
-        .single()
+      let variantUpdated = false
 
-      if (listingFetchError || !listing) {
-        console.error('Failed to fetch listing for quantity update:', listingFetchError)
-      } else {
-        const sizes = listing.sizes as any[]
-        if (Array.isArray(sizes)) {
-          const updatedSizes = sizes.map((s: any) => {
-            if (String(s.size) === String(size)) {
-              return { ...s, quantity: Math.max(0, (s.quantity || 0) - 1) }
-            }
-            return s
-          })
+      if (listingVariantId) {
+        const { data: variant } = await supabase
+          .from('listing_variants')
+          .select('id, quantity')
+          .eq('id', listingVariantId)
+          .maybeSingle()
 
-          // Check if all sizes are depleted
-          const totalRemaining = updatedSizes.reduce(
-            (sum: number, s: any) => sum + (s.quantity || 0),
-            0
-          )
+        if (variant) {
+          const { error: variantUpdateError } = await supabase
+            .from('listing_variants')
+            .update({
+              quantity: Math.max(0, (variant.quantity || 0) - 1),
+            })
+            .eq('id', variant.id)
 
-          const updatePayload: any = { sizes: updatedSizes }
-          if (totalRemaining <= 0) {
-            updatePayload.status = 'sold_out'
-          }
-
-          const { error: updateError } = await supabase
-            .from('listings')
-            .update(updatePayload)
-            .eq('id', listingId)
-
-          if (updateError) {
-            console.error('Quantity update error:', updateError)
+          if (variantUpdateError) {
+            console.error('Variant quantity update error:', variantUpdateError)
+          } else {
+            variantUpdated = true
           }
         }
       }
 
-      // Mark custom offer as accepted if applicable
+      if (!variantUpdated) {
+        const { data: variant } = await supabase
+          .from('listing_variants')
+          .select('id, quantity')
+          .eq('listing_id', listingId)
+          .eq('size', size)
+          .maybeSingle()
+
+        if (variant) {
+          const { error: variantUpdateError } = await supabase
+            .from('listing_variants')
+            .update({
+              quantity: Math.max(0, (variant.quantity || 0) - 1),
+            })
+            .eq('id', variant.id)
+
+          if (variantUpdateError) {
+            console.error('Variant quantity update error:', variantUpdateError)
+          } else {
+            variantUpdated = true
+          }
+        }
+      }
+
+      if (!variantUpdated) {
+        const { data: listing, error: listingFetchError } = await supabase
+          .from('listings')
+          .select('sizes, status')
+          .eq('id', listingId)
+          .single()
+
+        if (listingFetchError || !listing) {
+          console.error('Failed to fetch listing for quantity update:', listingFetchError)
+        } else {
+          const sizes = listing.sizes as any[]
+          if (Array.isArray(sizes)) {
+            const updatedSizes = sizes.map((entry: any) => {
+              if (String(entry.size) === String(size)) {
+                return { ...entry, quantity: Math.max(0, (entry.quantity || 0) - 1) }
+              }
+              return entry
+            })
+
+            const totalRemaining = updatedSizes.reduce(
+              (sum: number, entry: any) => sum + (entry.quantity || 0),
+              0
+            )
+
+            const updatePayload: any = { sizes: updatedSizes }
+            if (totalRemaining <= 0) {
+              updatePayload.status = 'sold_out'
+            }
+
+            const { error: updateError } = await supabase
+              .from('listings')
+              .update(updatePayload)
+              .eq('id', listingId)
+
+            if (updateError) {
+              console.error('Quantity update error:', updateError)
+            }
+          }
+        }
+      }
+
       if (customOfferId) {
         const { error: offerError } = await supabase
           .from('custom_offers')
@@ -161,7 +202,6 @@ export async function POST(request: NextRequest) {
           console.error('Offer update error:', offerError)
         }
 
-        // Also update the corresponding message status so the chat UI reflects it
         const { data: offerRow } = await supabase
           .from('custom_offers')
           .select('conversation_id, sender_id, offer_price, size')

@@ -137,6 +137,14 @@ const useAuthStore = create<AuthState>((set) => ({
 
       if (error) throw error;
 
+      // Supabase can return an obfuscated "success" response for an email that
+      // already exists in Auth. In that case no new Auth user is created.
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        throw new Error(
+          'An account with this email already exists. Sign in instead. If you do not know the password, reset it in Supabase Auth or delete the existing Auth user in staging and sign up again.'
+        );
+      }
+
       // Store intended role for onboarding redirect (seller needs to go through application)
       if (role === 'seller' && typeof window !== 'undefined') {
         localStorage.setItem('relay_intended_role', 'seller');
