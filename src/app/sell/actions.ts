@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerClientInstance } from "@/lib/supabase-server";
+import { resolveCatalogProductBySku } from "@/lib/catalog-server";
 import { InventoryUpsertError, upsertSellerSkuInventory } from "@/lib/inventory";
 
 interface PublishCatalogListingInput {
@@ -35,15 +36,17 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
   }
 
   try {
+    const catalogProduct = await resolveCatalogProductBySku(supabase, input.sku);
     const result = await upsertSellerSkuInventory(supabase, {
       seller_id: user.id,
       sku: input.sku,
       product: {
-        brand: input.brand,
-        model: input.model,
-        nickname: input.nickname,
-        description: input.description,
-        images: input.images || [],
+        catalog_product_id: catalogProduct?.id || null,
+        brand: input.brand || catalogProduct?.brand,
+        model: input.model || catalogProduct?.model,
+        nickname: input.nickname || catalogProduct?.nickname || undefined,
+        description: input.description || catalogProduct?.description,
+        images: input.images?.length ? input.images : catalogProduct?.images || [],
         condition: input.condition,
         box_condition: input.boxCondition,
         approx_sizing: input.approximateSizing,

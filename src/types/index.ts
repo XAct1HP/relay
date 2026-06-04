@@ -43,10 +43,24 @@ export interface ListingVariant {
   updated_at: string;
 }
 
+export interface CatalogProduct {
+  id: string;
+  sku: string;
+  sku_normalized: string;
+  brand: string;
+  model: string;
+  nickname: string | null;
+  description: string | null;
+  images: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 // Shoe listing
 export interface Listing {
   id: string;
   seller_id: string;
+  catalog_product_id?: string | null;
   listing_type: 'manual' | 'sku';
   sku: string | null;
   sku_normalized: string | null;

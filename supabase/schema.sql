@@ -40,11 +40,30 @@ CREATE INDEX idx_profiles_email ON profiles(email);
 CREATE INDEX idx_profiles_role ON profiles(role);
 
 -- ============================================================================
+-- CATALOG_PRODUCTS TABLE
+-- ============================================================================
+CREATE TABLE catalog_products (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sku TEXT NOT NULL UNIQUE,
+  sku_normalized TEXT NOT NULL UNIQUE,
+  brand TEXT NOT NULL,
+  model TEXT NOT NULL,
+  nickname TEXT,
+  description TEXT,
+  images TEXT[] DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_catalog_products_sku_normalized ON catalog_products(sku_normalized);
+
+-- ============================================================================
 -- LISTINGS TABLE
 -- ============================================================================
 CREATE TABLE listings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   seller_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  catalog_product_id UUID REFERENCES catalog_products(id) ON DELETE SET NULL,
   listing_type TEXT NOT NULL DEFAULT 'manual'
     CHECK (listing_type IN ('manual', 'sku')),
   sku TEXT,
@@ -72,6 +91,7 @@ CREATE INDEX idx_listings_seller_id ON listings(seller_id);
 CREATE INDEX idx_listings_status ON listings(status);
 CREATE INDEX idx_listings_created_at ON listings(created_at);
 CREATE INDEX idx_listings_brand ON listings(brand);
+CREATE INDEX idx_listings_catalog_product_id ON listings(catalog_product_id);
 CREATE UNIQUE INDEX idx_listings_unique_seller_sku
   ON listings(seller_id, sku_normalized)
   WHERE sku_normalized IS NOT NULL
@@ -415,6 +435,10 @@ CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+CREATE TRIGGER update_catalog_products_updated_at
+  BEFORE UPDATE ON catalog_products
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 CREATE TRIGGER update_listings_updated_at
   BEFORE UPDATE ON listings
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -632,6 +656,7 @@ $$ LANGUAGE plpgsql;
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE catalog_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listing_variants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
@@ -667,6 +692,13 @@ CREATE POLICY "Only admins can delete profiles" ON profiles
       SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
     )
   );
+
+-- ============================================================================
+-- CATALOG_PRODUCTS POLICIES
+-- ============================================================================
+
+CREATE POLICY "Everyone can read catalog products" ON catalog_products
+  FOR SELECT USING (true);
 
 -- ============================================================================
 -- LISTINGS POLICIES

@@ -18,6 +18,7 @@ export interface InventoryUpsertInput {
   seller_id: string;
   sku: string;
   product?: {
+    catalog_product_id?: string | null;
     brand?: string | null;
     model?: string | null;
     nickname?: string | null;
@@ -54,6 +55,7 @@ interface NormalizedInventoryInput {
   normalizedSku: string;
   displaySku: string;
   product: {
+    catalogProductId: string | null;
     brand: string;
     model: string;
     nickname: string | null;
@@ -83,6 +85,7 @@ export async function upsertSellerSkuInventory(
     const { error: updateError } = await supabase
       .from("listings")
       .update({
+        catalog_product_id: normalized.product.catalogProductId || existingListing.catalog_product_id || null,
         brand: normalized.product.brand,
         model: normalized.product.model,
         nickname: normalized.product.nickname,
@@ -114,6 +117,7 @@ export async function upsertSellerSkuInventory(
 
   const insertPayload = {
     seller_id: normalized.sellerId,
+    catalog_product_id: normalized.product.catalogProductId,
     brand: normalized.product.brand,
     model: normalized.product.model,
     nickname: normalized.product.nickname,
@@ -202,10 +206,10 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
         `Variant size ${variant.size} must have a price greater than 0.`
       );
     }
-    if (!Number.isFinite(variant.quantity) || variant.quantity <= 0) {
+    if (!Number.isFinite(variant.quantity) || !Number.isInteger(variant.quantity) || variant.quantity < 0) {
       throw new InventoryUpsertError(
         "invalid_variant_quantity",
-        `Variant size ${variant.size} must have a quantity greater than 0.`
+        `Variant size ${variant.size} must have an integer quantity greater than or equal to 0.`
       );
     }
   }
@@ -223,6 +227,7 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
     normalizedSku,
     displaySku,
     product: {
+      catalogProductId: product.catalog_product_id?.trim() || null,
       brand: fallbackBrand,
       model: fallbackModel,
       nickname: product.nickname?.trim() || null,
@@ -244,7 +249,7 @@ async function findExistingSellerSkuListing(
 ) {
   const { data, error } = await supabase
     .from("listings")
-    .select("id, status, images")
+    .select("id, status, images, catalog_product_id")
     .eq("seller_id", sellerId)
     .eq("sku_normalized", normalizedSku)
     .neq("status", "removed")
