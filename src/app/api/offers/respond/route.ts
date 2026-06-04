@@ -2,6 +2,17 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { SOLD_OUT_OFFER_ERROR } from '@/lib/offers'
+import { resolveListingVariant } from '@/lib/listings'
+
+function getLegacySizeEntry(
+  sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
+  size: string
+) {
+  return Array.isArray(sizes)
+    ? sizes.find((entry) => String(entry.size) === String(size))
+    : null
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messageId, action, conversationId } = await request.json()
+    const { messageId, action, customOfferId } = await request.json()
 
     if (!messageId || !action || !['accept', 'decline'].includes(action)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -94,15 +105,75 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update message' }, { status: 500 })
     }
 
-    // Update matching custom_offers record
-    await supabase
+    let offerLookup = supabase
       .from('custom_offers')
-      .update({ status: newStatus })
+      .select('id, listing_id, listing_variant_id, size, offer_price, status')
       .eq('conversation_id', message.conversation_id)
       .eq('sender_id', message.sender_id)
-      .eq('offer_price', message.custom_offer_price)
-      .eq('size', message.custom_offer_size)
       .eq('status', 'pending')
+
+    if (customOfferId) {
+      offerLookup = offerLookup.eq('id', customOfferId)
+    } else {
+      offerLookup = offerLookup
+        .eq('offer_price', message.custom_offer_price)
+        .eq('size', message.custom_offer_size)
+    }
+
+    const { data: offerRow } = await offerLookup.limit(1).maybeSingle()
+
+    if (!offerRow) {
+      return NextResponse.json({ error: 'Offer details could not be found' }, { status: 404 })
+    }
+
+    let listingVariantId = offerRow.listing_variant_id || null
+    let size = offerRow.size || message.custom_offer_size
+    let offerPrice = offerRow.offer_price || message.custom_offer_price
+
+    if (action === 'accept') {
+      const { data: listing } = await supabase
+        .from('listings')
+        .select('id, status, sizes')
+        .eq('id', offerRow.listing_id)
+        .maybeSingle()
+
+      if (!listing || listing.status !== 'active') {
+        return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+      }
+
+      const resolvedVariant = await resolveListingVariant(supabase, offerRow.listing_id, {
+        variantId: offerRow.listing_variant_id,
+        size: offerRow.size,
+      })
+
+      if (resolvedVariant) {
+        if ((resolvedVariant.quantity || 0) <= 0) {
+          return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+        }
+        listingVariantId = resolvedVariant.id
+        size = resolvedVariant.size
+      } else {
+        const legacySize = getLegacySizeEntry(listing.sizes as any[], offerRow.size)
+        if (!legacySize || (legacySize.quantity || 0) <= 0) {
+          return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+        }
+        size = String(legacySize.size)
+      }
+    }
+
+    const { error: customOfferUpdateError } = await supabase
+      .from('custom_offers')
+      .update({
+        status: newStatus,
+        listing_variant_id: listingVariantId,
+        size,
+      })
+      .eq('id', offerRow.id)
+
+    if (customOfferUpdateError) {
+      console.error('Custom offers update error:', customOfferUpdateError)
+      return NextResponse.json({ error: 'Failed to update offer details' }, { status: 500 })
+    }
 
     // Send a system message
     const offerContent = message.content || `$${message.custom_offer_price}`
@@ -115,35 +186,14 @@ export async function POST(request: NextRequest) {
       message_type: action === 'accept' ? 'offer_accepted' : 'offer_declined',
     })
 
-    // If accepted, find the listing ID from custom_offers for the checkout redirect
-    let listingId = null
-    let size = message.custom_offer_size
-    let offerPrice = message.custom_offer_price
-
-    if (action === 'accept') {
-      const { data: offer } = await supabase
-        .from('custom_offers')
-        .select('listing_id, size, offer_price')
-        .eq('conversation_id', message.conversation_id)
-        .eq('sender_id', message.sender_id)
-        .eq('offer_price', message.custom_offer_price)
-        .eq('size', message.custom_offer_size)
-        .limit(1)
-        .single()
-
-      if (offer) {
-        listingId = offer.listing_id
-        size = offer.size
-        offerPrice = offer.offer_price
-      }
-    }
-
     return NextResponse.json({
       success: true,
       action: newStatus,
-      listingId,
+      listingId: offerRow.listing_id,
+      listingVariantId,
       size,
       offerPrice,
+      customOfferId: offerRow.id,
     })
   } catch (error) {
     console.error('Offer respond error:', error)

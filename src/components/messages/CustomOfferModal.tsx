@@ -8,6 +8,7 @@ import useAuth from "@/hooks/useAuth";
 interface ListingOption {
   id: string;
   name: string;
+  sku?: string | null;
   sizes: { id?: string; size: string; price: number; quantity: number }[];
 }
 
@@ -42,7 +43,7 @@ export function CustomOfferModal({
 
       const { data, error } = await supabase
         .from("listings")
-        .select("id, brand, model, nickname, sizes, listing_variants(id, size, price, quantity, is_active)")
+        .select("id, brand, model, nickname, sku, sizes, listing_variants(id, size, price, quantity, is_active)")
         .eq("seller_id", currentUser!.id)
         .eq("status", "active")
         .order("created_at", { ascending: false });
@@ -50,7 +51,8 @@ export function CustomOfferModal({
       if (data) {
         const formatted: ListingOption[] = data.map((listing: any) => ({
           id: listing.id,
-          name: `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}`,
+          name: `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}${listing.sku ? ` [SKU ${listing.sku}]` : ""}`,
+          sku: listing.sku || null,
           sizes: ((listing.listing_variants as any[])?.length
             ? (listing.listing_variants as any[])
                 .filter((variant: any) => variant.is_active !== false)
@@ -102,73 +104,32 @@ export function CustomOfferModal({
 
     setIsSubmitting(true);
     try {
-      const supabase = createClient();
-      const now = new Date().toISOString();
-
-      // 1. Create entry in custom_offers table with full details
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-      const { data: offerData, error: offerError } = await supabase
-        .from("custom_offers")
-        .insert({
-          conversation_id: conversationId,
-          sender_id: currentUser!.id,
-          listing_id: selectedListingId,
-          listing_variant_id: selectedSizeData?.id || null,
+      const response = await fetch("/api/offers/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          conversationId,
+          listingId: selectedListingId,
+          listingVariantId: selectedSizeData?.id || null,
           size: selectedSize,
-          original_price: originalPrice,
-          offer_price: offerPriceNum,
-          status: "pending",
-          expires_at: expiresAt,
-        })
-        .select()
-        .single();
+          offerPrice: offerPriceNum,
+        }),
+      });
 
-      if (offerError) throw offerError;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send offer.");
+      }
 
-      // 2. Create message in messages table with only valid columns
-      const messageContent = `Custom offer: $${offerPriceNum.toFixed(2)} for ${selectedListing.name} (Size ${selectedSize})`;
-      const { data: inserted, error: msgError } = await supabase
-        .from("messages")
-        .insert({
-          conversation_id: conversationId,
-          sender_id: currentUser!.id,
-          content: messageContent,
-          message_type: "custom_offer",
-          custom_offer_price: offerPriceNum,
-          custom_offer_status: "pending",
-          custom_offer_size: selectedSize,
-        })
-        .select()
-        .single();
-
-      if (msgError) throw msgError;
-
-      // 3. Update conversation last_message
-      await supabase
-        .from("conversations")
-        .update({
-          last_message: `Custom offer: $${offerPriceNum.toFixed(2)}`,
-          last_message_at: now,
-        })
-        .eq("id", conversationId);
-
-      if (inserted) {
-        // Attach extra display info that we'll use client-side
-        const enrichedMessage = {
-          ...inserted,
-          _offerListingName: selectedListing.name,
-          _offerOriginalPrice: originalPrice,
-          _offerListingId: selectedListingId,
-          _offerCustomOfferId: offerData?.id,
-          _offerVariantId: selectedSizeData?.id,
-        };
-        onOfferSent(conversationId, enrichedMessage);
+      if (data.message) {
+        onOfferSent(conversationId, data.message);
       }
 
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending offer:", error);
-      alert("Failed to send offer. Please try again.");
+      alert(error?.message || "Failed to send offer. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -253,7 +214,7 @@ export function CustomOfferModal({
                   <option value="">Choose a size...</option>
                   {availableSizes.map((s) => (
                     <option key={s.size} value={s.size}>
-                      Size {s.size} — ${s.price.toFixed(2)}
+                      Size {s.size} - ${s.price.toFixed(2)}
                     </option>
                   ))}
                 </select>

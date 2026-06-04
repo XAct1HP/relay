@@ -13,6 +13,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { CustomOfferModal } from "@/components/messages/CustomOfferModal";
+import { formatOfferListingName } from "@/lib/offers";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import { useNotificationStore } from "@/store/notificationStore";
@@ -415,7 +416,6 @@ function ChatArea({
                     onAccept={() => onAcceptOffer(msg.id)}
                     onDecline={() => onDeclineOffer(msg.id)}
                     onGoToCheckout={() => onGoToCheckout(msg)}
-                    actionsEnabled={conversation.otherUser?.offers_enabled !== false}
                   />
                 </div>
               ) : msg.content ? (
@@ -551,7 +551,7 @@ export default function MessagesPage() {
           if (offerMessages.length > 0) {
             const { data: offers } = await supabase
               .from("custom_offers")
-              .select("*, listing:listings(brand, model, nickname)")
+              .select("*, listing:listings(brand, model, nickname, sku)")
               .eq("conversation_id", conv.id);
 
             if (offers) {
@@ -566,9 +566,7 @@ export default function MessagesPage() {
                 );
                 if (matchingOffer) {
                   const listing = matchingOffer.listing;
-                  const listingName = listing
-                    ? `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}`
-                    : undefined;
+                  const listingName = listing ? formatOfferListingName(listing) : undefined;
                   return {
                     ...msg,
                     _offerListingName: listingName,
@@ -762,19 +760,6 @@ export default function MessagesPage() {
   };
 
   const updateOfferStatus = async (messageId: string, status: "accepted" | "declined") => {
-    // 1. Optimistic UI update FIRST so the card changes instantly
-    setConversations((prev) =>
-      prev.map((conv) => ({
-        ...conv,
-        messages: conv.messages.map((m) =>
-          m.id === messageId ? { ...m, custom_offer_status: status } : m
-        ),
-      }))
-    );
-
-    // 2. Then update DB in background
-    const supabase = createClient();
-
     let targetMsg: MessageData | undefined;
     let targetConvId: string | undefined;
     for (const conv of conversations) {
@@ -788,34 +773,60 @@ export default function MessagesPage() {
 
     if (!targetMsg || !targetConvId) return;
 
-    // Update the message status
-    const { error: msgError } = await supabase
-      .from("messages")
-      .update({ custom_offer_status: status })
-      .eq("id", messageId);
+    // 1. Optimistic UI update FIRST so the card changes instantly
+    setConversations((prev) =>
+      prev.map((conv) => ({
+        ...conv,
+        messages: conv.messages.map((m) =>
+          m.id === messageId ? { ...m, custom_offer_status: status } : m
+        ),
+      }))
+    );
 
-    if (msgError) {
-      console.error(`Message update error:`, msgError);
-    }
+    try {
+      const response = await fetch("/api/offers/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          messageId,
+          action: status === "accepted" ? "accept" : "decline",
+          conversationId: targetConvId,
+          customOfferId: targetMsg._offerCustomOfferId,
+        }),
+      });
 
-    // Update custom_offers table
-    if (targetMsg._offerCustomOfferId) {
-      const { error: offerError } = await supabase
-        .from("custom_offers")
-        .update({ status })
-        .eq("id", targetMsg._offerCustomOfferId);
-
-      if (offerError) {
-        console.error(`Custom offers update error:`, offerError);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to ${status === "accepted" ? "accept" : "decline"} offer.`);
       }
-    } else {
-      // Fallback: match by conversation + size + price
-      await supabase
-        .from("custom_offers")
-        .update({ status })
-        .eq("conversation_id", targetConvId)
-        .eq("size", targetMsg.custom_offer_size || "")
-        .eq("offer_price", targetMsg.custom_offer_price || 0);
+
+      setConversations((prev) =>
+        prev.map((conv) => ({
+          ...conv,
+          messages: conv.messages.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  custom_offer_status: status,
+                  _offerCustomOfferId: data.customOfferId || m._offerCustomOfferId,
+                  _offerVariantId: data.listingVariantId || m._offerVariantId,
+                }
+              : m
+          ),
+        }))
+      );
+    } catch (error: any) {
+      console.error("Offer status update error:", error);
+      setConversations((prev) =>
+        prev.map((conv) => ({
+          ...conv,
+          messages: conv.messages.map((m) =>
+            m.id === messageId ? { ...m, custom_offer_status: "pending" } : m
+          ),
+        }))
+      );
+      alert(error?.message || "Failed to update offer.");
     }
   };
 

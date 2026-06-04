@@ -2,6 +2,17 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { SOLD_OUT_OFFER_ERROR } from '@/lib/offers'
+import { resolveListingVariant } from '@/lib/listings'
+
+function getLegacySizeEntry(
+  sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
+  size: string
+) {
+  return Array.isArray(sizes)
+    ? sizes.find((entry) => String(entry.size) === String(size))
+    : null
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messageId } = await request.json()
+    const { messageId, customOfferId } = await request.json()
 
     if (!messageId) {
       return NextResponse.json({ error: 'Missing messageId' }, { status: 400 })
@@ -81,26 +92,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Offer already responded to' }, { status: 400 })
     }
 
-    // Find the matching custom_offers row to get listing_id
-    const { data: offerRow } = await supabase
+    let offerLookup = supabase
       .from('custom_offers')
-      .select('id, listing_id, size, offer_price')
+      .select('id, listing_id, listing_variant_id, size, offer_price, status')
       .eq('conversation_id', message.conversation_id)
       .eq('sender_id', message.sender_id)
-      .eq('offer_price', message.custom_offer_price)
-      .eq('size', message.custom_offer_size)
       .eq('status', 'pending')
-      .limit(1)
-      .maybeSingle()
+
+    if (customOfferId) {
+      offerLookup = offerLookup.eq('id', customOfferId)
+    } else {
+      offerLookup = offerLookup
+        .eq('offer_price', message.custom_offer_price)
+        .eq('size', message.custom_offer_size)
+    }
+
+    const { data: offerRow } = await offerLookup.limit(1).maybeSingle()
 
     if (!offerRow || !offerRow.listing_id) {
       return NextResponse.json({ error: 'Could not find offer details' }, { status: 404 })
     }
 
+    const { data: listing } = await supabase
+      .from('listings')
+      .select('id, status, sizes')
+      .eq('id', offerRow.listing_id)
+      .maybeSingle()
+
+    if (!listing || listing.status !== 'active') {
+      return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+    }
+
+    const resolvedVariant = await resolveListingVariant(supabase, offerRow.listing_id, {
+      variantId: offerRow.listing_variant_id,
+      size: offerRow.size,
+    })
+
+    let listingVariantId = offerRow.listing_variant_id || null
+    let size = offerRow.size
+    if (resolvedVariant) {
+      if ((resolvedVariant.quantity || 0) <= 0) {
+        return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+      }
+      listingVariantId = resolvedVariant.id
+      size = resolvedVariant.size
+    } else {
+      const legacySize = getLegacySizeEntry(listing.sizes as any[], offerRow.size)
+      if (!legacySize || (legacySize.quantity || 0) <= 0) {
+        return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
+      }
+      size = String(legacySize.size)
+    }
+
     // Return everything the client needs to build the checkout URL
     return NextResponse.json({
       listingId: offerRow.listing_id,
-      size: offerRow.size,
+      listingVariantId,
+      size,
       offerPrice: offerRow.offer_price,
       customOfferId: offerRow.id,
     })
