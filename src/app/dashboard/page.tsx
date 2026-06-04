@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -379,6 +379,12 @@ export default function DashboardPage() {
             </button>
             <Link href="/sell">
               <button className="relay-button-primary">Create Listing</button>
+            </Link>
+            <Link href="/inventory/bulk-import">
+              <button className="relay-button-secondary flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" />
+                Bulk Import
+              </button>
             </Link>
           </div>
         </div>
