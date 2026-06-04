@@ -85,7 +85,7 @@ export default function ListingDetailPage({
           .eq("id", params.id)
           .maybeSingle();
 
-        if (data) {
+        if (data && data.status !== "removed") {
           const conditions: Record<string, ListingDetail["condition"]> = {
             new: "New",
             like_new: "Like New",

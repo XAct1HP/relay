@@ -1,6 +1,12 @@
 "use server";
 
-import { InventoryUpsertError, updateSellerListingVariant } from "@/lib/inventory";
+import {
+  bulkUpdateSellerInventory,
+  deleteSellerListing,
+  InventoryUpsertError,
+  type InventoryBulkActionType,
+  updateSellerListingVariant,
+} from "@/lib/inventory";
 import { createServerClientInstance } from "@/lib/supabase-server";
 
 interface UpdateInventoryVariantActionInput {
@@ -52,6 +58,97 @@ export async function updateInventoryVariantAction(input: UpdateInventoryVariant
     return {
       success: false as const,
       error: "Failed to update this inventory variant. Please try again.",
+    };
+  }
+}
+
+interface BulkInventoryActionInput {
+  listingIds: string[];
+  variantIds: string[];
+  action: InventoryBulkActionType;
+  percentage?: number;
+}
+
+export async function applyBulkInventoryAction(input: BulkInventoryActionInput) {
+  const supabase = await createServerClientInstance();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      success: false as const,
+      error: "You must be logged in to update inventory.",
+    };
+  }
+
+  try {
+    const result = await bulkUpdateSellerInventory(supabase, {
+      seller_id: user.id,
+      listing_ids: input.listingIds,
+      variant_ids: input.variantIds,
+      action: input.action,
+      percentage: input.percentage,
+    });
+
+    return {
+      success: true as const,
+      ...result,
+    };
+  } catch (error) {
+    if (error instanceof InventoryUpsertError) {
+      return {
+        success: false as const,
+        error: error.message,
+        code: error.code,
+      };
+    }
+
+    console.error("Bulk inventory update failed:", error);
+    return {
+      success: false as const,
+      error: "Failed to apply the bulk inventory update. Please try again.",
+    };
+  }
+}
+
+export async function deleteInventoryListingAction(listingId: string) {
+  const supabase = await createServerClientInstance();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      success: false as const,
+      error: "You must be logged in to delete inventory.",
+    };
+  }
+
+  try {
+    await deleteSellerListing(supabase, {
+      seller_id: user.id,
+      listing_id: listingId,
+    });
+
+    return {
+      success: true as const,
+    };
+  } catch (error) {
+    if (error instanceof InventoryUpsertError) {
+      return {
+        success: false as const,
+        error: error.message,
+        code: error.code,
+      };
+    }
+
+    console.error("Inventory delete failed:", error);
+    return {
+      success: false as const,
+      error: "Failed to delete this listing. Please try again.",
     };
   }
 }

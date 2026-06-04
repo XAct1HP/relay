@@ -3,7 +3,11 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { updateInventoryVariantAction } from "@/app/dashboard/inventory/actions";
+import {
+  applyBulkInventoryAction,
+  deleteInventoryListingAction,
+  updateInventoryVariantAction,
+} from "@/app/dashboard/inventory/actions";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
@@ -12,6 +16,13 @@ import type { Listing } from "@/types";
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
 type InventoryFilter = "all" | "active" | "inactive" | "sold_out" | "low_stock";
 type InventorySort = "newest" | "name_asc" | "price_asc" | "price_desc" | "quantity_desc";
+type BulkInventoryAction =
+  | ""
+  | "activate"
+  | "deactivate"
+  | "increase_price_percent"
+  | "decrease_price_percent"
+  | "set_quantity_zero";
 
 interface InventoryVariant {
   id?: string;
@@ -25,6 +36,17 @@ interface VariantDraft {
   price: string;
   quantity: string;
   isActive: boolean;
+}
+
+interface BulkResultSummary {
+  updatedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+interface PendingBulkAction {
+  action: Exclude<BulkInventoryAction, "">;
+  percentage?: number;
 }
 
 interface InventoryListingRow extends Listing {
@@ -61,6 +83,14 @@ export default function SellerInventoryDashboard() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<BulkInventoryAction>("");
+  const [bulkPercentage, setBulkPercentage] = useState("");
+  const [pendingBulkAction, setPendingBulkAction] = useState<PendingBulkAction | null>(null);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkFormError, setBulkFormError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<BulkResultSummary | null>(null);
   const [variantDrafts, setVariantDrafts] = useState<Record<string, VariantDraft>>({});
   const [variantMessages, setVariantMessages] = useState<
     Record<string, { type: "error" | "success"; message: string }>
@@ -80,6 +110,7 @@ export default function SellerInventoryDashboard() {
         .from("listings")
         .select("*, listing_variants(id, size, price, quantity, is_active)")
         .eq("seller_id", sellerId)
+        .neq("status", "removed")
         .order("updated_at", { ascending: false });
 
       if (error) {
@@ -89,6 +120,12 @@ export default function SellerInventoryDashboard() {
       const formatted = formatInventoryListings((data || []) as Listing[]);
       setListings(formatted);
       setVariantDrafts(buildVariantDrafts(formatted));
+      const listingIdSet = new Set(formatted.map((listing) => listing.id));
+      const variantIdSet = new Set(
+        formatted.flatMap((listing) => listing.variants.map((variant) => variant.id).filter(Boolean) as string[])
+      );
+      setSelectedListingIds((prev) => prev.filter((id) => listingIdSet.has(id)));
+      setSelectedVariantIds((prev) => prev.filter((id) => variantIdSet.has(id)));
     } catch (error) {
       console.error("Error fetching seller inventory:", error);
     } finally {
@@ -163,6 +200,7 @@ export default function SellerInventoryDashboard() {
     );
   }, 0);
   const uniqueSkuCount = new Set(listings.map((listing) => listing.sku_normalized || listing.id)).size;
+  const selectedSourceCount = selectedListingIds.length + selectedVariantIds.length;
 
   const handleToggleStatus = async (listingId: string, currentStatus: ListingStatus) => {
     if (!currentUser?.id) {
@@ -201,27 +239,44 @@ export default function SellerInventoryDashboard() {
 
     setActionLoading(listingId);
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("listings")
-        .update({ status: "removed" })
-        .eq("id", listingId)
-        .eq("seller_id", currentUser.id);
-
-      if (error) {
-        throw error;
+      const result = await deleteInventoryListingAction(listingId);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
-      setListings((prev) =>
-        prev.map((listing) => (listing.id === listingId ? { ...listing, status: "removed" } : listing))
-      );
+      await loadListings(currentUser.id, { showLoading: false });
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error("Error deleting listing:", error);
-      alert("Failed to delete listing. Please try again.");
+      alert(error instanceof Error ? error.message : "Failed to delete listing. Please try again.");
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const toggleSelection = (values: string[], value: string) => {
+    return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+  };
+
+  const handleToggleListingSelection = (listingId: string) => {
+    setSelectedListingIds((prev) => toggleSelection(prev, listingId));
+    setPendingBulkAction(null);
+    setBulkFormError(null);
+  };
+
+  const handleToggleVariantSelection = (variantId: string) => {
+    setSelectedVariantIds((prev) => toggleSelection(prev, variantId));
+    setPendingBulkAction(null);
+    setBulkFormError(null);
+  };
+
+  const clearBulkSelection = () => {
+    setSelectedListingIds([]);
+    setSelectedVariantIds([]);
+    setBulkAction("");
+    setBulkPercentage("");
+    setPendingBulkAction(null);
+    setBulkFormError(null);
   };
 
   const updateVariantDraft = (variantId: string, updates: Partial<VariantDraft>) => {
@@ -307,6 +362,75 @@ export default function SellerInventoryDashboard() {
       }));
     } finally {
       setSavingVariantId(null);
+    }
+  };
+
+  const handleReviewBulkAction = () => {
+    setBulkResult(null);
+
+    if (selectedSourceCount === 0) {
+      setBulkFormError("Select at least one listing or variant first.");
+      return;
+    }
+
+    if (!bulkAction) {
+      setBulkFormError("Choose a bulk action first.");
+      return;
+    }
+
+    const percentage = Number(bulkPercentage);
+    if (
+      (bulkAction === "increase_price_percent" || bulkAction === "decrease_price_percent") &&
+      (!Number.isFinite(percentage) || percentage <= 0)
+    ) {
+      setBulkFormError("Enter a percentage greater than 0.");
+      return;
+    }
+
+    setBulkFormError(null);
+    setPendingBulkAction({
+      action: bulkAction,
+      percentage:
+        bulkAction === "increase_price_percent" || bulkAction === "decrease_price_percent"
+          ? percentage
+          : undefined,
+    });
+  };
+
+  const handleApplyBulkAction = async () => {
+    if (!currentUser?.id || !pendingBulkAction) {
+      return;
+    }
+
+    setBulkApplying(true);
+    setBulkFormError(null);
+
+    try {
+      const result = await applyBulkInventoryAction({
+        listingIds: selectedListingIds,
+        variantIds: selectedVariantIds,
+        action: pendingBulkAction.action,
+        percentage: pendingBulkAction.percentage,
+      });
+
+      if (!result.success) {
+        setBulkFormError(result.error);
+        return;
+      }
+
+      await loadListings(currentUser.id, { showLoading: false });
+      setBulkResult({
+        updatedCount: result.updatedCount,
+        skippedCount: result.skippedCount,
+        errors: result.errors,
+      });
+      clearBulkSelection();
+    } catch (error) {
+      console.error("Error applying bulk inventory action:", error);
+      setBulkFormError("Failed to apply the bulk inventory action. Please try again.");
+    } finally {
+      setBulkApplying(false);
+      setPendingBulkAction(null);
     }
   };
 
@@ -400,6 +524,126 @@ export default function SellerInventoryDashboard() {
         </div>
       </div>
 
+      {selectedSourceCount > 0 && (
+        <div className="relay-card p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <p className="text-relay-text font-semibold">Bulk edit selected inventory</p>
+              <p className="text-sm text-white/55 mt-1">
+                {getSelectionSummary(selectedListingIds.length, selectedVariantIds.length)}
+              </p>
+            </div>
+
+            <button
+              onClick={clearBulkSelection}
+              className="px-4 py-2 rounded-full border border-white/10 bg-white/[0.04] text-sm text-white/70 hover:bg-white/[0.08] transition-colors"
+            >
+              Clear Selection
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px_auto] gap-3 items-end">
+            <label className="space-y-2">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">Bulk Action</span>
+              <select
+                value={bulkAction}
+                onChange={(event) => {
+                  setBulkAction(event.target.value as BulkInventoryAction);
+                  setPendingBulkAction(null);
+                  setBulkFormError(null);
+                }}
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-relay-text focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+              >
+                <option value="">Choose action</option>
+                <option value="activate">Activate</option>
+                <option value="deactivate">Deactivate</option>
+                <option value="increase_price_percent">Increase price by %</option>
+                <option value="decrease_price_percent">Decrease price by %</option>
+                <option value="set_quantity_zero">Set quantity to 0</option>
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">Percentage</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={bulkPercentage}
+                onChange={(event) => {
+                  setBulkPercentage(event.target.value);
+                  setPendingBulkAction(null);
+                  setBulkFormError(null);
+                }}
+                disabled={
+                  bulkAction !== "increase_price_percent" && bulkAction !== "decrease_price_percent"
+                }
+                placeholder="10"
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-relay-text placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40 disabled:opacity-40"
+              />
+            </label>
+
+            <button
+              onClick={handleReviewBulkAction}
+              className="px-4 py-3 rounded-2xl bg-[#5f8fff] text-white text-sm font-semibold hover:bg-[#7ca6ff] transition-colors"
+            >
+              Review Action
+            </button>
+          </div>
+
+          {bulkFormError && <p className="text-sm text-red-300">{bulkFormError}</p>}
+
+          {pendingBulkAction && (
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 space-y-3">
+              <p className="text-relay-text font-semibold">Confirm bulk update</p>
+              <p className="text-sm text-white/70">
+                {getBulkConfirmationCopy(
+                  pendingBulkAction.action,
+                  pendingBulkAction.percentage,
+                  selectedListingIds.length,
+                  selectedVariantIds.length
+                )}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleApplyBulkAction}
+                  disabled={bulkApplying}
+                  className="px-4 py-2 rounded-full bg-[#5f8fff] text-white text-sm font-semibold hover:bg-[#7ca6ff] transition-colors disabled:opacity-50"
+                >
+                  {bulkApplying ? "Applying..." : "Confirm Bulk Action"}
+                </button>
+                <button
+                  onClick={() => setPendingBulkAction(null)}
+                  className="px-4 py-2 rounded-full border border-white/10 bg-white/[0.04] text-sm text-white/70 hover:bg-white/[0.08] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {bulkResult && (
+        <div className="relay-card p-4 sm:p-5 space-y-3">
+          <p className="text-relay-text font-semibold">Bulk update summary</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Metric label="Updated" value={`${bulkResult.updatedCount}`} />
+            <Metric label="Skipped" value={`${bulkResult.skippedCount}`} />
+            <Metric label="Errors" value={`${bulkResult.errors.length}`} />
+          </div>
+          {bulkResult.errors.length > 0 && (
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 space-y-2">
+              {bulkResult.errors.map((error, index) => (
+                <p key={`${error}-${index}`} className="text-sm text-white/70">
+                  {error}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {filteredListings.length === 0 ? (
         <div className="relay-card p-12 text-center">
           <p className="text-relay-text mb-2">No inventory matched that search or filter.</p>
@@ -412,9 +656,30 @@ export default function SellerInventoryDashboard() {
           {filteredListings.map((listing) => {
             const badge = STATUS_BADGES[listing.status];
             const isExpanded = expandedListingId === listing.id;
+            const selectedVariantCount = listing.variants.filter(
+              (variant) => variant.id && selectedVariantIds.includes(variant.id)
+            ).length;
 
             return (
               <div key={listing.id} className="relay-card p-0 overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/8 bg-white/[0.02]">
+                  <label className="inline-flex items-center gap-3 text-sm text-white/75">
+                    <input
+                      type="checkbox"
+                      checked={selectedListingIds.includes(listing.id)}
+                      onChange={() => handleToggleListingSelection(listing.id)}
+                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff]"
+                    />
+                    Select listing
+                  </label>
+
+                  {selectedVariantCount > 0 && (
+                    <span className="text-xs text-white/45">
+                      {selectedVariantCount} variant{selectedVariantCount === 1 ? "" : "s"} selected
+                    </span>
+                  )}
+                </div>
+
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col xl:flex-row gap-5 xl:items-start">
                     <div className="w-full sm:w-28 h-28 rounded-2xl overflow-hidden bg-white/[0.04] border border-white/10 flex-shrink-0">
@@ -485,7 +750,7 @@ export default function SellerInventoryDashboard() {
                           {listing.status !== "removed" &&
                             (showDeleteConfirm === listing.id ? (
                               <div className="flex items-center gap-2">
-                                <span className="text-red-300 text-xs">Remove listing?</span>
+                                <span className="text-red-300 text-xs">Delete permanently?</span>
                                 <button
                                   onClick={() => handleDelete(listing.id)}
                                   disabled={actionLoading === listing.id}
@@ -547,13 +812,24 @@ export default function SellerInventoryDashboard() {
                         >
                           <div className="flex flex-col gap-4">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                              <div>
-                                <p className="text-relay-text font-semibold">Size {variant.size}</p>
-                                <p className="text-sm text-white/50 mt-1">
-                                  {variant.isActive && variant.quantity > 0
-                                    ? "Variant available for purchase"
-                                    : "Variant unavailable for purchase"}
-                                </p>
+                              <div className="flex items-start gap-3">
+                                {variant.id && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedVariantIds.includes(variant.id)}
+                                    onChange={() => handleToggleVariantSelection(variant.id!)}
+                                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff]"
+                                  />
+                                )}
+
+                                <div>
+                                  <p className="text-relay-text font-semibold">Size {variant.size}</p>
+                                  <p className="text-sm text-white/50 mt-1">
+                                    {variant.isActive && variant.quantity > 0
+                                      ? "Variant available for purchase"
+                                      : "Variant unavailable for purchase"}
+                                  </p>
+                                </div>
                               </div>
 
                               <div className="grid grid-cols-3 gap-3 sm:gap-5 sm:min-w-[320px]">
@@ -749,4 +1025,42 @@ function buildVariantDrafts(listings: InventoryListingRow[]) {
 
     return drafts;
   }, {});
+}
+
+function getSelectionSummary(selectedListingCount: number, selectedVariantCount: number) {
+  const parts = [];
+
+  if (selectedListingCount > 0) {
+    parts.push(`${selectedListingCount} listing${selectedListingCount === 1 ? "" : "s"}`);
+  }
+
+  if (selectedVariantCount > 0) {
+    parts.push(`${selectedVariantCount} variant${selectedVariantCount === 1 ? "" : "s"}`);
+  }
+
+  return `${parts.join(" and ")} selected. Listing selections apply to every variant under that listing.`;
+}
+
+function getBulkConfirmationCopy(
+  action: Exclude<BulkInventoryAction, "">,
+  percentage: number | undefined,
+  selectedListingCount: number,
+  selectedVariantCount: number
+) {
+  const targetSummary = getSelectionSummary(selectedListingCount, selectedVariantCount);
+
+  switch (action) {
+    case "activate":
+      return `Activate the selected inventory. ${targetSummary}`;
+    case "deactivate":
+      return `Deactivate the selected inventory. ${targetSummary}`;
+    case "increase_price_percent":
+      return `Increase selected prices by ${percentage}%. ${targetSummary}`;
+    case "decrease_price_percent":
+      return `Decrease selected prices by ${percentage}%. ${targetSummary}`;
+    case "set_quantity_zero":
+      return `Set the selected inventory quantities to 0 and make them unavailable for purchase. ${targetSummary}`;
+    default:
+      return targetSummary;
+  }
 }

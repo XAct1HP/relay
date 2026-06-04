@@ -70,7 +70,7 @@ export default function FeedPage() {
           }
           const { data, count } = await supabase
             .from("posts")
-            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes)", { count: "exact" })
+            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes, status)", { count: "exact" })
             .in("seller_id", followedIds)
             .order("created_at", { ascending: false })
             .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1);
@@ -80,7 +80,7 @@ export default function FeedPage() {
         } else if (activeTab === "Rising Brands") {
           const { data, count } = await supabase
             .from("posts")
-            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes)", { count: "exact" })
+            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes, status)", { count: "exact" })
             .eq("is_rising_brand", true)
             .order("created_at", { ascending: false })
             .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1);
@@ -91,13 +91,13 @@ export default function FeedPage() {
           const fetchLimit = 50;
           const { data: regularData } = await supabase
             .from("posts")
-            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes)")
+            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes, status)")
             .eq("is_custom_brand", false)
             .order("created_at", { ascending: false })
             .limit(fetchLimit);
           const { data: customBrandData } = await supabase
             .from("posts")
-            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes)")
+            .select("*, seller:profiles(id, full_name, username, avatar_url, display_name), listing:listings(id, brand, model, nickname, images, sizes, status)")
             .eq("is_custom_brand", true)
             .order("created_at", { ascending: false })
             .limit(20);
@@ -159,7 +159,7 @@ export default function FeedPage() {
       likedPostIds = new Set((likesData || []).map((l: any) => l.post_id));
     }
     return data.map((post: any) => {
-      const listing = post.listing;
+      const listing = post.listing?.status === "removed" ? null : post.listing;
       const lowestPrice = listing?.sizes ? Math.min(...(listing.sizes as any[]).map((s: any) => s.price)) : 0;
       return {
         id: post.id,

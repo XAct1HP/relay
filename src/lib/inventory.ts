@@ -62,6 +62,32 @@ export interface InventoryVariantUpdateResult {
   message?: string;
 }
 
+export type InventoryBulkActionType =
+  | "activate"
+  | "deactivate"
+  | "increase_price_percent"
+  | "decrease_price_percent"
+  | "set_quantity_zero";
+
+export interface InventoryBulkActionInput {
+  seller_id: string;
+  listing_ids?: string[];
+  variant_ids?: string[];
+  action: InventoryBulkActionType;
+  percentage?: number;
+}
+
+export interface InventoryBulkActionResult {
+  updatedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+export interface DeleteSellerListingInput {
+  seller_id: string;
+  listing_id: string;
+}
+
 export class InventoryUpsertError extends Error {
   code: string;
 
@@ -287,6 +313,121 @@ export async function updateSellerListingVariant(
   };
 }
 
+export async function bulkUpdateSellerInventory(
+  supabase: SupabaseClient,
+  input: InventoryBulkActionInput
+): Promise<InventoryBulkActionResult> {
+  const normalized = normalizeBulkInventoryActionInput(input);
+  const targets = await resolveBulkInventoryTargets(supabase, normalized);
+
+  if (targets.length === 0) {
+    throw new InventoryUpsertError(
+      "bulk_targets_not_found",
+      "Select at least one listing or variant from your inventory."
+    );
+  }
+
+  let updatedCount = 0;
+  let skippedCount = 0;
+  const errors: string[] = [];
+
+  for (const target of targets) {
+    const nextValues = getNextBulkVariantValues(target, normalized.action, normalized.percentage);
+
+    if (!nextValues.shouldUpdate) {
+      skippedCount += 1;
+      if (nextValues.reason) {
+        errors.push(nextValues.reason);
+      }
+      continue;
+    }
+
+    const { error } = await supabase
+      .from("listing_variants")
+      .update({
+        price: nextValues.price,
+        quantity: nextValues.quantity,
+        is_active: nextValues.is_active,
+      })
+      .eq("id", target.id)
+      .eq("listing_id", target.listing_id);
+
+    if (error) {
+      skippedCount += 1;
+      errors.push(`${buildVariantLabel(target)} failed to update: ${error.message}`);
+      continue;
+    }
+
+    updatedCount += 1;
+  }
+
+  return {
+    updatedCount,
+    skippedCount,
+    errors,
+  };
+}
+
+export async function deleteSellerListing(
+  supabase: SupabaseClient,
+  input: DeleteSellerListingInput
+): Promise<void> {
+  const sellerId = String(input.seller_id || "").trim();
+  const listingId = String(input.listing_id || "").trim();
+
+  if (!sellerId) {
+    throw new InventoryUpsertError("invalid_seller_id", "A valid seller is required.");
+  }
+
+  if (!listingId) {
+    throw new InventoryUpsertError("invalid_listing_id", "A valid listing is required.");
+  }
+
+  const { data: listing, error: listingError } = await supabase
+    .from("listings")
+    .select("id")
+    .eq("id", listingId)
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+
+  if (listingError) {
+    throw new InventoryUpsertError("listing_lookup_failed", listingError.message);
+  }
+
+  if (!listing) {
+    throw new InventoryUpsertError(
+      "listing_not_found",
+      "You can only delete inventory from your own seller account."
+    );
+  }
+
+  const { count: orderCount, error: orderError } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("listing_id", listingId);
+
+  if (orderError) {
+    throw new InventoryUpsertError("listing_order_check_failed", orderError.message);
+  }
+
+  if ((orderCount || 0) > 0) {
+    throw new InventoryUpsertError(
+      "listing_has_orders",
+      "This listing has order history and cannot be permanently deleted."
+    );
+  }
+
+  const { error: deleteError } = await supabase
+    .from("listings")
+    .delete()
+    .eq("id", listingId)
+    .eq("seller_id", sellerId);
+
+  if (deleteError) {
+    throw new InventoryUpsertError("listing_delete_failed", deleteError.message);
+  }
+}
+
 function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedInventoryInput {
   const sellerId = String(input.seller_id || "").trim();
   if (!sellerId) {
@@ -413,4 +554,231 @@ function normalizeInventoryVariantUpdateInput(input: InventoryVariantUpdateInput
     quantity,
     isActive: Boolean(input.is_active),
   };
+}
+
+function normalizeBulkInventoryActionInput(input: InventoryBulkActionInput) {
+  const sellerId = String(input.seller_id || "").trim();
+  const action = String(input.action || "").trim() as InventoryBulkActionType;
+  const listingIds = uniqueIds(input.listing_ids || []);
+  const variantIds = uniqueIds(input.variant_ids || []);
+  const rawPercentage = input.percentage;
+  const percentage = rawPercentage === undefined ? Number.NaN : Number(rawPercentage);
+
+  if (!sellerId) {
+    throw new InventoryUpsertError("invalid_seller_id", "A valid seller is required.");
+  }
+
+  if (!action) {
+    throw new InventoryUpsertError("invalid_bulk_action", "Choose a bulk action to apply.");
+  }
+
+  if (listingIds.length === 0 && variantIds.length === 0) {
+    throw new InventoryUpsertError("missing_bulk_targets", "Select at least one listing or variant.");
+  }
+
+  if (
+    (action === "increase_price_percent" || action === "decrease_price_percent") &&
+    (!Number.isFinite(percentage) || percentage <= 0)
+  ) {
+    throw new InventoryUpsertError(
+      "invalid_bulk_percentage",
+      "Enter a percentage greater than 0 for bulk price changes."
+    );
+  }
+
+  return {
+    sellerId,
+    action,
+    listingIds,
+    variantIds,
+    percentage: percentage || 0,
+  };
+}
+
+async function resolveBulkInventoryTargets(
+  supabase: SupabaseClient,
+  input: ReturnType<typeof normalizeBulkInventoryActionInput>
+) {
+  const targets = new Map<
+    string,
+    {
+      id: string;
+      listing_id: string;
+      size: string;
+      price: number;
+      quantity: number;
+      is_active: boolean;
+      sku: string | null;
+      brand: string | null;
+      model: string | null;
+    }
+  >();
+
+  if (input.listingIds.length > 0) {
+    const { data, error } = await supabase
+      .from("listing_variants")
+      .select("id, listing_id, size, price, quantity, is_active, listings!inner(seller_id, sku, brand, model)")
+      .in("listing_id", input.listingIds)
+      .eq("listings.seller_id", input.sellerId);
+
+    if (error) {
+      throw new InventoryUpsertError("bulk_variant_lookup_failed", error.message);
+    }
+
+    for (const row of (data || []) as any[]) {
+      targets.set(row.id, {
+        id: row.id,
+        listing_id: row.listing_id,
+        size: row.size,
+        price: Number(row.price),
+        quantity: Number(row.quantity),
+        is_active: row.is_active !== false,
+        sku: row.listings?.sku || null,
+        brand: row.listings?.brand || null,
+        model: row.listings?.model || null,
+      });
+    }
+  }
+
+  if (input.variantIds.length > 0) {
+    const { data, error } = await supabase
+      .from("listing_variants")
+      .select("id, listing_id, size, price, quantity, is_active, listings!inner(seller_id, sku, brand, model)")
+      .in("id", input.variantIds)
+      .eq("listings.seller_id", input.sellerId);
+
+    if (error) {
+      throw new InventoryUpsertError("bulk_variant_lookup_failed", error.message);
+    }
+
+    for (const row of (data || []) as any[]) {
+      targets.set(row.id, {
+        id: row.id,
+        listing_id: row.listing_id,
+        size: row.size,
+        price: Number(row.price),
+        quantity: Number(row.quantity),
+        is_active: row.is_active !== false,
+        sku: row.listings?.sku || null,
+        brand: row.listings?.brand || null,
+        model: row.listings?.model || null,
+      });
+    }
+  }
+
+  return Array.from(targets.values());
+}
+
+function getNextBulkVariantValues(
+  target: Awaited<ReturnType<typeof resolveBulkInventoryTargets>>[number],
+  action: InventoryBulkActionType,
+  percentage: number
+) {
+  switch (action) {
+    case "activate":
+      if (target.quantity <= 0) {
+        return {
+          shouldUpdate: false,
+          reason: `${buildVariantLabel(target)} skipped because quantity is 0.`,
+        };
+      }
+
+      if (target.is_active) {
+        return {
+          shouldUpdate: false,
+          reason: "",
+        };
+      }
+
+      return {
+        shouldUpdate: true,
+        price: target.price,
+        quantity: target.quantity,
+        is_active: true,
+      };
+
+    case "deactivate":
+      if (!target.is_active) {
+        return {
+          shouldUpdate: false,
+          reason: "",
+        };
+      }
+
+      return {
+        shouldUpdate: true,
+        price: target.price,
+        quantity: target.quantity,
+        is_active: false,
+      };
+
+    case "set_quantity_zero":
+      if (target.quantity === 0 && target.is_active === false) {
+        return {
+          shouldUpdate: false,
+          reason: "",
+        };
+      }
+
+      return {
+        shouldUpdate: true,
+        price: target.price,
+        quantity: 0,
+        is_active: false,
+      };
+
+    case "increase_price_percent": {
+      const nextPrice = roundCurrency(target.price * (1 + percentage / 100));
+      return {
+        shouldUpdate: nextPrice !== target.price,
+        price: nextPrice,
+        quantity: target.quantity,
+        is_active: target.quantity > 0 ? target.is_active : false,
+      };
+    }
+
+    case "decrease_price_percent": {
+      const nextPrice = roundCurrency(target.price * (1 - percentage / 100));
+      if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+        return {
+          shouldUpdate: false,
+          reason: `${buildVariantLabel(target)} skipped because price cannot become $0 or less.`,
+        };
+      }
+
+      return {
+        shouldUpdate: nextPrice !== target.price,
+        price: nextPrice,
+        quantity: target.quantity,
+        is_active: target.quantity > 0 ? target.is_active : false,
+      };
+    }
+
+    default:
+      return {
+        shouldUpdate: false,
+        reason: "",
+      };
+  }
+}
+
+function buildVariantLabel(target: {
+  size: string;
+  sku: string | null;
+  brand: string | null;
+  model: string | null;
+}) {
+  const product = [target.brand, target.model].filter(Boolean).join(" ").trim();
+  const prefix = target.sku || product || "Variant";
+  return `${prefix} size ${target.size}`;
+}
+
+function uniqueIds(values: string[]) {
+  return Array.from(
+    new Set(values.map((value) => String(value || "").trim()).filter(Boolean))
+  );
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
 }
