@@ -40,6 +40,28 @@ export interface InventoryUpsertResult {
   status: ListingStatus;
 }
 
+export interface InventoryVariantUpdateInput {
+  seller_id: string;
+  listing_id: string;
+  variant_id: string;
+  price: number;
+  quantity: number;
+  is_active: boolean;
+}
+
+export interface InventoryVariantUpdateResult {
+  listingId: string;
+  listingStatus: ListingStatus;
+  variant: {
+    id: string;
+    size: string;
+    price: number;
+    quantity: number;
+    is_active: boolean;
+  };
+  message?: string;
+}
+
 export class InventoryUpsertError extends Error {
   code: string;
 
@@ -175,6 +197,96 @@ export async function upsertSellerSkuInventory(
   };
 }
 
+export async function updateSellerListingVariant(
+  supabase: SupabaseClient,
+  input: InventoryVariantUpdateInput
+): Promise<InventoryVariantUpdateResult> {
+  const normalized = normalizeInventoryVariantUpdateInput(input);
+
+  const { data: listing, error: listingError } = await supabase
+    .from("listings")
+    .select("id, seller_id, status")
+    .eq("id", normalized.listingId)
+    .eq("seller_id", normalized.sellerId)
+    .maybeSingle();
+
+  if (listingError) {
+    throw new InventoryUpsertError("listing_lookup_failed", listingError.message);
+  }
+
+  if (!listing) {
+    throw new InventoryUpsertError(
+      "listing_not_found",
+      "You can only update inventory for your own listings."
+    );
+  }
+
+  const { data: existingVariant, error: existingVariantError } = await supabase
+    .from("listing_variants")
+    .select("id, listing_id, size")
+    .eq("id", normalized.variantId)
+    .eq("listing_id", normalized.listingId)
+    .maybeSingle();
+
+  if (existingVariantError) {
+    throw new InventoryUpsertError("variant_lookup_failed", existingVariantError.message);
+  }
+
+  if (!existingVariant) {
+    throw new InventoryUpsertError("variant_not_found", "This inventory variant could not be found.");
+  }
+
+  const shouldBeActive = normalized.quantity > 0 && normalized.isActive;
+
+  const { data: updatedVariant, error: updateError } = await supabase
+    .from("listing_variants")
+    .update({
+      price: normalized.price,
+      quantity: normalized.quantity,
+      is_active: shouldBeActive,
+    })
+    .eq("id", normalized.variantId)
+    .eq("listing_id", normalized.listingId)
+    .select("id, size, price, quantity, is_active")
+    .single();
+
+  if (updateError || !updatedVariant) {
+    throw new InventoryUpsertError(
+      "variant_update_failed",
+      updateError?.message || "Failed to update inventory variant."
+    );
+  }
+
+  const { data: refreshedListing, error: refreshedListingError } = await supabase
+    .from("listings")
+    .select("id, status")
+    .eq("id", normalized.listingId)
+    .single();
+
+  if (refreshedListingError || !refreshedListing) {
+    throw new InventoryUpsertError(
+      "listing_refresh_failed",
+      refreshedListingError?.message || "Failed to refresh listing status."
+    );
+  }
+
+  return {
+    listingId: normalized.listingId,
+    listingStatus: refreshedListing.status as ListingStatus,
+    variant: {
+      id: updatedVariant.id,
+      size: updatedVariant.size,
+      price: Number(updatedVariant.price),
+      quantity: Number(updatedVariant.quantity),
+      is_active: updatedVariant.is_active !== false,
+    },
+    message:
+      normalized.quantity === 0 && normalized.isActive
+        ? "Quantity is 0, so this variant was marked inactive."
+        : undefined,
+  };
+}
+
 function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedInventoryInput {
   const sellerId = String(input.seller_id || "").trim();
   if (!sellerId) {
@@ -261,4 +373,44 @@ async function findExistingSellerSkuListing(
   }
 
   return data;
+}
+
+function normalizeInventoryVariantUpdateInput(input: InventoryVariantUpdateInput) {
+  const sellerId = String(input.seller_id || "").trim();
+  const listingId = String(input.listing_id || "").trim();
+  const variantId = String(input.variant_id || "").trim();
+  const price = Number(input.price);
+  const quantity = Number(input.quantity);
+
+  if (!sellerId) {
+    throw new InventoryUpsertError("invalid_seller_id", "A valid seller is required.");
+  }
+
+  if (!listingId) {
+    throw new InventoryUpsertError("invalid_listing_id", "A valid listing is required.");
+  }
+
+  if (!variantId) {
+    throw new InventoryUpsertError("invalid_variant_id", "A valid inventory variant is required.");
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new InventoryUpsertError("invalid_variant_price", "Price must be greater than 0.");
+  }
+
+  if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity < 0) {
+    throw new InventoryUpsertError(
+      "invalid_variant_quantity",
+      "Quantity must be an integer greater than or equal to 0."
+    );
+  }
+
+  return {
+    sellerId,
+    listingId,
+    variantId,
+    price,
+    quantity,
+    isActive: Boolean(input.is_active),
+  };
 }

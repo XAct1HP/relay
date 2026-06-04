@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { updateInventoryVariantAction } from "@/app/dashboard/inventory/actions";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
@@ -17,6 +18,12 @@ interface InventoryVariant {
   size: string;
   quantity: number;
   price: number;
+  isActive: boolean;
+}
+
+interface VariantDraft {
+  price: string;
+  quantity: string;
   isActive: boolean;
 }
 
@@ -52,8 +59,44 @@ export default function SellerInventoryDashboard() {
   const [sortBy, setSortBy] = useState<InventorySort>("newest");
   const [expandedListingId, setExpandedListingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [variantDrafts, setVariantDrafts] = useState<Record<string, VariantDraft>>({});
+  const [variantMessages, setVariantMessages] = useState<
+    Record<string, { type: "error" | "success"; message: string }>
+  >({});
   const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  async function loadListings(sellerId: string, options?: { showLoading?: boolean }) {
+    const supabase = createClient();
+    const showLoading = options?.showLoading ?? true;
+
+    if (showLoading) {
+      setLoading(true);
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("listings")
+        .select("*, listing_variants(id, size, price, quantity, is_active)")
+        .eq("seller_id", sellerId)
+        .order("updated_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const formatted = formatInventoryListings((data || []) as Listing[]);
+      setListings(formatted);
+      setVariantDrafts(buildVariantDrafts(formatted));
+    } catch (error) {
+      console.error("Error fetching seller inventory:", error);
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }
 
   useEffect(() => {
     const sellerId = currentUser?.id;
@@ -63,71 +106,7 @@ export default function SellerInventoryDashboard() {
       return;
     }
 
-    async function fetchListings() {
-      const supabase = createClient();
-      setLoading(true);
-
-      try {
-        const { data, error } = await supabase
-          .from("listings")
-          .select("*, listing_variants(id, size, price, quantity, is_active)")
-          .eq("seller_id", sellerId)
-          .order("updated_at", { ascending: false });
-
-        if (error) {
-          throw error;
-        }
-
-        const dedupedListings = dedupeSkuListings((data || []) as Listing[]);
-        const formatted = dedupedListings.map((listing) => {
-          const metrics = getListingDisplayMetrics(listing);
-          const displayName = getDisplayName(listing);
-          const activeQuantity = metrics.variants.reduce(
-            (sum, variant) => sum + (variant.isActive ? variant.quantity : 0),
-            0
-          );
-          const totalQuantity = metrics.variants.reduce((sum, variant) => sum + variant.quantity, 0);
-          const searchableText = [
-            listing.sku,
-            listing.sku_normalized,
-            displayName,
-            listing.brand,
-            listing.model,
-            listing.nickname,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-
-          return {
-            ...listing,
-            displayName,
-            displayImage: listing.images?.[0] || "/placeholder-shoe.png",
-            displaySku: listing.sku || null,
-            availableSizeSummary: formatSizeDisplay(metrics.sizes, metrics.sizeLabels) || "No active sizes",
-            totalQuantity,
-            activeQuantity,
-            lowestPrice: metrics.lowestPrice,
-            searchableText,
-            variants: metrics.variants.map((variant) => ({
-              id: variant.id,
-              size: variant.size,
-              quantity: variant.quantity,
-              price: variant.price,
-              isActive: variant.isActive,
-            })),
-          } satisfies InventoryListingRow;
-        });
-
-        setListings(formatted);
-      } catch (error) {
-        console.error("Error fetching seller inventory:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchListings();
+    loadListings(sellerId);
   }, [currentUser?.id]);
 
   const filteredListings = useMemo(() => {
@@ -242,6 +221,92 @@ export default function SellerInventoryDashboard() {
       alert("Failed to delete listing. Please try again.");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const updateVariantDraft = (variantId: string, updates: Partial<VariantDraft>) => {
+    setVariantDrafts((prev) => ({
+      ...prev,
+      [variantId]: {
+        ...(prev[variantId] || { price: "", quantity: "0", isActive: true }),
+        ...updates,
+      },
+    }));
+
+    setVariantMessages((prev) => {
+      if (!prev[variantId]) {
+        return prev;
+      }
+
+      const next = { ...prev };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const handleSaveVariant = async (listingId: string, variant: InventoryVariant) => {
+    if (!currentUser?.id || !variant.id) {
+      return;
+    }
+
+    const draft = variantDrafts[variant.id] || {
+      price: String(variant.price),
+      quantity: String(variant.quantity),
+      isActive: variant.isActive,
+    };
+    const price = Number(draft.price);
+    const quantity = Number(draft.quantity);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setVariantMessages((prev) => ({
+        ...prev,
+        [variant.id!]: { type: "error", message: "Price must be greater than 0." },
+      }));
+      return;
+    }
+
+    if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity < 0) {
+      setVariantMessages((prev) => ({
+        ...prev,
+        [variant.id!]: { type: "error", message: "Quantity must be an integer greater than or equal to 0." },
+      }));
+      return;
+    }
+
+    setSavingVariantId(variant.id);
+    try {
+      const result = await updateInventoryVariantAction({
+        listingId,
+        variantId: variant.id,
+        price,
+        quantity,
+        isActive: draft.isActive,
+      });
+
+      if (!result.success) {
+        setVariantMessages((prev) => ({
+          ...prev,
+          [variant.id!]: { type: "error", message: result.error },
+        }));
+        return;
+      }
+
+      await loadListings(currentUser.id, { showLoading: false });
+      setVariantMessages((prev) => ({
+        ...prev,
+        [variant.id!]: {
+          type: "success",
+          message: result.message || `Size ${result.variant.size} updated.`,
+        },
+      }));
+    } catch (error) {
+      console.error("Error updating inventory variant:", error);
+      setVariantMessages((prev) => ({
+        ...prev,
+        [variant.id!]: { type: "error", message: "Failed to update this variant. Please try again." },
+      }));
+    } finally {
+      setSavingVariantId(null);
     }
   };
 
@@ -480,22 +545,100 @@ export default function SellerInventoryDashboard() {
                           key={variant.id || `${listing.id}-${variant.size}`}
                           className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4"
                         >
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div>
-                              <p className="text-relay-text font-semibold">Size {variant.size}</p>
-                              <p className="text-sm text-white/50 mt-1">
-                                {variant.isActive ? "Variant active" : "Variant inactive"}
-                              </p>
+                          <div className="flex flex-col gap-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div>
+                                <p className="text-relay-text font-semibold">Size {variant.size}</p>
+                                <p className="text-sm text-white/50 mt-1">
+                                  {variant.isActive && variant.quantity > 0
+                                    ? "Variant available for purchase"
+                                    : "Variant unavailable for purchase"}
+                                </p>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-3 sm:gap-5 sm:min-w-[320px]">
+                                <VariantMetric label="Quantity" value={variant.quantity} />
+                                <VariantMetric label="Price" value={`$${variant.price}`} />
+                                <VariantMetric
+                                  label="Status"
+                                  value={variant.isActive && variant.quantity > 0 ? "Active" : "Inactive"}
+                                />
+                              </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-3 sm:gap-5 sm:min-w-[320px]">
-                              <VariantMetric label="Quantity" value={variant.quantity} />
-                              <VariantMetric label="Price" value={`$${variant.price}`} />
-                              <VariantMetric
-                                label="Status"
-                                value={variant.isActive && variant.quantity > 0 ? "Active" : "Inactive"}
-                              />
-                            </div>
+                            {variant.id ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+                                <label className="space-y-2">
+                                  <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                                    Price
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={variantDrafts[variant.id]?.price ?? String(variant.price)}
+                                    onChange={(event) =>
+                                      updateVariantDraft(variant.id!, { price: event.target.value })
+                                    }
+                                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-relay-text focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+                                  />
+                                </label>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+                                  <label className="space-y-2">
+                                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+                                      Quantity
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={variantDrafts[variant.id]?.quantity ?? String(variant.quantity)}
+                                      onChange={(event) =>
+                                        updateVariantDraft(variant.id!, { quantity: event.target.value })
+                                      }
+                                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-relay-text focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+                                    />
+                                  </label>
+
+                                  <label className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-relay-text">
+                                    <input
+                                      type="checkbox"
+                                      checked={variantDrafts[variant.id]?.isActive ?? variant.isActive}
+                                      onChange={(event) =>
+                                        updateVariantDraft(variant.id!, { isActive: event.target.checked })
+                                      }
+                                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff]"
+                                    />
+                                    Active
+                                  </label>
+                                </div>
+
+                                <button
+                                  onClick={() => handleSaveVariant(listing.id, variant)}
+                                  disabled={savingVariantId === variant.id}
+                                  className="px-4 py-3 rounded-2xl bg-[#5f8fff] text-white text-sm font-semibold hover:bg-[#7ca6ff] transition-colors disabled:opacity-50"
+                                >
+                                  {savingVariantId === variant.id ? "Saving..." : "Save Variant"}
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-white/45">
+                                This legacy variant cannot be edited inline until it has a normalized variant record.
+                              </p>
+                            )}
+
+                            {variant.id && variantMessages[variant.id] && (
+                              <p
+                                className={`text-sm ${
+                                  variantMessages[variant.id].type === "error"
+                                    ? "text-red-300"
+                                    : "text-emerald-300"
+                                }`}
+                              >
+                                {variantMessages[variant.id].message}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -544,4 +687,66 @@ function getDisplayName(listing: Listing) {
 
 function getSortablePrice(price: number) {
   return price > 0 ? price : Number.MAX_SAFE_INTEGER;
+}
+
+function formatInventoryListings(listings: Listing[]): InventoryListingRow[] {
+  const dedupedListings = dedupeSkuListings(listings);
+
+  return dedupedListings.map((listing) => {
+    const metrics = getListingDisplayMetrics(listing);
+    const displayName = getDisplayName(listing);
+    const activeQuantity = metrics.variants.reduce(
+      (sum, variant) => sum + (variant.isActive ? variant.quantity : 0),
+      0
+    );
+    const totalQuantity = metrics.variants.reduce((sum, variant) => sum + variant.quantity, 0);
+    const searchableText = [
+      listing.sku,
+      listing.sku_normalized,
+      displayName,
+      listing.brand,
+      listing.model,
+      listing.nickname,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return {
+      ...listing,
+      displayName,
+      displayImage: listing.images?.[0] || "/placeholder-shoe.png",
+      displaySku: listing.sku || null,
+      availableSizeSummary: formatSizeDisplay(metrics.sizes, metrics.sizeLabels) || "No active sizes",
+      totalQuantity,
+      activeQuantity,
+      lowestPrice: metrics.lowestPrice,
+      searchableText,
+      variants: metrics.variants.map((variant) => ({
+        id: variant.id,
+        size: variant.size,
+        quantity: variant.quantity,
+        price: variant.price,
+        isActive: variant.isActive,
+      })),
+    } satisfies InventoryListingRow;
+  });
+}
+
+function buildVariantDrafts(listings: InventoryListingRow[]) {
+  return listings.reduce<Record<string, VariantDraft>>((drafts, listing) => {
+    for (const variant of listing.variants) {
+      if (!variant.id) {
+        continue;
+      }
+
+      drafts[variant.id] = {
+        price: String(variant.price),
+        quantity: String(variant.quantity),
+        isActive: variant.isActive,
+      };
+    }
+
+    return drafts;
+  }, {});
 }
