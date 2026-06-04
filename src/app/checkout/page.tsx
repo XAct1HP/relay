@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import { resolveListingVariant } from '@/lib/listings';
 import useAuth from '@/hooks/useAuth';
 import { Listing } from '@/types';
 import { ArrowLeft, Package, Truck, CreditCard, Loader2 } from 'lucide-react';
@@ -31,6 +32,11 @@ interface ResolvedVariant {
   size: string;
   price: number;
   quantity: number;
+}
+
+function getLegacySizeEntry(listing: Listing, size: string | null) {
+  const sizes = Array.isArray(listing.sizes) ? listing.sizes : [];
+  return sizes.find((entry) => String(entry.size) === String(size ?? '')) || null;
 }
 
 export default function CheckoutPage() {
@@ -90,7 +96,7 @@ export default function CheckoutPage() {
 
           let resolvedVariantRow: ResolvedVariant | null = null;
 
-          // Resolve price from custom offer or listing sizes
+          // Resolve price from custom offer or listing variants
           if (customOfferId && customOfferId !== 'true') {
             const { data: offer, error: offerError } = await supabase
               .from('custom_offers')
@@ -107,87 +113,52 @@ export default function CheckoutPage() {
               return;
             }
 
-            if (offer.listing_variant_id) {
-              const { data: variant, error: variantError } = await supabase
-                .from('listing_variants')
-                .select('id, size, price, quantity, is_active')
-                .eq('id', offer.listing_variant_id)
-                .single();
+            const resolvedOfferVariant = await resolveListingVariant(supabase, listingId, {
+              variantId: offer.listing_variant_id,
+              size: offer.size,
+            });
 
-              if (variantError || !variant || variant.is_active === false) {
-                setError('This offer references a size that is no longer available.');
-                return;
-              }
-
+            if (resolvedOfferVariant) {
               resolvedVariantRow = {
-                id: variant.id,
-                size: variant.size,
-                price: Number(variant.price) || 0,
-                quantity: variant.quantity || 0,
-              };
-            } else if (offer.size) {
-              const { data: variant, error: variantError } = await supabase
-                .from('listing_variants')
-                .select('id, size, price, quantity, is_active')
-                .eq('listing_id', listingId)
-                .eq('size', offer.size)
-                .single();
-
-              if (!variantError && variant && variant.is_active !== false) {
-                resolvedVariantRow = {
-                  id: variant.id,
-                  size: variant.size,
-                  price: Number(variant.price) || 0,
-                  quantity: variant.quantity || 0,
-                };
-              }
-            }
-
-            if (resolvedVariantRow) {
-              setResolvedVariant(resolvedVariantRow);
-            }
-            setResolvedPrice(parseFloat(offer.offer_price));
-          } else {
-            if (variantId) {
-              const { data: variant, error: variantError } = await supabase
-                .from('listing_variants')
-                .select('id, size, price, quantity, is_active')
-                .eq('id', variantId)
-                .eq('listing_id', listingId)
-                .single();
-
-              if (variantError || !variant || variant.is_active === false) {
-                setError('Selected size is no longer available.');
-                return;
-              }
-
-              resolvedVariantRow = {
-                id: variant.id,
-                size: variant.size,
-                price: Number(variant.price) || 0,
-                quantity: variant.quantity || 0,
+                id: resolvedOfferVariant.id,
+                size: resolvedOfferVariant.size,
+                price: Number(resolvedOfferVariant.price) || 0,
+                quantity: resolvedOfferVariant.quantity || 0,
               };
             } else {
-              const { data: variant, error: variantError } = await supabase
-                .from('listing_variants')
-                .select('id, size, price, quantity, is_active')
-                .eq('listing_id', listingId)
-                .eq('size', String(size))
-                .single();
-
-              if (!variantError && variant && variant.is_active !== false) {
+              const legacySizeEntry = getLegacySizeEntry(data as Listing, offer.size);
+              if (legacySizeEntry) {
                 resolvedVariantRow = {
-                  id: variant.id,
-                  size: variant.size,
-                  price: Number(variant.price) || 0,
-                  quantity: variant.quantity || 0,
+                  id: `${listingId}:${legacySizeEntry.size}`,
+                  size: String(legacySizeEntry.size),
+                  price: Number(legacySizeEntry.price) || 0,
+                  quantity: legacySizeEntry.quantity || 0,
                 };
               }
             }
 
-            if (!resolvedVariantRow) {
-              const sizes = data.sizes as any[];
-              const sizeEntry = sizes?.find((s: any) => String(s.size) === String(size));
+            if (!resolvedVariantRow || resolvedVariantRow.quantity <= 0) {
+              setError('This offer references a size that is no longer available.');
+              return;
+            }
+
+            setResolvedVariant(resolvedVariantRow);
+            setResolvedPrice(parseFloat(offer.offer_price));
+          } else {
+            const resolvedListingVariant = await resolveListingVariant(supabase, listingId, {
+              variantId,
+              size,
+            });
+
+            if (resolvedListingVariant) {
+              resolvedVariantRow = {
+                id: resolvedListingVariant.id,
+                size: resolvedListingVariant.size,
+                price: Number(resolvedListingVariant.price) || 0,
+                quantity: resolvedListingVariant.quantity || 0,
+              };
+            } else {
+              const sizeEntry = getLegacySizeEntry(data as Listing, size);
               if (!sizeEntry) {
                 setError('Selected size is no longer available.');
                 return;
@@ -197,7 +168,7 @@ export default function CheckoutPage() {
                 size: String(sizeEntry.size),
                 price: Number(sizeEntry.price) || 0,
                 quantity: sizeEntry.quantity || 0,
-              };
+                };
             }
 
             if (resolvedVariantRow.quantity <= 0) {
@@ -305,7 +276,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           listingId,
           size: resolvedVariant?.size || size,
-          listingVariantId: resolvedVariant?.id,
+          listingVariantId: resolvedVariant?.id?.includes(':') ? undefined : resolvedVariant?.id,
           price: resolvedPrice,
           shippingCost: parseFloat(shippingRate.amount),
           buyerAddress: {

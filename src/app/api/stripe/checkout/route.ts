@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { resolveListingVariant } from '@/lib/listings'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -13,6 +14,15 @@ interface VariantRow {
   price: number
   quantity: number
   is_active: boolean
+}
+
+function getLegacySizeEntry(
+  sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
+  size: string
+) {
+  return Array.isArray(sizes)
+    ? sizes.find((entry) => String(entry.size) === String(size))
+    : null
 }
 
 export async function POST(request: NextRequest) {
@@ -95,45 +105,18 @@ export async function POST(request: NextRequest) {
     }
 
     let variantRow: VariantRow | null = null
+    const resolvedVariant = await resolveListingVariant(supabase, listingId, {
+      variantId: resolvedVariantId,
+      size: resolvedSize,
+    })
 
-    if (resolvedVariantId) {
-      const { data: variant, error: variantError } = await supabase
-        .from('listing_variants')
-        .select('id, size, price, quantity, is_active')
-        .eq('id', resolvedVariantId)
-        .eq('listing_id', listingId)
-        .single()
-
-      if (variantError || !variant || variant.is_active === false) {
-        return NextResponse.json(
-          { error: 'This size is no longer available' },
-          { status: 400 }
-        )
-      }
-
+    if (resolvedVariant) {
       variantRow = {
-        id: variant.id,
-        size: variant.size,
-        price: Number(variant.price),
-        quantity: variant.quantity || 0,
-        is_active: variant.is_active,
-      }
-    } else {
-      const { data: variant } = await supabase
-        .from('listing_variants')
-        .select('id, size, price, quantity, is_active')
-        .eq('listing_id', listingId)
-        .eq('size', String(size))
-        .maybeSingle()
-
-      if (variant && variant.is_active !== false) {
-        variantRow = {
-          id: variant.id,
-          size: variant.size,
-          price: Number(variant.price),
-          quantity: variant.quantity || 0,
-          is_active: variant.is_active,
-        }
+        id: resolvedVariant.id,
+        size: resolvedVariant.size,
+        price: Number(resolvedVariant.price),
+        quantity: resolvedVariant.quantity || 0,
+        is_active: resolvedVariant.is_active,
       }
     }
 
@@ -152,10 +135,7 @@ export async function POST(request: NextRequest) {
         price = variantRow.price
       }
     } else {
-      const sizes = listing.sizes as any[]
-      const sizeEntry = Array.isArray(sizes)
-        ? sizes.find((entry: any) => String(entry.size) === String(size))
-        : null
+      const sizeEntry = getLegacySizeEntry(listing.sizes as any[], resolvedSize)
 
       if (!sizeEntry || (sizeEntry.quantity || 0) <= 0) {
         return NextResponse.json(
@@ -207,7 +187,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: lineItems,
       success_url: `${request.headers.get('origin')}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${request.headers.get('origin')}/listings/${listingId}`,
+      cancel_url: `${request.headers.get('origin')}/listing/${listingId}`,
       metadata: {
         listingId,
         listingVariantId: resolvedVariantId || '',

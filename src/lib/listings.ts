@@ -16,6 +16,11 @@ export interface ListingVariantRow extends VariantInput {
   updated_at?: string;
 }
 
+interface ResolveListingVariantOptions {
+  variantId?: string | null;
+  size?: string | null;
+}
+
 export function normalizeSku(rawSku: string | null | undefined): string | null {
   if (!rawSku) {
     return null;
@@ -99,6 +104,53 @@ export async function fetchListingVariants(
   }
 
   return (data || []) as ListingVariantRow[];
+}
+
+export async function resolveListingVariant(
+  supabase: SupabaseClient,
+  listingId: string,
+  options: ResolveListingVariantOptions
+): Promise<ListingVariantRow | null> {
+  const variantId = options.variantId ? String(options.variantId).trim() : "";
+  const size = options.size ? String(options.size).trim() : "";
+
+  if (variantId) {
+    const { data, error } = await supabase
+      .from("listing_variants")
+      .select("id, listing_id, size, price, quantity, is_active, created_at, updated_at")
+      .eq("id", variantId)
+      .eq("listing_id", listingId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (data && data.is_active !== false) {
+      return data as ListingVariantRow;
+    }
+  }
+
+  if (!size) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("listing_variants")
+    .select("id, listing_id, size, price, quantity, is_active, created_at, updated_at")
+    .eq("listing_id", listingId)
+    .eq("size", size)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.is_active === false) {
+    return null;
+  }
+
+  return data as ListingVariantRow;
 }
 
 export async function mergeListingVariants(

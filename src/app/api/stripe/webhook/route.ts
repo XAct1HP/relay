@@ -105,47 +105,35 @@ export async function POST(request: NextRequest) {
       let variantUpdated = false
 
       if (listingVariantId) {
-        const { data: variant } = await supabase
-          .from('listing_variants')
-          .select('id, quantity')
-          .eq('id', listingVariantId)
-          .maybeSingle()
+        const { data: decrementedRows, error: decrementError } = await supabase.rpc(
+          'decrement_listing_variant_inventory',
+          { target_listing_variant_id: listingVariantId }
+        )
 
-        if (variant) {
-          const { error: variantUpdateError } = await supabase
-            .from('listing_variants')
-            .update({
-              quantity: Math.max(0, (variant.quantity || 0) - 1),
-            })
-            .eq('id', variant.id)
-
-          if (variantUpdateError) {
-            console.error('Variant quantity update error:', variantUpdateError)
-          } else {
-            variantUpdated = true
-          }
+        if (decrementError) {
+          console.error('Variant quantity update error:', decrementError)
+        } else if (Array.isArray(decrementedRows) && decrementedRows.length > 0) {
+          variantUpdated = true
         }
       }
 
       if (!variantUpdated) {
         const { data: variant } = await supabase
           .from('listing_variants')
-          .select('id, quantity')
+          .select('id')
           .eq('listing_id', listingId)
           .eq('size', size)
           .maybeSingle()
 
         if (variant) {
-          const { error: variantUpdateError } = await supabase
-            .from('listing_variants')
-            .update({
-              quantity: Math.max(0, (variant.quantity || 0) - 1),
-            })
-            .eq('id', variant.id)
+          const { data: decrementedRows, error: decrementError } = await supabase.rpc(
+            'decrement_listing_variant_inventory',
+            { target_listing_variant_id: variant.id }
+          )
 
-          if (variantUpdateError) {
-            console.error('Variant quantity update error:', variantUpdateError)
-          } else {
+          if (decrementError) {
+            console.error('Variant quantity update error:', decrementError)
+          } else if (Array.isArray(decrementedRows) && decrementedRows.length > 0) {
             variantUpdated = true
           }
         }
