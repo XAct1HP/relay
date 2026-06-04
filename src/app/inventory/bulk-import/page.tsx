@@ -105,7 +105,7 @@ export default function BulkImportPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/my-listings" className="relay-button-secondary">
+        <Link href="/dashboard/inventory" className="relay-button-secondary">
           Back to My Listings
         </Link>
         <Link href="/sell" className="relay-button-primary">

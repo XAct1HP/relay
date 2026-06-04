@@ -49,7 +49,7 @@ export function Sidebar() {
     { href: "/feed", label: "Feed", icon: Rss },
     { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
     { href: "/sell", label: "Sell", icon: Upload },
-    { href: "/my-listings", label: "My Listings", icon: List },
+    { href: "/dashboard/inventory", label: "My Listings", icon: List },
     { href: "/inventory/bulk-import", label: "Bulk Import", icon: FileSpreadsheet },
     { href: "/messages", label: "Messages", icon: MessageSquare },
     { href: "/orders", label: "Orders", icon: Package },

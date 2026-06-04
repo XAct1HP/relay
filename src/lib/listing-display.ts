@@ -6,6 +6,8 @@ interface DisplayVariant {
   isActive: boolean;
 }
 
+export interface NormalizedDisplayVariant extends DisplayVariant {}
+
 type ListingDisplayInput = {
   id?: string;
   seller_id?: string;
@@ -25,8 +27,8 @@ type ListingDisplayInput = {
 };
 
 export interface ListingDisplayMetrics {
-  variants: DisplayVariant[];
-  availableVariants: DisplayVariant[];
+  variants: NormalizedDisplayVariant[];
+  availableVariants: NormalizedDisplayVariant[];
   sizes: number[];
   sizeLabels: string[];
   lowestPrice: number;
@@ -131,6 +133,10 @@ function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
     }))
     .filter((variant) => variant.size)
     .sort(compareVariantSize);
+}
+
+export function getListingNormalizedVariants(listing: ListingDisplayInput): NormalizedDisplayVariant[] {
+  return getNormalizedVariants(listing);
 }
 
 function compareVariantSize(a: DisplayVariant, b: DisplayVariant): number {
