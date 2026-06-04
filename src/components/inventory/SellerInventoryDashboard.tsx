@@ -2,10 +2,11 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   applyBulkInventoryAction,
   deleteInventoryListingAction,
+  exportInventoryCsvAction,
   updateInventoryVariantAction,
 } from "@/app/dashboard/inventory/actions";
 import { createClient } from "@/lib/supabase";
@@ -82,6 +83,7 @@ export default function SellerInventoryDashboard() {
   const [expandedListingId, setExpandedListingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
@@ -434,6 +436,32 @@ export default function SellerInventoryDashboard() {
     }
   };
 
+  const handleExportInventory = async () => {
+    setExporting(true);
+
+    try {
+      const result = await exportInventoryCsvAction();
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error exporting inventory:", error);
+      alert(error instanceof Error ? error.message : "Failed to export inventory.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return <div className="relay-empty text-center">Loading...</div>;
   }
@@ -490,6 +518,14 @@ export default function SellerInventoryDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleExportInventory}
+              disabled={exporting}
+              className="relay-button-secondary inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              <Download size={16} />
+              {exporting ? "Exporting..." : "Export CSV"}
+            </button>
             <Link href="/inventory/bulk-import" className="relay-button-secondary inline-flex items-center gap-2">
               <FileSpreadsheet size={16} />
               Bulk Import
