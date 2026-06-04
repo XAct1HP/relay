@@ -319,6 +319,7 @@ export async function bulkUpdateSellerInventory(
 ): Promise<InventoryBulkActionResult> {
   const normalized = normalizeBulkInventoryActionInput(input);
   const targets = await resolveBulkInventoryTargets(supabase, normalized);
+  const touchedListingIds = uniqueIds(targets.map((target) => target.listing_id));
 
   if (targets.length === 0) {
     throw new InventoryUpsertError(
@@ -360,6 +361,12 @@ export async function bulkUpdateSellerInventory(
 
     updatedCount += 1;
   }
+
+  await reconcileBulkListingStatuses(supabase, {
+    action: normalized.action,
+    touchedListingIds,
+    selectedListingIds: normalized.listingIds,
+  });
 
   return {
     updatedCount,
@@ -759,6 +766,66 @@ function getNextBulkVariantValues(
         shouldUpdate: false,
         reason: "",
       };
+  }
+}
+
+async function reconcileBulkListingStatuses(
+  supabase: SupabaseClient,
+  input: {
+    action: InventoryBulkActionType;
+    touchedListingIds: string[];
+    selectedListingIds: string[];
+  }
+) {
+  if (input.touchedListingIds.length === 0) {
+    return;
+  }
+
+  if (input.action !== "activate" && input.action !== "deactivate") {
+    return;
+  }
+
+  const { data: listings, error } = await supabase
+    .from("listings")
+    .select("id, status, listing_variants(quantity, is_active)")
+    .in("id", input.touchedListingIds);
+
+  if (error) {
+    throw new InventoryUpsertError("bulk_listing_reconcile_failed", error.message);
+  }
+
+  const selectedListingIds = new Set(input.selectedListingIds);
+
+  for (const listing of (listings || []) as Array<{
+    id: string;
+    status: ListingStatus;
+    listing_variants?: Array<{ quantity: number | string; is_active: boolean | null }> | null;
+  }>) {
+    const variants = Array.isArray(listing.listing_variants) ? listing.listing_variants : [];
+    const hasAvailableVariant = variants.some(
+      (variant) => Number(variant.quantity) > 0 && variant.is_active !== false
+    );
+
+    let nextStatus: ListingStatus | null = null;
+
+    if (input.action === "deactivate" && selectedListingIds.has(listing.id)) {
+      nextStatus = "inactive";
+    } else if (input.action === "activate") {
+      nextStatus = hasAvailableVariant ? "active" : "sold_out";
+    }
+
+    if (!nextStatus || nextStatus === listing.status) {
+      continue;
+    }
+
+    const { error: updateError } = await supabase
+      .from("listings")
+      .update({ status: nextStatus })
+      .eq("id", listing.id);
+
+    if (updateError) {
+      throw new InventoryUpsertError("bulk_listing_status_update_failed", updateError.message);
+    }
   }
 }
 
