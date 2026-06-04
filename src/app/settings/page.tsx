@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [sellerApplicationStatus, setSellerApplicationStatus] = useState<string | null>(null)
   const [customerMessagingEnabled, setCustomerMessagingEnabled] = useState(false)
+  const [vacationModeEnabled, setVacationModeEnabled] = useState(false)
   const [offersEnabled, setOffersEnabled] = useState(false)
 
   // Handle return from Stripe onboarding
@@ -58,6 +59,7 @@ export default function SettingsPage() {
         if (data.seller_application_status) setSellerApplicationStatus(data.seller_application_status)
         if (data.instagram_url) setInstagramUrl(data.instagram_url)
         setCustomerMessagingEnabled(!!data.customer_messaging_enabled)
+        setVacationModeEnabled(!!data.vacation_mode_enabled)
         setOffersEnabled(!!data.offers_enabled)
         // Check if Stripe account is connected based on profile data
         if (data.stripe_account_id) {
@@ -113,6 +115,7 @@ export default function SettingsPage() {
         avatar_url: avatarUrl,
         instagram_url: instagramUrl || null,
         customer_messaging_enabled: customerMessagingEnabled,
+        vacation_mode_enabled: vacationModeEnabled,
         offers_enabled: offersEnabled,
       })
 
@@ -437,6 +440,24 @@ export default function SettingsPage() {
                 </label>
               </div>
 
+              <div className="flex items-center justify-between py-4 border-b border-white/10">
+                <div>
+                  <p className="text-white font-medium">Vacation Mode</p>
+                  <p className="text-white/50 text-sm">
+                    Keep listings visible while pausing checkout and new buyer messages
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={vacationModeEnabled}
+                    onChange={(e) => setVacationModeEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white/50 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5f8fff]"></div>
+                </label>
+              </div>
+
               <div className="flex items-center justify-between py-4">
                 <div>
                   <p className="text-white font-medium">Offers</p>
@@ -544,6 +565,7 @@ export default function SettingsPage() {
               setAvatar(currentUser?.avatar_url || '')
               setAvatarFile(null)
               setCustomerMessagingEnabled(!!currentUser?.customer_messaging_enabled)
+              setVacationModeEnabled(!!currentUser?.vacation_mode_enabled)
               setOffersEnabled(!!currentUser?.offers_enabled)
             }}
             className="px-6 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] font-medium rounded-lg transition-colors border border-white/10"

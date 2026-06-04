@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, DollarSign, MoreVertical, Send, Tag, X } from "lucide-react";
 import { CustomOfferModal } from "@/components/messages/CustomOfferModal";
 import { formatOfferListingName } from "@/lib/offers";
+import { getBuyerMessagingUnavailableReason } from "@/lib/seller-availability";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -39,6 +40,9 @@ interface Conversation {
   time: string;
   unread: boolean;
   messages: Message[];
+  otherUserRole?: "buyer" | "seller" | "admin";
+  customerMessagingEnabled?: boolean;
+  vacationModeEnabled?: boolean;
   relatedListing?: {
     id: string;
     name: string;
@@ -249,7 +253,7 @@ export default function ConversationPage() {
     if (otherUserId) {
       const { data } = await supabase
         .from("profiles")
-        .select("id, display_name, full_name, avatar_url, is_verified_seller")
+        .select("id, display_name, full_name, avatar_url, role, is_verified_seller, customer_messaging_enabled, vacation_mode_enabled")
         .eq("id", otherUserId)
         .maybeSingle();
       otherUserData = data;
@@ -266,6 +270,9 @@ export default function ConversationPage() {
         : "",
       unread: convData.unread,
       messages,
+      otherUserRole: otherUserData?.role,
+      customerMessagingEnabled: !!otherUserData?.customer_messaging_enabled,
+      vacationModeEnabled: !!otherUserData?.vacation_mode_enabled,
       relatedListing: convData.listing_id
         ? {
             id: convData.listing_id,
@@ -434,6 +441,15 @@ export default function ConversationPage() {
     );
   }
 
+  const messagingDisabledReason =
+    currentUser?.role === "buyer"
+      ? getBuyerMessagingUnavailableReason({
+          role: conversation.otherUserRole,
+          customerMessagingEnabled: conversation.customerMessagingEnabled,
+          vacationModeEnabled: conversation.vacationModeEnabled,
+        })
+      : null;
+
   return (
     <div className="space-y-6 pb-12">
       <div className="flex items-center gap-4">
@@ -520,12 +536,18 @@ export default function ConversationPage() {
       </div>
 
       <div className="relay-card p-3 sm:p-6 space-y-3">
+        {messagingDisabledReason && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <p className="text-sm text-amber-200">{messagingDisabledReason}</p>
+          </div>
+        )}
         <div className="flex gap-2 sm:gap-3">
           <input
             type="text"
             placeholder="Type your message..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            disabled={!!messagingDisabledReason}
             onKeyPress={(e) => {
               if (e.key === "Enter" && inputValue.trim()) {
                 setInputValue("");
@@ -533,7 +555,7 @@ export default function ConversationPage() {
             }}
             className="relay-input flex-1"
           />
-          <button className="relay-button-accent px-3 sm:px-4 flex items-center gap-2">
+          <button disabled={!!messagingDisabledReason} className="relay-button-accent px-3 sm:px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
             <Send className="w-4 h-4" />
             <span className="hidden sm:inline">Send</span>
           </button>

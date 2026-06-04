@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id, seller_id, brand, model, images, sizes, status')
+      .select('id, seller_id, brand, model, images, sizes, status, seller:profiles(vacation_mode_enabled)')
       .eq('id', listingId)
       .single()
 
@@ -77,6 +77,13 @@ export async function POST(request: NextRequest) {
     if (listing.status !== 'active') {
       return NextResponse.json(
         { error: 'This listing is no longer available' },
+        { status: 400 }
+      )
+    }
+
+    if ((listing as any).seller?.vacation_mode_enabled) {
+      return NextResponse.json(
+        { error: 'Seller is temporarily unavailable while vacation mode is on.' },
         { status: 400 }
       )
     }

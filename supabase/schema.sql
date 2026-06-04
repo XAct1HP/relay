@@ -15,6 +15,7 @@ CREATE TABLE profiles (
   seller_application_status TEXT NOT NULL DEFAULT 'none'
     CHECK (seller_application_status IN ('none', 'pending', 'approved', 'rejected', 'rejected_final')),
   customer_messaging_enabled BOOLEAN NOT NULL DEFAULT false,
+  vacation_mode_enabled BOOLEAN NOT NULL DEFAULT false,
   offers_enabled BOOLEAN NOT NULL DEFAULT false,
   stripe_account_id TEXT,
   ship_from_address JSONB,
@@ -886,11 +887,17 @@ CREATE POLICY "Users can insert conversations" ON conversations
     auth.uid() = ANY(participant_ids)
     AND NOT EXISTS (
       SELECT 1
-      FROM profiles
-      WHERE id = ANY(participant_ids)
-        AND id <> auth.uid()
-        AND role IN ('seller', 'admin')
-        AND customer_messaging_enabled = false
+      FROM profiles AS sender_profile
+      JOIN profiles AS recipient_profile
+        ON recipient_profile.id = ANY(participant_ids)
+      WHERE sender_profile.id = auth.uid()
+        AND recipient_profile.id <> auth.uid()
+        AND sender_profile.role = 'buyer'
+        AND recipient_profile.role IN ('seller', 'admin')
+        AND (
+          recipient_profile.customer_messaging_enabled = false
+          OR recipient_profile.vacation_mode_enabled = true
+        )
     )
   );
 
@@ -935,6 +942,21 @@ CREATE POLICY "Users can insert messages to their conversations" ON messages
         WHERE id = auth.uid()
           AND (role = 'admin' OR offers_enabled = true)
       )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM conversations
+      JOIN profiles AS sender_profile ON sender_profile.id = auth.uid()
+      JOIN profiles AS recipient_profile
+        ON recipient_profile.id = ANY(conversations.participant_ids)
+      WHERE conversations.id = conversation_id
+        AND recipient_profile.id <> auth.uid()
+        AND sender_profile.role = 'buyer'
+        AND recipient_profile.role IN ('seller', 'admin')
+        AND (
+          recipient_profile.customer_messaging_enabled = false
+          OR recipient_profile.vacation_mode_enabled = true
+        )
     )
   );
 

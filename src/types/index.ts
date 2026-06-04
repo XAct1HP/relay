@@ -9,6 +9,7 @@ export interface User {
   is_verified_seller: boolean;
   seller_application_status: 'none' | 'pending' | 'approved' | 'rejected' | 'rejected_final';
   customer_messaging_enabled: boolean;
+  vacation_mode_enabled: boolean;
   offers_enabled: boolean;
   stripe_account_id: string | null;
   ship_from_address: ShippingAddress | null;

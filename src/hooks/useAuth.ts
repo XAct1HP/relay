@@ -40,6 +40,7 @@ async function ensureProfileExists(supabase: ReturnType<typeof createClient>, se
       username: buildFallbackUsername(sessionUser.email),
       role: 'buyer' as const,
       customer_messaging_enabled: false,
+      vacation_mode_enabled: false,
       offers_enabled: false,
     });
 

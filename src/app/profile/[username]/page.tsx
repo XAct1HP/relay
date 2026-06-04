@@ -4,6 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from '@/lib/listing-display';
+import {
+  canBuyerMessageSeller,
+  getBuyerMessagingUnavailableReason,
+  getVacationModeNotice,
+} from '@/lib/seller-availability';
 import useAuth from '@/hooks/useAuth';
 import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { Star, MessageCircle, TrendingUp, UserPlus, UserCheck, Heart, Instagram } from 'lucide-react';
@@ -34,7 +39,9 @@ interface SellerProfile {
   sales_count?: number;
   avg_rating?: number;
   instagram_url?: string;
+  role?: string;
   customer_messaging_enabled?: boolean;
+  vacation_mode_enabled?: boolean;
   offers_enabled?: boolean;
 }
 
@@ -205,8 +212,15 @@ export default function SellerProfilePage({ params }: { params: { username: stri
       const supabase = createClient();
       const { data: existingConvos } = await supabase.from('conversations').select('*').contains('participant_ids', [currentUser!.id, profile.id]);
       if (existingConvos && existingConvos.length > 0) { router.push('/messages'); return; }
-      if (!profile.customer_messaging_enabled) {
-        alert('This seller is not accepting new customer messages right now.');
+      const buyerMessagingUnavailableReason = currentUser?.role === 'seller' || currentUser?.role === 'admin'
+        ? null
+        : getBuyerMessagingUnavailableReason({
+            role: profile.role || 'seller',
+            customerMessagingEnabled: profile.customer_messaging_enabled,
+            vacationModeEnabled: profile.vacation_mode_enabled,
+          });
+      if (buyerMessagingUnavailableReason) {
+        alert(buyerMessagingUnavailableReason);
         return;
       }
       const { error } = await supabase.from('conversations').insert({ participant_ids: [currentUser!.id, profile.id], listing_id: null, last_message: null, last_message_at: new Date().toISOString() });
@@ -250,6 +264,20 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
   const theme = THEME_MAP[profile.profile_theme || 'blue'] || THEME_MAP.blue;
   const getInitials = (name: string) => (name || '?').split(' ').map((n) => n[0]).join('').toUpperCase();
+  const buyerMessagingUnavailableReason = getBuyerMessagingUnavailableReason({
+    role: profile.role || 'seller',
+    customerMessagingEnabled: profile.customer_messaging_enabled,
+    vacationModeEnabled: profile.vacation_mode_enabled,
+  });
+  const viewerCanMessageSeller =
+    currentUser?.id === profile.id ||
+    currentUser?.role === 'seller' ||
+    currentUser?.role === 'admin' ||
+    canBuyerMessageSeller({
+      role: profile.role || 'seller',
+      customerMessagingEnabled: profile.customer_messaging_enabled,
+      vacationModeEnabled: profile.vacation_mode_enabled,
+    });
 
   // Fallback display name if not yet set
   const displayName = profile.display_name || profile.full_name || profile.username || 'Seller';
@@ -276,9 +304,19 @@ export default function SellerProfilePage({ params }: { params: { username: stri
               {profile.is_verified_seller && (
                 <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: theme.accent + '20', color: theme.accent, border: '1px solid ' + theme.cardBorder }}>Verified</span>
               )}
+              {profile.vacation_mode_enabled && (
+                <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                  Vacation Mode
+                </span>
+              )}
             </div>
             <p className="text-white/50 text-sm">@{profile.username}</p>
             {profile.bio && <p className="text-relay-text mt-3 max-w-2xl">{profile.bio}</p>}
+            {profile.vacation_mode_enabled && (
+              <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                <p className="text-sm font-medium text-amber-300">{getVacationModeNotice()}</p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4 mb-4 text-sm">
@@ -294,10 +332,12 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                 {isFollowing ? 'Following' : 'Follow'}
               </button>
             )}
-            <button onClick={handleMessage} disabled={messagingLoading} className="flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors disabled:opacity-50 border" style={{ borderColor: theme.cardBorder, color: theme.accent }}>
-              <MessageCircle size={18} />
-              {messagingLoading ? 'Opening...' : 'Message'}
-            </button>
+            {currentUser?.id !== profile.id && (
+              <button onClick={handleMessage} disabled={messagingLoading || !viewerCanMessageSeller} className="flex items-center gap-2 px-4 py-2 font-semibold rounded-lg transition-colors disabled:opacity-50 border" style={{ borderColor: theme.cardBorder, color: theme.accent }}>
+                <MessageCircle size={18} />
+                {messagingLoading ? 'Opening...' : profile.vacation_mode_enabled ? 'Seller on Vacation' : 'Message'}
+              </button>
+            )}
             {profile.instagram_url && (
               <a href={profile.instagram_url.startsWith('http') ? profile.instagram_url : 'https://instagram.com/' + profile.instagram_url.replace(/^@/, '')} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:bg-white/[0.08] rounded-lg transition-colors" style={{ color: theme.accent }}>
                 <Instagram size={18} />
@@ -305,6 +345,10 @@ export default function SellerProfilePage({ params }: { params: { username: stri
               </a>
             )}
           </div>
+
+          {!viewerCanMessageSeller && currentUser?.id !== profile.id && buyerMessagingUnavailableReason && (
+            <p className="text-sm text-white/50 mt-3">{buyerMessagingUnavailableReason}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">

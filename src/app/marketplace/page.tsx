@@ -26,6 +26,7 @@ interface ListingDisplay {
     name: string;
     avatar: string;
     isVerified: boolean;
+    vacationModeEnabled: boolean;
   };
   gradient: string;
   createdAt: string;
@@ -64,7 +65,7 @@ export default function MarketplacePage() {
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, listing_variants(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url)")
+          .select("*, listing_variants(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url, vacation_mode_enabled)")
           .eq("status", "active");
 
         if (data) {
@@ -103,6 +104,7 @@ export default function MarketplacePage() {
                   listing.seller?.avatar_url ||
                   "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
                 isVerified: listing.seller?.is_verified_seller || false,
+                vacationModeEnabled: !!listing.seller?.vacation_mode_enabled,
               },
               gradient: gradients[listing.brand] || "from-blue-500/20 to-indigo-500/20",
               createdAt: listing.created_at,
@@ -137,6 +139,7 @@ export default function MarketplacePage() {
             name: listing.seller.displayName,
             avatar: listing.seller.avatar,
             isVerified: listing.seller.isVerified,
+            vacationModeEnabled: false,
           },
           gradient: listing.gradient,
           createdAt: listing.createdAt,
@@ -394,6 +397,13 @@ export default function MarketplacePage() {
                           {listing.condition}
                         </span>
                       </div>
+                      {listing.seller.vacationModeEnabled && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <span className="relay-badge text-xs px-2 py-1 border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                            Vacation Mode
+                          </span>
+                        </div>
+                      )}
 
                     </div>
 
@@ -436,6 +446,11 @@ export default function MarketplacePage() {
                           <BadgeCheck size={14} className="text-relay-accent flex-shrink-0" />
                         )}
                       </div>
+                      {listing.seller.vacationModeEnabled && (
+                        <p className="text-xs text-amber-300/90 mt-2">
+                          Seller temporarily unavailable
+                        </p>
+                      )}
                     </div>
                   </div>
                 </Link>

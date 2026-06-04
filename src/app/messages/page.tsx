@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { CustomOfferModal } from "@/components/messages/CustomOfferModal";
 import { formatOfferListingName } from "@/lib/offers";
+import { getBuyerMessagingUnavailableReason } from "@/lib/seller-availability";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import { useNotificationStore } from "@/store/notificationStore";
@@ -48,7 +49,10 @@ interface ConversationData {
     display_name: string;
     full_name: string;
     avatar_url: string | null;
+    role: "buyer" | "seller" | "admin";
     is_verified_seller: boolean;
+    customer_messaging_enabled: boolean;
+    vacation_mode_enabled: boolean;
     offers_enabled: boolean;
   } | null;
   messages: MessageData[];
@@ -283,6 +287,7 @@ function ChatArea({
   conversation,
   currentUserId,
   canSendOffers,
+  messagingDisabledReason,
   onShowOfferModal,
   onSendMessage,
   onAcceptOffer,
@@ -292,6 +297,7 @@ function ChatArea({
   conversation: ConversationData | null;
   currentUserId: string;
   canSendOffers: boolean;
+  messagingDisabledReason: string | null;
   onShowOfferModal: () => void;
   onSendMessage: (conversationId: string, content: string) => Promise<void>;
   onAcceptOffer: (messageId: string) => Promise<void>;
@@ -311,7 +317,7 @@ function ChatArea({
   }, [conversation?.messages?.length, scrollToBottom]);
 
   const handleSend = async () => {
-    if (!inputValue.trim() || !conversation || sending) return;
+    if (!inputValue.trim() || !conversation || sending || messagingDisabledReason) return;
     const content = inputValue.trim();
     setInputValue("");
     setSending(true);
@@ -438,12 +444,18 @@ function ChatArea({
       </div>
 
       <div className="border-t border-white/10 p-4 space-y-3">
+        {messagingDisabledReason && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <p className="text-sm text-amber-200">{messagingDisabledReason}</p>
+          </div>
+        )}
         <div className="flex gap-3">
           <input
             type="text"
             placeholder="Type your message..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            disabled={!!messagingDisabledReason}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -454,7 +466,7 @@ function ChatArea({
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() || sending}
+            disabled={!inputValue.trim() || sending || !!messagingDisabledReason}
             className="relay-button-accent px-4 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-4 h-4" />
@@ -532,7 +544,7 @@ export default function MessagesPage() {
           if (otherUserId) {
             const { data: profile } = await supabase
               .from("profiles")
-              .select("id, display_name, full_name, avatar_url, is_verified_seller, offers_enabled")
+              .select("id, display_name, full_name, avatar_url, role, is_verified_seller, customer_messaging_enabled, vacation_mode_enabled, offers_enabled")
               .eq("id", otherUserId)
               .maybeSingle();
             otherUser = profile;
@@ -868,6 +880,14 @@ export default function MessagesPage() {
   const currentConv = conversations.find((c) => c.id === selectedConversation) || null;
   const isSeller = currentUser?.role === "seller" || currentUser?.role === "admin";
   const canSendOffers = isSeller && !!currentUser?.offers_enabled;
+  const messagingDisabledReason =
+    currentUser?.role === "buyer"
+      ? getBuyerMessagingUnavailableReason({
+          role: currentConv?.otherUser?.role,
+          customerMessagingEnabled: currentConv?.otherUser?.customer_messaging_enabled,
+          vacationModeEnabled: currentConv?.otherUser?.vacation_mode_enabled,
+        })
+      : null;
 
   if (loading) {
     return <div className="relay-empty text-center">Loading...</div>;
@@ -902,6 +922,7 @@ export default function MessagesPage() {
               conversation={currentConv}
               currentUserId={currentUser?.id || ""}
               canSendOffers={canSendOffers}
+              messagingDisabledReason={messagingDisabledReason}
               onShowOfferModal={() => setShowOfferModal(true)}
               onSendMessage={handleSendMessage}
               onAcceptOffer={handleAcceptOffer}

@@ -16,6 +16,12 @@ import {
 import { createClient } from "@/lib/supabase";
 import { usePublicTestMode } from "@/hooks/usePublicTestMode";
 import { getRelayTestMarketplaceListing } from "@/lib/test-marketplace";
+import {
+  canBuyerMessageSeller,
+  canBuyFromSeller,
+  getBuyerMessagingUnavailableReason,
+  getVacationModeNotice,
+} from "@/lib/seller-availability";
 import { Listing } from "@/types";
 import useAuth from "@/hooks/useAuth";
 
@@ -39,11 +45,13 @@ interface ListingDetail {
   averageRating: number;
   reviewCount: number;
   seller: {
+    role: string;
     username: string;
     displayName: string;
     avatar: string;
     isVerified: boolean;
     customerMessagingEnabled: boolean;
+    vacationModeEnabled: boolean;
     offersEnabled: boolean;
     totalSales: number;
     rating: number;
@@ -145,6 +153,7 @@ export default function ListingDetailPage({
             averageRating: 4.8,
             reviewCount: 0,
             seller: {
+              role: data.seller?.role || "seller",
               username: data.seller?.username || "unknown",
               displayName: data.seller?.display_name || data.seller?.full_name || "Unknown Seller",
               avatar:
@@ -152,6 +161,7 @@ export default function ListingDetailPage({
                 "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
               isVerified: data.seller?.is_verified_seller || false,
               customerMessagingEnabled: data.seller?.customer_messaging_enabled ?? false,
+              vacationModeEnabled: data.seller?.vacation_mode_enabled ?? false,
               offersEnabled: data.seller?.offers_enabled ?? false,
               totalSales: 847,
               rating: 4.9,
@@ -191,11 +201,13 @@ export default function ListingDetailPage({
               averageRating: 4.8,
               reviewCount: 12,
               seller: {
+                role: "seller",
                 username: previewListing.seller.username,
                 displayName: previewListing.seller.displayName,
                 avatar: previewListing.seller.avatar,
                 isVerified: previewListing.seller.isVerified,
                 customerMessagingEnabled: false,
+                vacationModeEnabled: false,
                 offersEnabled: false,
                 totalSales: previewListing.seller.totalSales,
                 rating: previewListing.seller.rating,
@@ -245,8 +257,16 @@ export default function ListingDetailPage({
         return;
       }
 
-      if (!listing?.seller.customerMessagingEnabled) {
-        alert("This seller is not accepting new customer messages right now.");
+      const buyerMessagingUnavailableReason = currentUser?.role === "seller" || currentUser?.role === "admin"
+        ? null
+        : getBuyerMessagingUnavailableReason({
+            role: listing?.seller.role,
+            customerMessagingEnabled: listing?.seller.customerMessagingEnabled,
+            vacationModeEnabled: listing?.seller.vacationModeEnabled,
+          });
+
+      if (buyerMessagingUnavailableReason) {
+        alert(buyerMessagingUnavailableReason);
         return;
       }
 
@@ -287,6 +307,29 @@ export default function ListingDetailPage({
 
   const selectedSizeData = listing.sizes.find((s) => s.size === selectedSize);
   const availableSizes = listing.sizes.filter((s) => s.quantity > 0);
+  const sellerVacationNotice = getVacationModeNotice();
+  const sellerOnVacation = isPreviewListing
+    ? false
+    : !canBuyFromSeller({
+        role: listing.seller.role,
+        vacationModeEnabled: listing.seller.vacationModeEnabled,
+      });
+  const buyerMessagingUnavailableReason = isPreviewListing
+    ? "Preview listings do not support messaging."
+    : getBuyerMessagingUnavailableReason({
+        role: listing.seller.role,
+        customerMessagingEnabled: listing.seller.customerMessagingEnabled,
+        vacationModeEnabled: listing.seller.vacationModeEnabled,
+      });
+  const viewerCanMessageSeller =
+    !isPreviewListing &&
+    (currentUser?.role === "seller" || currentUser?.role === "admin"
+      ? true
+      : canBuyerMessageSeller({
+          role: listing.seller.role,
+          customerMessagingEnabled: listing.seller.customerMessagingEnabled,
+          vacationModeEnabled: listing.seller.vacationModeEnabled,
+        }));
   const lowestAvailablePrice = availableSizes.length > 0
     ? Math.min(...availableSizes.map((s) => s.price))
     : (listing.sizes.length > 0 ? Math.min(...listing.sizes.map((s) => s.price)) : 0);
@@ -479,6 +522,13 @@ export default function ListingDetailPage({
               </p>
             </div>
 
+            {sellerOnVacation && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <p className="text-sm font-semibold text-amber-300">Seller on vacation</p>
+                <p className="text-sm text-amber-100/80 mt-1">{sellerVacationNotice}</p>
+              </div>
+            )}
+
             {/* ACTION BUTTONS */}
             <div className="flex flex-col gap-2">
               <button
@@ -492,20 +542,31 @@ export default function ListingDetailPage({
                     : "";
                   router.push(`/checkout?listing=${params.id}&size=${selectedSize}${variantParam}`);
                 }}
-                disabled={selectedSize === null || isPreviewListing}
+                disabled={selectedSize === null || isPreviewListing || sellerOnVacation}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingCart size={20} />
-                {isPreviewListing ? "Preview Only" : "Buy Now"}
+                {isPreviewListing ? "Preview Only" : sellerOnVacation ? "Seller Unavailable" : "Buy Now"}
               </button>
               <button
                 onClick={handleMessageSeller}
-                disabled={messagingLoading || isPreviewListing}
+                disabled={messagingLoading || !viewerCanMessageSeller}
                 className="relay-button-secondary w-full py-3 text-base flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <MessageSquare size={20} />
-                {isPreviewListing ? "Messaging Disabled in Preview" : messagingLoading ? "Opening..." : "Message Seller"}
+                {!viewerCanMessageSeller
+                  ? sellerOnVacation
+                    ? "Seller on Vacation"
+                    : "Messaging Unavailable"
+                  : messagingLoading
+                  ? "Opening..."
+                  : "Message Seller"}
               </button>
+              {!viewerCanMessageSeller && buyerMessagingUnavailableReason && (
+                <p className="text-xs text-relay-subtle text-center mt-1">
+                  {buyerMessagingUnavailableReason}
+                </p>
+              )}
               {isPreviewListing && (
                 <p className="text-xs text-relay-subtle text-center mt-1">
                   Preview listings are staging-only and let you review the listing page layout without a live checkout flow.

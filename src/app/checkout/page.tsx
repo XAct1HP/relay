@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { resolveListingVariant } from '@/lib/listings';
+import { getVacationModeNotice } from '@/lib/seller-availability';
 import useAuth from '@/hooks/useAuth';
 import { Listing } from '@/types';
 import { ArrowLeft, Package, Truck, CreditCard, Loader2 } from 'lucide-react';
@@ -90,6 +91,9 @@ export default function CheckoutPage() {
 
         if (data) {
           setListing(data as Listing);
+          if (data.seller?.vacation_mode_enabled) {
+            setError(getVacationModeNotice());
+          }
           if (data.seller?.ship_from_address) {
             setSellerAddress(data.seller.ship_from_address);
           }
@@ -211,6 +215,10 @@ export default function CheckoutPage() {
 
   const handleGetQuote = async () => {
     if (!sellerAddress || !isAddressComplete || !listing) return;
+    if (listing.seller?.vacation_mode_enabled) {
+      setError(getVacationModeNotice());
+      return;
+    }
 
     setQuoteLoading(true);
     setError(null);
@@ -265,6 +273,10 @@ export default function CheckoutPage() {
 
   const handleProceedToPayment = async () => {
     if (!shippingRate || !listing || resolvedPrice === null) return;
+    if (listing.seller?.vacation_mode_enabled) {
+      setError(getVacationModeNotice());
+      return;
+    }
 
     setCheckoutLoading(true);
     setError(null);
@@ -332,6 +344,7 @@ export default function CheckoutPage() {
   const shippingCost = shippingRate ? parseFloat(shippingRate.amount) : 0;
   const total = shoePrice + shippingCost;
   const displaySize = resolvedVariant?.size || size;
+  const sellerOnVacation = !!listing.seller?.vacation_mode_enabled;
 
   return (
     <div className="max-w-2xl mx-auto py-8">
@@ -345,6 +358,13 @@ export default function CheckoutPage() {
       </Link>
 
       <h1 className="text-2xl font-semibold text-relay-text mb-8">Checkout</h1>
+
+      {sellerOnVacation && (
+        <div className="relay-card p-4 mb-6 border-amber-500/30 bg-amber-500/10">
+          <p className="text-amber-300 text-sm font-medium">Seller on vacation</p>
+          <p className="text-amber-100/80 text-sm mt-1">{getVacationModeNotice()}</p>
+        </div>
+      )}
 
       {/* Order Summary */}
       <div className="relay-card p-6 mb-6">
@@ -468,7 +488,7 @@ export default function CheckoutPage() {
         {!shippingRate && (
           <button
             onClick={handleGetQuote}
-            disabled={!isAddressComplete || quoteLoading}
+            disabled={!isAddressComplete || quoteLoading || sellerOnVacation}
             className="relay-button-secondary w-full mt-6 py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {quoteLoading ? (
@@ -525,7 +545,7 @@ export default function CheckoutPage() {
 
           <button
             onClick={handleProceedToPayment}
-            disabled={checkoutLoading}
+            disabled={checkoutLoading || sellerOnVacation}
             className="relay-button-primary w-full py-3 text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {checkoutLoading ? (
