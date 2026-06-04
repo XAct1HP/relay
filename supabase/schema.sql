@@ -90,6 +90,7 @@ CREATE TABLE listings (
 CREATE INDEX idx_listings_seller_id ON listings(seller_id);
 CREATE INDEX idx_listings_status ON listings(status);
 CREATE INDEX idx_listings_created_at ON listings(created_at);
+CREATE INDEX idx_listings_seller_updated_at ON listings(seller_id, updated_at DESC);
 CREATE INDEX idx_listings_brand ON listings(brand);
 CREATE INDEX idx_listings_catalog_product_id ON listings(catalog_product_id);
 CREATE UNIQUE INDEX idx_listings_unique_seller_sku

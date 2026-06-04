@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Eye, FileSpreadsheet, Pencil, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
 import type { Listing } from "@/types";
 
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
+type InventoryFilter = "all" | "active" | "inactive" | "sold_out" | "low_stock";
+type InventorySort = "newest" | "name_asc" | "price_asc" | "price_desc" | "quantity_desc";
 
 interface InventoryVariant {
   id?: string;
@@ -26,8 +27,12 @@ interface InventoryListingRow extends Listing {
   availableSizeSummary: string;
   totalQuantity: number;
   lowestPrice: number;
+  activeQuantity: number;
+  searchableText: string;
   variants: InventoryVariant[];
 }
+
+const LOW_STOCK_THRESHOLD = 2;
 
 const STATUS_BADGES: Record<ListingStatus, { label: string; color: string }> = {
   active: { label: "Active", color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25" },
@@ -39,14 +44,16 @@ const STATUS_BADGES: Record<ListingStatus, { label: string; color: string }> = {
 };
 
 export default function SellerInventoryDashboard() {
-  const router = useRouter();
   const { currentUser } = useAuth();
   const [listings, setListings] = useState<InventoryListingRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | ListingStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<InventoryFilter>("all");
+  const [sortBy, setSortBy] = useState<InventorySort>("newest");
   const [expandedListingId, setExpandedListingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   useEffect(() => {
     const sellerId = currentUser?.id;
@@ -74,16 +81,34 @@ export default function SellerInventoryDashboard() {
         const dedupedListings = dedupeSkuListings((data || []) as Listing[]);
         const formatted = dedupedListings.map((listing) => {
           const metrics = getListingDisplayMetrics(listing);
+          const displayName = getDisplayName(listing);
+          const activeQuantity = metrics.variants.reduce(
+            (sum, variant) => sum + (variant.isActive ? variant.quantity : 0),
+            0
+          );
           const totalQuantity = metrics.variants.reduce((sum, variant) => sum + variant.quantity, 0);
+          const searchableText = [
+            listing.sku,
+            listing.sku_normalized,
+            displayName,
+            listing.brand,
+            listing.model,
+            listing.nickname,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
           return {
             ...listing,
-            displayName: `${listing.brand} ${listing.model}`.trim(),
+            displayName,
             displayImage: listing.images?.[0] || "/placeholder-shoe.png",
             displaySku: listing.sku || null,
             availableSizeSummary: formatSizeDisplay(metrics.sizes, metrics.sizeLabels) || "No active sizes",
             totalQuantity,
+            activeQuantity,
             lowestPrice: metrics.lowestPrice,
+            searchableText,
             variants: metrics.variants.map((variant) => ({
               id: variant.id,
               size: variant.size,
@@ -106,14 +131,50 @@ export default function SellerInventoryDashboard() {
   }, [currentUser?.id]);
 
   const filteredListings = useMemo(() => {
-    if (filter === "all") {
-      return listings;
+    const normalizedSearch = deferredSearchQuery.trim().toLowerCase();
+
+    let nextListings = listings;
+
+    if (normalizedSearch) {
+      nextListings = nextListings.filter((listing) => listing.searchableText.includes(normalizedSearch));
     }
 
-    return listings.filter((listing) => listing.status === filter);
-  }, [filter, listings]);
+    nextListings = nextListings.filter((listing) => {
+      if (filter === "all") {
+        return true;
+      }
+
+      if (filter === "low_stock") {
+        return listing.activeQuantity > 0 && listing.activeQuantity <= LOW_STOCK_THRESHOLD;
+      }
+
+      return listing.status === filter;
+    });
+
+    const sortedListings = [...nextListings];
+    sortedListings.sort((a, b) => {
+      switch (sortBy) {
+        case "name_asc":
+          return a.displayName.localeCompare(b.displayName);
+        case "price_asc":
+          return getSortablePrice(a.lowestPrice) - getSortablePrice(b.lowestPrice);
+        case "price_desc":
+          return getSortablePrice(b.lowestPrice) - getSortablePrice(a.lowestPrice);
+        case "quantity_desc":
+          return b.totalQuantity - a.totalQuantity;
+        case "newest":
+        default:
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+
+    return sortedListings;
+  }, [deferredSearchQuery, filter, listings, sortBy]);
 
   const activeListingsCount = listings.filter((listing) => listing.status === "active").length;
+  const lowStockCount = listings.filter(
+    (listing) => listing.activeQuantity > 0 && listing.activeQuantity <= LOW_STOCK_THRESHOLD
+  ).length;
   const totalInventoryValue = listings.reduce((sum, listing) => {
     return (
       sum +
@@ -194,20 +255,65 @@ export default function SellerInventoryDashboard() {
         <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
         <h1 className="relay-title">Inventory Dashboard</h1>
         <p className="text-relay-subtle max-w-3xl">
-          Manage your SKU listings, review size-level inventory, and keep your pricing current across desktop and mobile.
+          Search by SKU or product details, filter low-stock pairs fast, and review size-level inventory from one mobile-friendly seller workspace.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard label="Active Listings" value={activeListingsCount} />
         <StatCard label="Unique SKU Listings" value={uniqueSkuCount} />
         <StatCard label="Units in Stock" value={listings.reduce((sum, listing) => sum + listing.totalQuantity, 0)} />
+        <StatCard label={`Low Stock (<=${LOW_STOCK_THRESHOLD})`} value={lowStockCount} />
         <StatCard label="Inventory Value" value={`$${totalInventoryValue.toFixed(0)}`} />
       </div>
 
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+            <label className="relative flex-1">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search SKU, product name, brand, model, or colorway"
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] pl-11 pr-4 py-3 text-sm text-relay-text placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+              />
+            </label>
+
+            <label className="sm:w-[220px]">
+              <span className="sr-only">Sort inventory</span>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as InventorySort)}
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-relay-text focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+              >
+                <option value="newest">Newest</option>
+                <option value="name_asc">Name A-Z</option>
+                <option value="price_asc">Lowest Price</option>
+                <option value="price_desc">Highest Price</option>
+                <option value="quantity_desc">Total Quantity</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link href="/inventory/bulk-import" className="relay-button-secondary inline-flex items-center gap-2">
+              <FileSpreadsheet size={16} />
+              Bulk Import
+            </Link>
+            <Link href="/sell" className="relay-button-primary inline-flex items-center gap-2">
+              <Plus size={16} />
+              Create Listing
+            </Link>
+          </div>
+        </div>
+
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {(["all", "active", "inactive", "sold_out", "pending_review", "removed"] as const).map((status) => (
+          {(["all", "active", "inactive", "sold_out", "low_stock"] as const).map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -221,29 +327,20 @@ export default function SellerInventoryDashboard() {
                 ? "All"
                 : status === "sold_out"
                 ? "Sold Out"
-                : status === "pending_review"
-                ? "Pending Review"
+                : status === "low_stock"
+                ? `Low Stock (<=${LOW_STOCK_THRESHOLD})`
                 : status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
           ))}
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Link href="/inventory/bulk-import" className="relay-button-secondary inline-flex items-center gap-2">
-            <FileSpreadsheet size={16} />
-            Bulk Import
-          </Link>
-          <Link href="/sell" className="relay-button-primary inline-flex items-center gap-2">
-            <Plus size={16} />
-            Create Listing
-          </Link>
         </div>
       </div>
 
       {filteredListings.length === 0 ? (
         <div className="relay-card p-12 text-center">
-          <p className="text-relay-text mb-2">No inventory found for this filter.</p>
-          <p className="text-relay-subtle text-sm">Create a new listing or switch filters to see more items.</p>
+          <p className="text-relay-text mb-2">No inventory matched that search or filter.</p>
+          <p className="text-relay-subtle text-sm">
+            Try another SKU or product keyword, or switch filters to see more items.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -277,6 +374,11 @@ export default function SellerInventoryDashboard() {
                             <span className={`${badge.color} border px-3 py-1 rounded-full text-xs font-semibold`}>
                               {badge.label}
                             </span>
+                            {listing.activeQuantity > 0 && listing.activeQuantity <= LOW_STOCK_THRESHOLD && (
+                              <span className="border border-amber-500/25 bg-amber-500/15 px-3 py-1 rounded-full text-xs font-semibold text-amber-300">
+                                Low Stock
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
@@ -348,7 +450,10 @@ export default function SellerInventoryDashboard() {
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                         <Metric label="Available Sizes" value={listing.availableSizeSummary} />
                         <Metric label="Total Quantity" value={`${listing.totalQuantity} units`} />
-                        <Metric label="Lowest Price" value={listing.lowestPrice > 0 ? `From $${listing.lowestPrice}` : "No price"} />
+                        <Metric
+                          label="Lowest Price"
+                          value={listing.lowestPrice > 0 ? `From $${listing.lowestPrice}` : "No price"}
+                        />
                         <Metric label="Variants" value={`${listing.variants.length} total`} />
                       </div>
                     </div>
@@ -431,4 +536,12 @@ function VariantMetric({ label, value }: { label: string; value: string | number
       <p className="text-sm font-semibold text-relay-text">{value}</p>
     </div>
   );
+}
+
+function getDisplayName(listing: Listing) {
+  return [listing.brand, listing.model, listing.nickname].filter(Boolean).join(" ").trim() || "Untitled Listing";
+}
+
+function getSortablePrice(price: number) {
+  return price > 0 ? price : Number.MAX_SAFE_INTEGER;
 }
