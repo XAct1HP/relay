@@ -41,6 +41,24 @@ CREATE INDEX idx_profiles_email ON profiles(email);
 CREATE INDEX idx_profiles_role ON profiles(role);
 
 -- ============================================================================
+-- SELLER_API_KEYS TABLE
+-- ============================================================================
+CREATE TABLE seller_api_keys (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  seller_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  key_hash TEXT NOT NULL UNIQUE,
+  key_prefix TEXT NOT NULL,
+  name TEXT NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_seller_api_keys_seller_id ON seller_api_keys(seller_id);
+CREATE INDEX idx_seller_api_keys_seller_id_revoked_at ON seller_api_keys(seller_id, revoked_at);
+CREATE INDEX idx_seller_api_keys_key_prefix ON seller_api_keys(key_prefix);
+
+-- ============================================================================
 -- CATALOG_PRODUCTS TABLE
 -- ============================================================================
 CREATE TABLE catalog_products (
@@ -658,6 +676,7 @@ $$ LANGUAGE plpgsql;
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE seller_api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE catalog_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listing_variants ENABLE ROW LEVEL SECURITY;

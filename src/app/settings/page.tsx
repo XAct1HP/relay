@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase'
-import { Clock, CheckCircle, XCircle, Upload } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, Upload, KeyRound, Copy } from 'lucide-react'
+import type { SellerApiKey } from '@/types'
+
+interface GeneratedApiKeyState {
+  value: string
+  name: string
+  prefix: string
+}
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -32,6 +39,14 @@ export default function SettingsPage() {
   const [customerMessagingEnabled, setCustomerMessagingEnabled] = useState(false)
   const [vacationModeEnabled, setVacationModeEnabled] = useState(false)
   const [offersEnabled, setOffersEnabled] = useState(false)
+  const [apiKeys, setApiKeys] = useState<SellerApiKey[]>([])
+  const [apiKeysLoading, setApiKeysLoading] = useState(false)
+  const [apiKeyName, setApiKeyName] = useState('')
+  const [apiKeySubmitting, setApiKeySubmitting] = useState(false)
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null)
+  const [generatedApiKey, setGeneratedApiKey] = useState<GeneratedApiKeyState | null>(null)
+  const [apiKeyError, setApiKeyError] = useState('')
+  const [apiKeySuccess, setApiKeySuccess] = useState('')
 
   // Handle return from Stripe onboarding
   useEffect(() => {
@@ -73,6 +88,36 @@ export default function SettingsPage() {
 
     loadProfile()
   }, [currentUser?.id])
+
+  useEffect(() => {
+    async function loadApiKeys() {
+      if (!currentUser?.id || currentUser.role !== 'seller' || sellerApplicationStatus !== 'approved') {
+        setApiKeys([])
+        setApiKeysLoading(false)
+        return
+      }
+
+      setApiKeysLoading(true)
+      setApiKeyError('')
+
+      try {
+        const response = await fetch('/api/seller/api-keys', { cache: 'no-store' })
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to load API keys.')
+        }
+
+        setApiKeys(Array.isArray(result.apiKeys) ? result.apiKeys : [])
+      } catch (error: any) {
+        setApiKeyError(error.message || 'Failed to load API keys.')
+      } finally {
+        setApiKeysLoading(false)
+      }
+    }
+
+    loadApiKeys()
+  }, [currentUser?.id, currentUser?.role, sellerApplicationStatus])
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -160,6 +205,87 @@ export default function SettingsPage() {
       .eq('id', currentUser!.id)
 
     await supabase.auth.signOut()
+  }
+
+  const handleGenerateApiKey = async () => {
+    if (!(sellerApplicationStatus === 'approved' && currentUser?.role === 'seller')) {
+      setApiKeyError('Only approved sellers can generate Relay API keys.')
+      return
+    }
+
+    setApiKeySubmitting(true)
+    setApiKeyError('')
+    setApiKeySuccess('')
+
+    try {
+      const response = await fetch('/api/seller/api-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: apiKeyName }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create API key.')
+      }
+
+      setGeneratedApiKey({
+        value: result.apiKey,
+        name: result.record?.name || apiKeyName.trim(),
+        prefix: result.record?.key_prefix || '',
+      })
+      setApiKeys((prev) => [result.record, ...prev])
+      setApiKeyName('')
+      setApiKeySuccess('API key created. Copy it now — it will not be shown again.')
+    } catch (error: any) {
+      setApiKeyError(error.message || 'Failed to create API key.')
+    } finally {
+      setApiKeySubmitting(false)
+    }
+  }
+
+  const handleRevokeApiKey = async (keyId: string) => {
+    setRevokingKeyId(keyId)
+    setApiKeyError('')
+    setApiKeySuccess('')
+
+    try {
+      const response = await fetch(`/api/seller/api-keys/${keyId}/revoke`, {
+        method: 'POST',
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to revoke API key.')
+      }
+
+      setApiKeys((prev) =>
+        prev.map((key) =>
+          key.id === keyId
+            ? { ...key, revoked_at: result.record?.revoked_at || new Date().toISOString() }
+            : key
+        )
+      )
+      setApiKeySuccess('API key revoked successfully.')
+    } catch (error: any) {
+      setApiKeyError(error.message || 'Failed to revoke API key.')
+    } finally {
+      setRevokingKeyId(null)
+    }
+  }
+
+  const handleCopyApiKey = async () => {
+    if (!generatedApiKey?.value) return
+
+    try {
+      await navigator.clipboard.writeText(generatedApiKey.value)
+      setApiKeySuccess('API key copied to clipboard.')
+    } catch {
+      setApiKeyError('Failed to copy the API key. Copy it manually before leaving this page.')
+    }
   }
 
   if (loading) {
@@ -475,6 +601,142 @@ export default function SettingsPage() {
                   <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white/50 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5f8fff]"></div>
                 </label>
               </div>
+            </div>
+          </div>
+        )}
+
+        {isApprovedSeller && (
+          <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
+            <div className="flex items-start gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-[#5f8fff]/15 border border-[#5f8fff]/25 flex items-center justify-center flex-shrink-0">
+                <KeyRound size={22} className="text-[#7ca6ff]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">API Keys</h2>
+                <p className="text-white/50 text-sm mt-1">
+                  Generate seller-scoped API keys for inventory integrations. Keys are shown once, and Relay only stores a hashed version.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5 mb-6">
+              <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+                <label className="flex-1">
+                  <span className="block text-white/70 text-sm font-medium mb-2">Key Name</span>
+                  <input
+                    type="text"
+                    value={apiKeyName}
+                    onChange={(e) => setApiKeyName(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/[0.04] border border-white/10 rounded-lg text-white placeholder:text-white/30 focus:outline-none focus:border-[#5f8fff]/50 transition-colors"
+                    placeholder="KNET primary sync"
+                    maxLength={80}
+                  />
+                </label>
+                <button
+                  onClick={handleGenerateApiKey}
+                  disabled={apiKeySubmitting}
+                  className="px-6 py-3 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {apiKeySubmitting ? 'Generating...' : 'Generate API Key'}
+                </button>
+              </div>
+              <p className="text-white/40 text-xs mt-3">
+                Preview and staging keys begin with <span className="text-white/60">relay_sk_test_</span>. Production keys begin with <span className="text-white/60">relay_sk_live_</span>.
+              </p>
+            </div>
+
+            {generatedApiKey && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 mb-6">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div>
+                    <p className="text-amber-300 font-semibold">Copy This API Key Now</p>
+                    <p className="text-amber-100/80 text-sm mt-1">
+                      This secret will not be shown again after you leave or refresh this page.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCopyApiKey}
+                    className="px-4 py-2 rounded-lg bg-white/[0.08] text-white hover:bg-white/[0.12] border border-white/10 transition-colors inline-flex items-center gap-2"
+                  >
+                    <Copy size={16} />
+                    Copy Key
+                  </button>
+                </div>
+                <p className="text-amber-100/70 text-xs mt-4 mb-2">
+                  {generatedApiKey.name} · {generatedApiKey.prefix}...
+                </p>
+                <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                  <p className="text-white font-mono text-sm break-all">{generatedApiKey.value}</p>
+                </div>
+              </div>
+            )}
+
+            {apiKeyError && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 mb-4">
+                <p className="text-sm text-red-300">{apiKeyError}</p>
+              </div>
+            )}
+
+            {apiKeySuccess && (
+              <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 mb-4">
+                <p className="text-sm text-green-300">{apiKeySuccess}</p>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <h3 className="text-white font-medium">Existing API Keys</h3>
+              {apiKeysLoading ? (
+                <p className="text-white/40 text-sm">Loading API keys...</p>
+              ) : apiKeys.length === 0 ? (
+                <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-5">
+                  <p className="text-white/60 text-sm">No API keys created yet.</p>
+                </div>
+              ) : (
+                apiKeys.map((apiKey) => {
+                  const isRevoked = !!apiKey.revoked_at
+
+                  return (
+                    <div
+                      key={apiKey.id}
+                      className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <p className="text-white font-medium">{apiKey.name}</p>
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                              isRevoked
+                                ? 'bg-red-500/15 text-red-300 border-red-500/25'
+                                : 'bg-green-500/15 text-green-300 border-green-500/25'
+                            }`}
+                          >
+                            {isRevoked ? 'Revoked' : 'Active'}
+                          </span>
+                        </div>
+                        <p className="text-white/65 text-sm font-mono">{apiKey.key_prefix}...</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-white/40">
+                          <span>Created {new Date(apiKey.created_at).toLocaleString()}</span>
+                          <span>
+                            Last used {apiKey.last_used_at ? new Date(apiKey.last_used_at).toLocaleString() : 'Never'}
+                          </span>
+                          {isRevoked && (
+                            <span>Revoked {new Date(apiKey.revoked_at as string).toLocaleString()}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <button
+                          onClick={() => handleRevokeApiKey(apiKey.id)}
+                          disabled={isRevoked || revokingKeyId === apiKey.id}
+                          className="px-4 py-2 bg-red-500/15 text-red-300 hover:bg-red-500/25 font-medium rounded-lg transition-colors border border-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {revokingKeyId === apiKey.id ? 'Revoking...' : isRevoked ? 'Revoked' : 'Revoke'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
             </div>
           </div>
         )}

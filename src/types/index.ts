@@ -57,6 +57,16 @@ export interface CatalogProduct {
   updated_at: string;
 }
 
+export interface SellerApiKey {
+  id: string;
+  seller_id: string;
+  key_prefix: string;
+  name: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
 // Shoe listing
 export interface Listing {
   id: string;
