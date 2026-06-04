@@ -6,6 +6,7 @@ import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "
 import { buildLegacySizes, isManualListingBrand, mergeListingVariants, normalizeSku } from "@/lib/listings";
 import { getCatalogProductSeed } from "@/lib/catalog";
 import { calculateFees, formatCurrency } from "@/lib/utils";
+import { publishCatalogListingAction } from "@/app/sell/actions";
 import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight, ScanSearch, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
@@ -230,26 +231,6 @@ export default function SellPage() {
 
     try {
       const supabase = createClient();
-      let existingListingId: string | null = null;
-      let existingListingImages: string[] = [];
-
-      if (isCatalogListing && normalizedSku) {
-        const { data: existingListing, error: existingListingError } = await supabase
-          .from("listings")
-          .select("id, images")
-          .eq("seller_id", currentUser!.id)
-          .eq("sku_normalized", normalizedSku)
-          .neq("status", "removed")
-          .limit(1)
-          .maybeSingle();
-
-        if (existingListingError) {
-          throw existingListingError;
-        }
-
-        existingListingId = existingListing?.id || null;
-        existingListingImages = existingListing?.images || [];
-      }
 
       // Upload photos to storage
       const imageUrls: string[] = [];
@@ -273,49 +254,39 @@ export default function SellPage() {
         }
       }
 
-      const legacySizes = buildLegacySizes(
-        sizes.map((s) => ({
-          size: s.size,
-          price: s.price,
-          quantity: s.quantity,
-        }))
-      );
+      if (isCatalogListing) {
+        const result = await publishCatalogListingAction({
+          sku: sku,
+          brand,
+          model: modelName,
+          nickname: nickname || undefined,
+          description,
+          images: imageUrls,
+          condition: condition as "new" | "like_new" | "used_excellent" | "used_good" | "used_fair",
+          boxCondition: boxCondition as "perfect" | "good" | "damaged" | "no_box",
+          approximateSizing: approximateSizing as "lightweight" | "normal" | "heavy",
+          variants: sizes.map((s) => ({
+            size: s.size,
+            price: s.price,
+            quantity: s.quantity,
+          })),
+        });
 
-      if (existingListingId) {
-        const { error } = await supabase
-          .from("listings")
-          .update({
-            brand,
-            model: modelName,
-            nickname: nickname || null,
-            condition,
-            box_condition: boxCondition,
-            approx_sizing: approximateSizing,
-            description,
-            images: imageUrls.length > 0 ? imageUrls : existingListingImages,
-            sku: normalizedSku,
-            sizes: legacySizes,
-          })
-          .eq("id", existingListingId)
-          .eq("seller_id", currentUser!.id);
-
-        if (error) {
-          console.error("Database error:", error);
-          alert("Failed to update your existing SKU listing. Please try again.");
+        if (!result.success) {
+          alert(result.error);
           return;
         }
 
-        await mergeListingVariants(
-          supabase,
-          existingListingId,
+        setPublishedWasMerged(result.merged);
+      } else {
+        const legacySizes = buildLegacySizes(
           sizes.map((s) => ({
             size: s.size,
             price: s.price,
             quantity: s.quantity,
           }))
         );
-        setPublishedWasMerged(true);
-      } else {
+
         const { data, error } = await supabase
           .from("listings")
           .insert({
