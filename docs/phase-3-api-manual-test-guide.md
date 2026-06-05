@@ -23,6 +23,22 @@ Recommended sanity checks:
 - In Supabase, verify your staging seller is approved in `profiles`.
 - In seller settings, confirm the generated key begins with `relay_sk_test_`.
 
+## Preview Protection Note
+
+If your Vercel Preview deployment is protected, direct requests to `https://...vercel.app` may fail before Relay ever sees them.
+
+For Preview testing:
+
+- Prefer `vercel curl` over direct `Invoke-RestMethod` or `Invoke-WebRequest`
+- Your **Vercel deployment protection bypass token** is separate from your **Relay API key**
+- `vercel curl` handles the Vercel protection layer
+- Relay still requires `Authorization: Bearer relay_sk_test_...`
+
+Recommended workflow:
+
+- Use direct PowerShell REST calls only if your Preview deployment is not protected
+- If Preview protection is enabled, use the `vercel curl` examples in this guide instead
+
 ## 2. Test Variables
 
 Set these variables in PowerShell first:
@@ -74,12 +90,49 @@ PowerShell 5.1 note:
 - For successful JSON responses, `Invoke-RestMethod` is convenient.
 - For expected error responses like `400`, `401`, `403`, and `429`, prefer `Invoke-WebRequest` plus `Show-RelayError`.
 - If PowerShell still hides the response body, use `curl.exe -i` as a fallback.
+- If Vercel Preview protection is enabled, prefer `vercel curl` with a temp JSON file.
+
+Optional `vercel curl` helper for protected Preview deployments:
+
+```powershell
+function Invoke-RelayPreviewApi {
+  param(
+    [string]$Path,
+    [string]$Method,
+    [string]$Body,
+    [string]$ApiKey,
+    [string]$BaseUrl
+  )
+
+  $temp = New-TemporaryFile
+  Set-Content -Path $temp -Value $Body -NoNewline
+
+  $args = @(
+    'curl',
+    $Path,
+    '--deployment', $BaseUrl,
+    '--',
+    '--header', "Authorization: Bearer $ApiKey",
+    '--header', 'Content-Type: application/json',
+    '--request', $Method,
+    '--data-binary', "@$temp"
+  )
+
+  try {
+    & vercel @args
+  } finally {
+    Remove-Item $temp -ErrorAction SilentlyContinue
+  }
+}
+```
 
 ## 3. API Key Checks
 
 There is no dedicated "validate key" endpoint right now, so the safest manual check is to hit an integration endpoint with a harmless body and observe auth behavior.
 
 ### Missing Authorization Header
+
+Use this if your Preview deployment is **not** protected:
 
 ```powershell
 try {
@@ -93,12 +146,35 @@ try {
 }
 ```
 
+If Preview protection is enabled, use `vercel curl` instead:
+
+```powershell
+$body = '{"items":[]}'
+$temp = New-TemporaryFile
+Set-Content -Path $temp -Value $body -NoNewline
+
+$args = @(
+  'curl',
+  '/api/integrations/inventory/upsert',
+  '--deployment', $BASE_URL,
+  '--',
+  '--header', 'Content-Type: application/json',
+  '--request', 'POST',
+  '--data-binary', "@$temp"
+)
+
+& vercel @args
+Remove-Item $temp
+```
+
 Expected result:
 
 - `401`
 - Error should be a safe message like `Invalid API key.`
 
 ### Invalid API Key
+
+Use this if your Preview deployment is **not** protected:
 
 ```powershell
 $BAD_HEADERS = @{
@@ -117,6 +193,28 @@ try {
 }
 ```
 
+If Preview protection is enabled, use `vercel curl` instead:
+
+```powershell
+$body = '{"items":[]}'
+$temp = New-TemporaryFile
+Set-Content -Path $temp -Value $body -NoNewline
+
+$args = @(
+  'curl',
+  '/api/integrations/inventory/upsert',
+  '--deployment', $BASE_URL,
+  '--',
+  '--header', 'Authorization: Bearer relay_sk_test_not_real',
+  '--header', 'Content-Type: application/json',
+  '--request', 'POST',
+  '--data-binary', "@$temp"
+)
+
+& vercel @args
+Remove-Item $temp
+```
+
 Expected result:
 
 - `401`
@@ -126,6 +224,8 @@ Expected result:
 ### Revoked API Key
 
 Revoke a staging key in Relay seller settings, then run:
+
+Use this if your Preview deployment is **not** protected:
 
 ```powershell
 $REVOKED_HEADERS = @{
@@ -142,6 +242,28 @@ try {
 } catch {
   Show-RelayError $_
 }
+```
+
+If Preview protection is enabled, use `vercel curl` instead:
+
+```powershell
+$body = '{"items":[]}'
+$temp = New-TemporaryFile
+Set-Content -Path $temp -Value $body -NoNewline
+
+$args = @(
+  'curl',
+  '/api/integrations/inventory/upsert',
+  '--deployment', $BASE_URL,
+  '--',
+  '--header', 'Authorization: Bearer relay_sk_test_REVOKED_KEY',
+  '--header', 'Content-Type: application/json',
+  '--request', 'POST',
+  '--data-binary', "@$temp"
+)
+
+& vercel @args
+Remove-Item $temp
 ```
 
 Expected result:
@@ -178,6 +300,28 @@ Expected result:
   - `skipped_count`
   - `item_errors`
 - For an empty payload, expect counts of `0`
+
+If Preview protection is enabled, use this working smoke test instead:
+
+```powershell
+$body = '{"items":[]}'
+$temp = New-TemporaryFile
+Set-Content -Path $temp -Value $body -NoNewline
+
+$args = @(
+  'curl',
+  '/api/integrations/inventory/upsert',
+  '--deployment', $BASE_URL,
+  '--',
+  '--header', "Authorization: Bearer $API_KEY",
+  '--header', 'Content-Type: application/json',
+  '--request', 'POST',
+  '--data-binary', "@$temp"
+)
+
+& vercel @args
+Remove-Item $temp
+```
 
 ## 4. Inventory Upsert Test
 
@@ -223,6 +367,31 @@ Invoke-RestMethod `
   -Uri "$BASE_URL/api/integrations/inventory/upsert" `
   -Headers $AUTH_HEADERS `
   -Body $body
+```
+
+If Preview protection is enabled, use this instead:
+
+```powershell
+$body = @'
+{
+  "items": [
+    {
+      "sku": "DZ5485-612",
+      "variants": [
+        { "size": "10", "quantity": 1, "price": 350 },
+        { "size": "11", "quantity": 2, "price": 360 }
+      ]
+    }
+  ]
+}
+'@
+
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/upsert" `
+  -Method "POST" `
+  -Body $body `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
 ```
 
 Expected result:
@@ -275,6 +444,27 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+If Preview protection is enabled, use this instead:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "quantity": 3,
+  "price": 345,
+  "active": true
+}
+'@
+
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/variant" `
+  -Method "PATCH" `
+  -Body $body `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
+```
+
 Expected result:
 
 - Size `10` variant updates
@@ -313,6 +503,26 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+If Preview protection is enabled, use this instead:
+
+```powershell
+$body = @'
+{
+  "updates": [
+    { "sku": "DZ5485-612", "size": "10", "price": 340 },
+    { "sku": "DZ5485-612", "size": "11", "price": 355 }
+  ]
+}
+'@
+
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/prices" `
+  -Method "PATCH" `
+  -Body $body `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
+```
+
 Expected result:
 
 - Both targeted variants update price
@@ -348,6 +558,24 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+If Preview protection is enabled, use this instead:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10"
+}
+'@
+
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/deactivate-variant" `
+  -Method "POST" `
+  -Body $body `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
+```
+
 Expected result:
 
 - Size `10` becomes unavailable
@@ -378,6 +606,23 @@ Invoke-RestMethod `
   -Uri "$BASE_URL/api/integrations/inventory/deactivate" `
   -Headers $AUTH_HEADERS `
   -Body $body
+```
+
+If Preview protection is enabled, use this instead:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612"
+}
+'@
+
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/deactivate" `
+  -Method "POST" `
+  -Body $body `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
 ```
 
 Expected result:
