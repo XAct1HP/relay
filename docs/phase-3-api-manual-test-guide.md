@@ -49,15 +49,31 @@ function Show-RelayError {
 
   if ($ErrorRecord.Exception.Response) {
     $response = $ErrorRecord.Exception.Response
-    $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
-    $body = $reader.ReadToEnd()
-    Write-Host "Status:" [int]$response.StatusCode
-    Write-Host "Body:" $body
+    $status = [int]$response.StatusCode
+    $body = $ErrorRecord.ErrorDetails.Message
+
+    if (-not $body) {
+      try {
+        $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+        $body = $reader.ReadToEnd()
+      } catch {
+        $body = ""
+      }
+    }
+
+    Write-Host "Status: $status"
+    Write-Host "Body: $body"
   } else {
     Write-Host $ErrorRecord
   }
 }
 ```
+
+PowerShell 5.1 note:
+
+- For successful JSON responses, `Invoke-RestMethod` is convenient.
+- For expected error responses like `400`, `401`, `403`, and `429`, prefer `Invoke-WebRequest` plus `Show-RelayError`.
+- If PowerShell still hides the response body, use `curl.exe -i` as a fallback.
 
 ## 3. API Key Checks
 
@@ -67,7 +83,7 @@ There is no dedicated "validate key" endpoint right now, so the safest manual ch
 
 ```powershell
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method POST `
     -Uri "$BASE_URL/api/integrations/inventory/upsert" `
     -ContentType "application/json" `
@@ -91,7 +107,7 @@ $BAD_HEADERS = @{
 }
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method POST `
     -Uri "$BASE_URL/api/integrations/inventory/upsert" `
     -Headers $BAD_HEADERS `
@@ -118,7 +134,7 @@ $REVOKED_HEADERS = @{
 }
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method POST `
     -Uri "$BASE_URL/api/integrations/inventory/upsert" `
     -Headers $REVOKED_HEADERS `
@@ -132,6 +148,16 @@ Expected result:
 
 - `401`
 - Same safe error: `Invalid API key.`
+
+Optional `curl.exe` fallback for any auth error test:
+
+```powershell
+curl.exe -i `
+  -X POST `
+  "$BASE_URL/api/integrations/inventory/upsert" `
+  -H "Content-Type: application/json" `
+  --data "{\"items\":[]}"
+```
 
 ### Valid API Key
 
@@ -376,7 +402,7 @@ $body = @'
 '@
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method PATCH `
     -Uri "$BASE_URL/api/integrations/inventory/variant" `
     -Headers $AUTH_HEADERS `
@@ -405,7 +431,7 @@ $body = @'
 '@
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method PATCH `
     -Uri "$BASE_URL/api/integrations/inventory/variant" `
     -Headers $AUTH_HEADERS `
@@ -434,7 +460,7 @@ $body = @'
 '@
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method PATCH `
     -Uri "$BASE_URL/api/integrations/inventory/variant" `
     -Headers $AUTH_HEADERS `
@@ -487,7 +513,7 @@ Expected safe result:
 $badJson = '{"items":[{"sku":"DZ5485-612","variants":[{"size":"10","quantity":1,"price":350}]'
 
 try {
-  Invoke-RestMethod `
+  Invoke-WebRequest `
     -Method POST `
     -Uri "$BASE_URL/api/integrations/inventory/upsert" `
     -Headers $AUTH_HEADERS `
@@ -538,10 +564,34 @@ Expected safe result:
 
 If you have a non-approved staging seller with a generated key:
 
+```powershell
+try {
+  Invoke-WebRequest `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -Headers $AUTH_HEADERS `
+    -Body '{"items":[]}'
+} catch {
+  Show-RelayError $_
+}
+```
+
 - Request should fail with `403`
 - Error should be `Seller not approved.`
 
 ### Revoked key cannot access endpoints
+
+```powershell
+try {
+  Invoke-WebRequest `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -Headers $REVOKED_HEADERS `
+    -Body '{"items":[]}'
+} catch {
+  Show-RelayError $_
+}
+```
 
 - Request should fail with `401`
 - Error should remain generic: `Invalid API key.`
