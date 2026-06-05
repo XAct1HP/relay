@@ -5,10 +5,12 @@ import { NextResponse } from "next/server";
 import {
   authenticateIntegrationRequest,
   IntegrationAuthError,
+  touchIntegrationApiKeyLastUsed,
   type AuthenticatedIntegrationSeller,
 } from "@/lib/integration-auth";
 import { IntegrationInventoryError } from "@/lib/integration-inventory";
 import { logIntegrationApiRequest } from "@/lib/integration-logging";
+import { enforceIntegrationRateLimit } from "@/lib/integration-rate-limit";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 interface HandleIntegrationRouteOptions<TBody = unknown> {
@@ -34,9 +36,12 @@ export async function handleIntegrationRoute<TBody = unknown>(
   let statusCode = 500;
   let errorCode: string | null = "internal_error";
   let responseBody: unknown = { error: "Internal server error." };
+  let retryAfterSeconds: number | null = null;
 
   try {
     auth = await authenticateIntegrationRequest(request);
+    enforceIntegrationRateLimit(auth);
+    await touchIntegrationApiKeyLastUsed(auth.apiKeyId);
     const body = (await request.json()) as TBody;
     const result = await handler({
       admin,
@@ -52,6 +57,7 @@ export async function handleIntegrationRoute<TBody = unknown>(
     if (error instanceof IntegrationAuthError) {
       statusCode = error.status;
       errorCode = error.code;
+      retryAfterSeconds = error.retryAfterSeconds ?? null;
       responseBody = { error: error.message };
     } else if (error instanceof IntegrationInventoryError) {
       statusCode = 400;
@@ -81,6 +87,11 @@ export async function handleIntegrationRoute<TBody = unknown>(
     status: statusCode,
     headers: {
       "x-relay-request-id": requestId,
+      ...(statusCode === 429 && errorCode === "rate_limited" && retryAfterSeconds
+        ? {
+            "retry-after": String(retryAfterSeconds),
+          }
+        : {}),
     },
   });
 }

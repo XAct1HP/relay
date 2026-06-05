@@ -28,16 +28,19 @@ export interface AuthenticatedIntegrationSeller {
 export class IntegrationAuthError extends Error {
   code: "invalid_api_key" | "seller_not_approved" | "rate_limited";
   status: 401 | 403 | 429;
+  retryAfterSeconds?: number;
 
   constructor(
     code: "invalid_api_key" | "seller_not_approved" | "rate_limited",
     message: string,
-    status: 401 | 403 | 429
+    status: 401 | 403 | 429,
+    retryAfterSeconds?: number
   ) {
     super(message);
     this.name = "IntegrationAuthError";
     this.code = code;
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -89,20 +92,29 @@ export async function authenticateIntegrationRequest(
     throw new IntegrationAuthError("seller_not_approved", "Seller not approved.", 403);
   }
 
-  const { error: touchError } = await admin
-    .from("seller_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", matchedKey.id);
-
-  if (touchError) {
-    console.error("Integration API key last_used_at update failed:", touchError);
-  }
-
   return {
     sellerId: matchedKey.seller_id,
     apiKeyId: matchedKey.id,
     apiKeyPrefix: matchedKey.key_prefix,
   };
+}
+
+export async function touchIntegrationApiKeyLastUsed(apiKeyId: string) {
+  const normalizedApiKeyId = String(apiKeyId || "").trim();
+
+  if (!normalizedApiKeyId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("seller_api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", normalizedApiKeyId);
+
+  if (error) {
+    console.error("Integration API key last_used_at update failed:", error);
+  }
 }
 
 export function createIntegrationAuthErrorResponse(error: unknown) {
