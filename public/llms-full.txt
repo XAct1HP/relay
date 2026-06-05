@@ -1,0 +1,444 @@
+# Relay Inventory API - Complete Reference
+
+Base URL: https://relayco.app
+
+## Authentication
+
+All requests require a bearer token sent via the `Authorization` header.
+
+```
+Authorization: Bearer relay_sk_test_xxxxxxxxxxxx
+```
+
+### Key formats
+
+- **Staging / Preview**: `relay_sk_test_` prefix followed by 48 hex characters
+- **Production**: `relay_sk_live_` prefix followed by 48 hex characters
+
+Staging keys are issued on non-production Vercel deployments. Production keys are issued on the production deployment. Keys are hashed with SHA-256 on the server and cannot be retrieved after creation. Sellers generate keys from Relay seller settings.
+
+### Seller requirements
+
+The API key must belong to a user with `role: "seller"` and `seller_application_status: "approved"`. Keys belonging to non-approved sellers return `403 seller_not_approved`.
+
+### Response headers
+
+Every response includes:
+
+- `x-relay-request-id` - UUID for the request, useful for debugging and support
+- `retry-after` - (only on 429 responses) seconds to wait before retrying
+
+
+## Endpoints
+
+### POST /api/integrations/inventory/upsert
+
+Create new SKU listings or merge inventory into existing ones. If the seller already has a listing for a given SKU, existing sizes are updated and new sizes are added. If the SKU does not exist, a new listing is created.
+
+#### Request body
+
+```json
+{
+  "items": [
+    {
+      "sku": "DZ5485-612",
+      "variants": [
+        { "size": "10", "quantity": 1, "price": 350 },
+        { "size": "11", "quantity": 2, "price": 360 }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| items | array | Yes | Array of inventory items to upsert |
+| items[].sku | string | Yes | Product SKU (e.g. "DZ5485-612"). Normalized to uppercase before lookup. |
+| items[].variants | array | Yes | Array of size variants. At least one required. |
+| items[].variants[].size | string | Yes | Size label (e.g. "10", "11.5"). Must be unique within the item. |
+| items[].variants[].quantity | integer | Yes | Stock count. Must be >= 0. |
+| items[].variants[].price | number | Yes | Price in USD. Must be > 0. |
+
+#### Response body (200)
+
+```json
+{
+  "created_count": 2,
+  "updated_count": 0,
+  "skipped_count": 0,
+  "item_errors": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| created_count | integer | Number of new variants created |
+| updated_count | integer | Number of existing variants updated |
+| skipped_count | integer | Number of variants skipped due to errors |
+| item_errors | array | Per-item error objects |
+| item_errors[].item_index | integer | Index of the item in the request array |
+| item_errors[].sku | string | SKU of the failed item (if available) |
+| item_errors[].field | string | Which field caused the error: "sku", "variants", "size", "quantity", "price", or "item" |
+| item_errors[].message | string | Human-readable error description |
+
+#### Behavior
+
+- SKU is trimmed and uppercased before lookup. "dz5485-612" and "DZ5485-612" resolve to the same listing.
+- Relay keeps one SKU listing per seller. Upserting an existing SKU merges variants.
+- When a matching catalog product is found, the listing attaches to that catalog reference.
+- If a SKU cannot be resolved to a catalog product, the item is skipped and returned in item_errors.
+- Duplicate sizes within a single item are rejected.
+- Invalid rows are returned as item-level errors; valid rows in the same batch still process.
+
+#### Error responses
+
+- `400` invalid_request: "Request body must include an items array."
+- `400` invalid_request: "SKU is required." (per item)
+- `400` invalid_request: "At least one variant is required." (per item)
+- `400` invalid_request: "Variant size is required." (per variant)
+- `400` invalid_request: "Variant size {size} must have an integer quantity greater than or equal to 0."
+- `400` invalid_request: "Variant size {size} must have a price greater than 0."
+- `400` invalid_request: "Duplicate size {size} found for SKU {sku}."
+
+
+### PATCH /api/integrations/inventory/variant
+
+Update a single variant by SKU and size. Use this for live quantity changes, price adjustments, and toggling active status. The variant must already exist.
+
+#### Request body
+
+```json
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "quantity": 3,
+  "price": 345,
+  "active": true
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| sku | string | Yes | Product SKU. Normalized to uppercase. |
+| size | string | Yes | Size label of the variant to update. |
+| quantity | integer | Yes | New stock count. Must be >= 0. |
+| price | number | Yes | New price in USD. Must be > 0. |
+| active | boolean | Yes | Whether the variant is available for purchase. |
+
+#### Response body (200)
+
+```json
+{
+  "updated_count": 1,
+  "skipped_count": 0,
+  "item_results": [
+    {
+      "item_index": 0,
+      "sku": "DZ5485-612",
+      "size": "10",
+      "success": true,
+      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+      "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+      "message": "Variant updated successfully."
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| updated_count | integer | 1 if the variant was updated, 0 otherwise |
+| skipped_count | integer | 1 if the update was skipped |
+| item_results | array | Array with one result object |
+| item_results[].item_index | integer | Always 0 for single variant updates |
+| item_results[].sku | string | The SKU that was updated |
+| item_results[].size | string | The size that was updated |
+| item_results[].success | boolean | Whether the update succeeded |
+| item_results[].listing_id | string | UUID of the parent listing (on success) |
+| item_results[].variant_id | string | UUID of the updated variant (on success) |
+| item_results[].message | string | Human-readable result message (on success) |
+| item_results[].error | string | Error message (on failure) |
+
+#### Behavior
+
+- The variant must already exist. If not found, returns success: false with an error directing to the upsert endpoint.
+- All five fields are required on every request.
+- Setting active to false soft-deactivates the variant.
+
+#### Error responses
+
+- `400` invalid_request: "SKU is required."
+- `400` invalid_request: "Size is required."
+- `400` invalid_request: "Quantity must be an integer greater than or equal to 0."
+- `400` invalid_request: "Price must be greater than 0."
+- `400` invalid_request: "Active must be a boolean value."
+
+
+### PATCH /api/integrations/inventory/prices
+
+Reprice multiple SKU-size pairs in a single request. Only the price field is changed; quantity and active status are preserved.
+
+#### Request body
+
+```json
+{
+  "updates": [
+    { "sku": "DZ5485-612", "size": "10", "price": 345 },
+    { "sku": "DZ5485-612", "size": "11", "price": 355 }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| updates | array | Yes | Array of price update objects |
+| updates[].sku | string | Yes | Product SKU. Normalized to uppercase. |
+| updates[].size | string | Yes | Size label of the variant to reprice. |
+| updates[].price | number | Yes | New price in USD. Must be > 0. |
+
+#### Response body (200)
+
+```json
+{
+  "updated_count": 2,
+  "skipped_count": 0,
+  "item_results": [
+    {
+      "item_index": 0,
+      "sku": "DZ5485-612",
+      "size": "10",
+      "success": true,
+      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+      "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+      "message": "Variant updated successfully."
+    },
+    {
+      "item_index": 1,
+      "sku": "DZ5485-612",
+      "size": "11",
+      "success": true,
+      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+      "variant_id": "11223344-5566-7788-99aa-bbccddeeff00",
+      "message": "Variant updated successfully."
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| updated_count | integer | Number of variants successfully repriced |
+| skipped_count | integer | Number that failed or were not found |
+| item_results | array | Per-item result objects (same shape as variant update) |
+
+#### Behavior
+
+- Only price is updated. Quantity and active status remain unchanged.
+- Each item is processed independently. One failure does not roll back others.
+- Variants must already exist. Missing variants return success: false.
+
+#### Error responses
+
+- `400` invalid_request: "Request body must include an updates array."
+- `400` invalid_request: "SKU is required." (per item)
+- `400` invalid_request: "Size is required." (per item)
+- `400` invalid_request: "Price must be greater than 0." (per item)
+
+
+### POST /api/integrations/inventory/deactivate
+
+Soft-deactivate an entire SKU listing. All size variants become unavailable for purchase without deleting order history.
+
+#### Request body
+
+```json
+{
+  "sku": "DZ5485-612"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| sku | string | Yes | Product SKU to deactivate. Normalized to uppercase. |
+
+#### Response body (200)
+
+```json
+{
+  "sku": "DZ5485-612",
+  "success": true,
+  "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "message": "Listing deactivated successfully."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| sku | string | The SKU that was deactivated |
+| success | boolean | Whether the deactivation succeeded |
+| listing_id | string | UUID of the listing (on success) |
+| message | string | Success message |
+| error | string | Error message (on failure) |
+
+#### Behavior
+
+- Soft deactivation. The listing remains in the database but is no longer purchasable.
+- Listings with status "removed" are excluded from lookup.
+
+#### Error responses
+
+- `400` invalid_request: "SKU is required."
+
+
+### POST /api/integrations/inventory/deactivate-variant
+
+Soft-deactivate a single size variant under a SKU listing. The rest of the listing remains active.
+
+#### Request body
+
+```json
+{
+  "sku": "DZ5485-612",
+  "size": "10"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| sku | string | Yes | Product SKU. Normalized to uppercase. |
+| size | string | Yes | Size label of the variant to deactivate. |
+
+#### Response body (200)
+
+```json
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "success": true,
+  "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+  "message": "Variant deactivated successfully."
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| sku | string | The SKU of the parent listing |
+| size | string | The size that was deactivated |
+| success | boolean | Whether the deactivation succeeded |
+| listing_id | string | UUID of the parent listing (on success) |
+| variant_id | string | UUID of the deactivated variant (on success) |
+| message | string | Success message |
+| error | string | Error message (on failure) |
+
+#### Behavior
+
+- Sets is_active to false on the variant. Price and quantity data are preserved.
+- To reactivate, use the variant update endpoint with active: true.
+
+#### Error responses
+
+- `400` invalid_request: "SKU is required."
+- `400` invalid_request: "Size is required."
+
+
+## Error Reference
+
+All errors return a JSON body with an `error` string field.
+
+| Status | Code | Message | When |
+|--------|------|---------|------|
+| 401 | invalid_api_key | "Invalid API key." | Missing, malformed, revoked, or unrecognized bearer token |
+| 403 | seller_not_approved | "Seller not approved." | API key belongs to a non-approved seller |
+| 400 | invalid_json | "Request body must be valid JSON." | Request body is not parseable JSON |
+| 400 | invalid_request | (varies) | Body validation failed (see per-endpoint errors above) |
+| 429 | rate_limited | "Rate limit exceeded. Max 60 requests per minute per API key. Try again in N seconds." | Exceeded 60 requests in 60 seconds for this API key |
+| 500 | internal_error | "Failed to process integration request." | Unexpected server error |
+
+
+## Rate Limits
+
+- 60 requests per minute per API key (sliding window)
+- Exceeding returns HTTP 429 with `Retry-After` header (seconds to wait)
+- The `x-relay-request-id` response header is included on all responses
+
+
+## Example Integration Flow
+
+1. **Generate an API key**: Approved sellers create a key from Relay seller settings. The full key is shown only once.
+2. **Authenticate**: Send `Authorization: Bearer <key>` on every request with `Content-Type: application/json`.
+3. **Create inventory**: POST to `/api/integrations/inventory/upsert` with SKUs and size variants. Relay matches against the catalog automatically.
+4. **Update prices/quantities**: Use PATCH `/api/integrations/inventory/variant` for single changes or PATCH `/api/integrations/inventory/prices` for bulk repricing.
+5. **Deactivate**: POST to `/api/integrations/inventory/deactivate` for full SKU deactivation or `/api/integrations/inventory/deactivate-variant` for a single size.
+
+### cURL example (upsert)
+
+```bash
+curl -X POST https://relayco.app/api/integrations/inventory/upsert \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \
+  -d '{
+    "items": [
+      {
+        "sku": "DZ5485-612",
+        "variants": [
+          { "size": "10", "quantity": 1, "price": 350 },
+          { "size": "11", "quantity": 2, "price": 360 }
+        ]
+      }
+    ]
+  }'
+```
+
+### TypeScript example (upsert)
+
+```typescript
+const response = await fetch("https://relayco.app/api/integrations/inventory/upsert", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer relay_sk_test_xxxxxxxxxxxx",
+  },
+  body: JSON.stringify({
+    items: [
+      {
+        sku: "DZ5485-612",
+        variants: [
+          { size: "10", quantity: 1, price: 350 },
+          { size: "11", quantity: 2, price: 360 },
+        ],
+      },
+    ],
+  }),
+});
+
+const data = await response.json();
+```
+
+### Python example (upsert)
+
+```python
+import requests
+
+response = requests.post(
+    "https://relayco.app/api/integrations/inventory/upsert",
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer relay_sk_test_xxxxxxxxxxxx",
+    },
+    json={
+        "items": [
+            {
+                "sku": "DZ5485-612",
+                "variants": [
+                    {"size": "10", "quantity": 1, "price": 350},
+                    {"size": "11", "quantity": 2, "price": 360},
+                ],
+            }
+        ]
+    },
+)
+
+print(response.json())
+```

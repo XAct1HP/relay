@@ -1,0 +1,23 @@
+# Relay Inventory API
+
+> Relay is a sneaker resale marketplace. The Inventory API lets approved sellers sync inventory, manage size variants, update pricing, and deactivate listings programmatically.
+
+Base URL: https://relayco.app
+
+## Authentication
+Bearer token using a Relay API key. Keys have prefix `relay_sk_test_` (staging) or `relay_sk_live_` (production). Pass as `Authorization: Bearer <key>`.
+
+## Endpoints
+
+- [Inventory Upsert](https://relayco.app/api#upsert): POST /api/integrations/inventory/upsert — Create or merge SKU listings with size variants.
+- [Variant Update](https://relayco.app/api#variant): PATCH /api/integrations/inventory/variant — Update quantity, price, or active status for one variant.
+- [Bulk Price Update](https://relayco.app/api#prices): PATCH /api/integrations/inventory/prices — Reprice multiple SKU-size pairs in one request.
+- [Deactivate Listing](https://relayco.app/api#deactivate): POST /api/integrations/inventory/deactivate — Soft-deactivate all sizes under a SKU.
+- [Deactivate Variant](https://relayco.app/api#deactivate-variant): POST /api/integrations/inventory/deactivate-variant — Soft-deactivate one size under a SKU.
+
+## Rate Limits
+60 requests per minute per API key. Exceeding returns HTTP 429 with `Retry-After` header.
+
+## Full Reference
+https://relayco.app/llms-full.txt — complete API reference in plain markdown
+https://relayco.app/openapi.json — OpenAPI 3.0 specification

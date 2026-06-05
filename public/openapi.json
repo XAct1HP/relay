@@ -1,0 +1,942 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Relay Inventory API",
+    "version": "1.0.0",
+    "description": "The Relay Inventory API lets approved sneaker resellers sync inventory, manage size variants, update pricing, and deactivate listings programmatically.",
+    "contact": {
+      "name": "Relay Support",
+      "url": "https://relayco.app"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://relayco.app",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/integrations/inventory/upsert": {
+      "post": {
+        "summary": "Inventory Upsert",
+        "description": "Create new SKU listings or merge inventory into existing ones. If the seller already has a listing for a given SKU, existing sizes are updated and new sizes are added. If the SKU does not exist, a new listing is created with all provided variants.",
+        "operationId": "inventoryUpsert",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertRequest"
+              },
+              "example": {
+                "items": [
+                  {
+                    "sku": "DZ5485-612",
+                    "variants": [
+                      { "size": "10", "quantity": 1, "price": 350 },
+                      { "size": "11", "quantity": 2, "price": 360 }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upsert completed. Check created_count, updated_count, skipped_count, and item_errors for details.",
+            "headers": {
+              "x-relay-request-id": {
+                "description": "Unique request identifier (UUID).",
+                "schema": { "type": "string", "format": "uuid" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResponse"
+                },
+                "example": {
+                  "created_count": 2,
+                  "updated_count": 0,
+                  "skipped_count": 0,
+                  "item_errors": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (invalid JSON or invalid request body).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Request body must include an items array." }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Invalid API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Seller not approved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Seller not approved." }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before retrying.",
+                "schema": { "type": "integer" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" },
+                "example": { "error": "Rate limit exceeded. Max 60 requests per minute per API key. Try again in 23 seconds." }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Failed to process integration request." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/inventory/variant": {
+      "patch": {
+        "summary": "Variant Update",
+        "description": "Update a single variant by SKU and size. Use for live quantity changes, price adjustments, and toggling active status. The variant must already exist (create it via the upsert endpoint first).",
+        "operationId": "variantUpdate",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariantUpdateRequest"
+              },
+              "example": {
+                "sku": "DZ5485-612",
+                "size": "10",
+                "quantity": 3,
+                "price": 345,
+                "active": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Variant update result.",
+            "headers": {
+              "x-relay-request-id": {
+                "description": "Unique request identifier (UUID).",
+                "schema": { "type": "string", "format": "uuid" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VariantUpdateResponse"
+                },
+                "example": {
+                  "updated_count": 1,
+                  "skipped_count": 0,
+                  "item_results": [
+                    {
+                      "item_index": 0,
+                      "sku": "DZ5485-612",
+                      "size": "10",
+                      "success": true,
+                      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                      "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+                      "message": "Variant updated successfully."
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "SKU is required." }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Invalid API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Seller not approved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Seller not approved." }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before retrying.",
+                "schema": { "type": "integer" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/inventory/prices": {
+      "patch": {
+        "summary": "Bulk Price Update",
+        "description": "Reprice multiple SKU-size pairs in a single request. Only the price field is changed; quantity and active status are preserved. Each update is processed independently.",
+        "operationId": "bulkPriceUpdate",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceUpdateRequest"
+              },
+              "example": {
+                "updates": [
+                  { "sku": "DZ5485-612", "size": "10", "price": 345 },
+                  { "sku": "DZ5485-612", "size": "11", "price": 355 }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk price update results.",
+            "headers": {
+              "x-relay-request-id": {
+                "description": "Unique request identifier (UUID).",
+                "schema": { "type": "string", "format": "uuid" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceUpdateResponse"
+                },
+                "example": {
+                  "updated_count": 2,
+                  "skipped_count": 0,
+                  "item_results": [
+                    {
+                      "item_index": 0,
+                      "sku": "DZ5485-612",
+                      "size": "10",
+                      "success": true,
+                      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                      "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+                      "message": "Variant updated successfully."
+                    },
+                    {
+                      "item_index": 1,
+                      "sku": "DZ5485-612",
+                      "size": "11",
+                      "success": true,
+                      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                      "variant_id": "11223344-5566-7788-99aa-bbccddeeff00",
+                      "message": "Variant updated successfully."
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Request body must include an updates array." }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Invalid API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Seller not approved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Seller not approved." }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before retrying.",
+                "schema": { "type": "integer" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/inventory/deactivate": {
+      "post": {
+        "summary": "Deactivate Listing",
+        "description": "Soft-deactivate an entire SKU listing for the authenticated seller. All size variants become unavailable for purchase without deleting order history.",
+        "operationId": "deactivateListing",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivateRequest"
+              },
+              "example": {
+                "sku": "DZ5485-612"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deactivation result.",
+            "headers": {
+              "x-relay-request-id": {
+                "description": "Unique request identifier (UUID).",
+                "schema": { "type": "string", "format": "uuid" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeactivateResponse"
+                },
+                "example": {
+                  "sku": "DZ5485-612",
+                  "success": true,
+                  "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                  "message": "Listing deactivated successfully."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "SKU is required." }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Invalid API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Seller not approved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Seller not approved." }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before retrying.",
+                "schema": { "type": "integer" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/inventory/deactivate-variant": {
+      "post": {
+        "summary": "Deactivate Variant",
+        "description": "Soft-deactivate a single size variant under a seller's SKU listing. The rest of the listing remains active.",
+        "operationId": "deactivateVariant",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeactivateVariantRequest"
+              },
+              "example": {
+                "sku": "DZ5485-612",
+                "size": "10"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Variant deactivation result.",
+            "headers": {
+              "x-relay-request-id": {
+                "description": "Unique request identifier (UUID).",
+                "schema": { "type": "string", "format": "uuid" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeactivateVariantResponse"
+                },
+                "example": {
+                  "sku": "DZ5485-612",
+                  "size": "10",
+                  "success": true,
+                  "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                  "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+                  "message": "Variant deactivated successfully."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "SKU is required." }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Invalid API key." }
+              }
+            }
+          },
+          "403": {
+            "description": "Seller not approved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": "Seller not approved." }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "headers": {
+              "retry-after": {
+                "description": "Seconds to wait before retrying.",
+                "schema": { "type": "integer" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Relay API key. Staging keys have prefix relay_sk_test_, production keys have prefix relay_sk_live_. Pass as a bearer token."
+      }
+    },
+    "schemas": {
+      "InventoryVariant": {
+        "type": "object",
+        "required": ["size", "quantity", "price"],
+        "properties": {
+          "size": {
+            "type": "string",
+            "description": "Size label (e.g. '10', '11.5'). Must be unique within the item.",
+            "example": "10"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Stock count. Must be an integer >= 0.",
+            "example": 1
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Price in USD. Must be greater than 0.",
+            "example": 350
+          }
+        }
+      },
+      "InventoryItem": {
+        "type": "object",
+        "required": ["sku", "variants"],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Product SKU (e.g. 'DZ5485-612'). Normalized to uppercase before lookup.",
+            "example": "DZ5485-612"
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/InventoryVariant"
+            },
+            "description": "Array of size variants. At least one required."
+          }
+        }
+      },
+      "UpsertRequest": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryItem"
+            },
+            "description": "Array of inventory items to upsert."
+          }
+        }
+      },
+      "ItemError": {
+        "type": "object",
+        "properties": {
+          "item_index": {
+            "type": "integer",
+            "description": "Index of the item in the request array.",
+            "example": 0
+          },
+          "sku": {
+            "type": "string",
+            "description": "SKU of the failed item (if available).",
+            "example": "DZ5485-612"
+          },
+          "field": {
+            "type": "string",
+            "enum": ["sku", "variants", "size", "quantity", "price", "item"],
+            "description": "Which field caused the error.",
+            "example": "sku"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error description.",
+            "example": "SKU is required."
+          }
+        }
+      },
+      "UpsertResponse": {
+        "type": "object",
+        "properties": {
+          "created_count": {
+            "type": "integer",
+            "description": "Number of new variants created.",
+            "example": 2
+          },
+          "updated_count": {
+            "type": "integer",
+            "description": "Number of existing variants updated.",
+            "example": 0
+          },
+          "skipped_count": {
+            "type": "integer",
+            "description": "Number of variants skipped due to errors.",
+            "example": 0
+          },
+          "item_errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemError"
+            },
+            "description": "Array of per-item error objects."
+          }
+        }
+      },
+      "VariantUpdateRequest": {
+        "type": "object",
+        "required": ["sku", "size", "quantity", "price", "active"],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Product SKU. Normalized to uppercase.",
+            "example": "DZ5485-612"
+          },
+          "size": {
+            "type": "string",
+            "description": "Size label of the variant to update.",
+            "example": "10"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "New stock count. Must be an integer >= 0.",
+            "example": 3
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "New price in USD. Must be greater than 0.",
+            "example": 345
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Whether the variant is available for purchase.",
+            "example": true
+          }
+        }
+      },
+      "VariantResult": {
+        "type": "object",
+        "properties": {
+          "item_index": {
+            "type": "integer",
+            "description": "Index of the item in the request (0 for single updates).",
+            "example": 0
+          },
+          "sku": {
+            "type": "string",
+            "description": "The SKU that was processed.",
+            "example": "DZ5485-612"
+          },
+          "size": {
+            "type": "string",
+            "description": "The size that was processed.",
+            "example": "10"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the operation succeeded.",
+            "example": true
+          },
+          "listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the parent listing (on success).",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          },
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the variant (on success).",
+            "example": "f0e1d2c3-b4a5-6789-0abc-def123456789"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable result message (on success).",
+            "example": "Variant updated successfully."
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (on failure).",
+            "example": "Variant 10 for SKU DZ5485-612 was not found. Use the upsert endpoint to create it."
+          }
+        }
+      },
+      "VariantUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "updated_count": {
+            "type": "integer",
+            "description": "1 if the variant was updated, 0 otherwise.",
+            "example": 1
+          },
+          "skipped_count": {
+            "type": "integer",
+            "description": "1 if the update was skipped, 0 otherwise.",
+            "example": 0
+          },
+          "item_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantResult"
+            },
+            "description": "Array with one result object."
+          }
+        }
+      },
+      "PriceUpdate": {
+        "type": "object",
+        "required": ["sku", "size", "price"],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Product SKU. Normalized to uppercase.",
+            "example": "DZ5485-612"
+          },
+          "size": {
+            "type": "string",
+            "description": "Size label of the variant to reprice.",
+            "example": "10"
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "New price in USD. Must be greater than 0.",
+            "example": 345
+          }
+        }
+      },
+      "PriceUpdateRequest": {
+        "type": "object",
+        "required": ["updates"],
+        "properties": {
+          "updates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceUpdate"
+            },
+            "description": "Array of price update objects."
+          }
+        }
+      },
+      "PriceUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "updated_count": {
+            "type": "integer",
+            "description": "Number of variants successfully repriced.",
+            "example": 2
+          },
+          "skipped_count": {
+            "type": "integer",
+            "description": "Number of variants that failed or were not found.",
+            "example": 0
+          },
+          "item_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantResult"
+            },
+            "description": "Per-item result objects."
+          }
+        }
+      },
+      "DeactivateRequest": {
+        "type": "object",
+        "required": ["sku"],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Product SKU to deactivate. Normalized to uppercase.",
+            "example": "DZ5485-612"
+          }
+        }
+      },
+      "DeactivateVariantRequest": {
+        "type": "object",
+        "required": ["sku", "size"],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "Product SKU. Normalized to uppercase.",
+            "example": "DZ5485-612"
+          },
+          "size": {
+            "type": "string",
+            "description": "Size label of the variant to deactivate.",
+            "example": "10"
+          }
+        }
+      },
+      "DeactivateResponse": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "The SKU that was deactivated.",
+            "example": "DZ5485-612"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the deactivation succeeded.",
+            "example": true
+          },
+          "listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the deactivated listing (on success).",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable success message.",
+            "example": "Listing deactivated successfully."
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (on failure).",
+            "example": "Listing for SKU DZ5485-612 was not found for this seller."
+          }
+        }
+      },
+      "DeactivateVariantResponse": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "The SKU of the parent listing.",
+            "example": "DZ5485-612"
+          },
+          "size": {
+            "type": "string",
+            "description": "The size that was deactivated.",
+            "example": "10"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the deactivation succeeded.",
+            "example": true
+          },
+          "listing_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the parent listing (on success).",
+            "example": "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+          },
+          "variant_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the deactivated variant (on success).",
+            "example": "f0e1d2c3-b4a5-6789-0abc-def123456789"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable success message.",
+            "example": "Variant deactivated successfully."
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message (on failure).",
+            "example": "Variant 10 for SKU DZ5485-612 was not found for this seller."
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message.",
+            "example": "Invalid API key."
+          }
+        }
+      },
+      "RateLimitErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Rate limit error message including retry delay.",
+            "example": "Rate limit exceeded. Max 60 requests per minute per API key. Try again in 23 seconds."
+          }
+        }
+      }
+    }
+  }
+}
