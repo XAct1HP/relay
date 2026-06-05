@@ -59,6 +59,26 @@ CREATE INDEX idx_seller_api_keys_seller_id_revoked_at ON seller_api_keys(seller_
 CREATE INDEX idx_seller_api_keys_key_prefix ON seller_api_keys(key_prefix);
 
 -- ============================================================================
+-- INTEGRATION_API_LOGS TABLE
+-- ============================================================================
+CREATE TABLE integration_api_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  seller_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  api_key_id UUID REFERENCES seller_api_keys(id) ON DELETE SET NULL,
+  endpoint TEXT NOT NULL,
+  method TEXT NOT NULL,
+  status_code INT NOT NULL,
+  request_id TEXT NOT NULL,
+  error_code TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_integration_api_logs_created_at ON integration_api_logs(created_at DESC);
+CREATE INDEX idx_integration_api_logs_seller_id_created_at ON integration_api_logs(seller_id, created_at DESC);
+CREATE INDEX idx_integration_api_logs_api_key_id_created_at ON integration_api_logs(api_key_id, created_at DESC);
+CREATE INDEX idx_integration_api_logs_request_id ON integration_api_logs(request_id);
+
+-- ============================================================================
 -- CATALOG_PRODUCTS TABLE
 -- ============================================================================
 CREATE TABLE catalog_products (
@@ -677,6 +697,7 @@ $$ LANGUAGE plpgsql;
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seller_api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integration_api_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE catalog_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listing_variants ENABLE ROW LEVEL SECURITY;
@@ -705,6 +726,14 @@ CREATE POLICY "Users can update their own profile" ON profiles
 -- Users can insert their own profile (via trigger, but we allow it for safety)
 CREATE POLICY "Users can insert their own profile" ON profiles
   FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Admins can read integration logs
+CREATE POLICY "Admins can read integration api logs" ON integration_api_logs
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
 
 -- Only admins can delete profiles
 CREATE POLICY "Only admins can delete profiles" ON profiles
