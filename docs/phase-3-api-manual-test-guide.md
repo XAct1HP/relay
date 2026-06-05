@@ -1,0 +1,753 @@
+# Relay Phase 3 API Manual Test Guide
+
+This guide is for manually testing Relay's Inventory API against a **Vercel Preview deployment** backed by **`relay_staging` Supabase**.
+
+Do **not** run these tests against production.
+
+## 1. Prerequisites
+
+Before testing, confirm all of the following:
+
+- You are using a **Vercel Preview URL**, not the production domain.
+- The Preview deployment's environment variables point to **`relay_staging` Supabase**.
+- `RELAY_TEST_MODE=true` is enabled **only** in Preview, not production.
+- `VERCEL_ENV` is `preview`, not `production`.
+- You have an **approved staging seller account**.
+- You have generated a **staging API key** from Relay seller settings.
+- The staging API key prefix is **`relay_sk_test_`**.
+- You understand these tests will mutate **staging inventory data**.
+
+Recommended sanity checks:
+
+- Open the Preview deployment in the browser and confirm seller settings are using staging data.
+- In Supabase, verify your staging seller is approved in `profiles`.
+- In seller settings, confirm the generated key begins with `relay_sk_test_`.
+
+## 2. Test Variables
+
+Set these variables in PowerShell first:
+
+```powershell
+$BASE_URL = "https://YOUR-PREVIEW-URL.vercel.app"
+$API_KEY = "relay_sk_test_xxxxxxxxx"
+```
+
+Optional helper headers:
+
+```powershell
+$AUTH_HEADERS = @{
+  Authorization = "Bearer $API_KEY"
+  "Content-Type" = "application/json"
+}
+```
+
+Optional helper for inspecting failed responses cleanly:
+
+```powershell
+function Show-RelayError {
+  param($ErrorRecord)
+
+  if ($ErrorRecord.Exception.Response) {
+    $response = $ErrorRecord.Exception.Response
+    $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
+    $body = $reader.ReadToEnd()
+    Write-Host "Status:" [int]$response.StatusCode
+    Write-Host "Body:" $body
+  } else {
+    Write-Host $ErrorRecord
+  }
+}
+```
+
+## 3. API Key Checks
+
+There is no dedicated "validate key" endpoint right now, so the safest manual check is to hit an integration endpoint with a harmless body and observe auth behavior.
+
+### Missing Authorization Header
+
+```powershell
+try {
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -ContentType "application/json" `
+    -Body '{"items":[]}'
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `401`
+- Error should be a safe message like `Invalid API key.`
+
+### Invalid API Key
+
+```powershell
+$BAD_HEADERS = @{
+  Authorization = "Bearer relay_sk_test_not_real"
+  "Content-Type" = "application/json"
+}
+
+try {
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -Headers $BAD_HEADERS `
+    -Body '{"items":[]}'
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `401`
+- Safe error like `Invalid API key.`
+- Response should **not** reveal whether a key exists
+
+### Revoked API Key
+
+Revoke a staging key in Relay seller settings, then run:
+
+```powershell
+$REVOKED_HEADERS = @{
+  Authorization = "Bearer relay_sk_test_REVOKED_KEY"
+  "Content-Type" = "application/json"
+}
+
+try {
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -Headers $REVOKED_HEADERS `
+    -Body '{"items":[]}'
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `401`
+- Same safe error: `Invalid API key.`
+
+### Valid API Key
+
+```powershell
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+  -Headers $AUTH_HEADERS `
+  -Body '{"items":[]}'
+```
+
+Expected result:
+
+- `200`
+- Response should be structurally valid, typically:
+  - `created_count`
+  - `updated_count`
+  - `skipped_count`
+  - `item_errors`
+- For an empty payload, expect counts of `0`
+
+## 4. Inventory Upsert Test
+
+Endpoint:
+
+- `POST /api/integrations/inventory/upsert`
+
+Test body:
+
+```json
+{
+  "items": [
+    {
+      "sku": "DZ5485-612",
+      "variants": [
+        { "size": "10", "quantity": 1, "price": 350 },
+        { "size": "11", "quantity": 2, "price": 360 }
+      ]
+    }
+  ]
+}
+```
+
+PowerShell command:
+
+```powershell
+$body = @'
+{
+  "items": [
+    {
+      "sku": "DZ5485-612",
+      "variants": [
+        { "size": "10", "quantity": 1, "price": 350 },
+        { "size": "11", "quantity": 2, "price": 360 }
+      ]
+    }
+  ]
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected result:
+
+- If the seller does **not** already have this SKU listing:
+  - listing is created
+  - size `10` variant is created
+  - size `11` variant is created
+- If the seller **already has** this SKU listing:
+  - listing is updated/merged
+  - existing size variants update
+  - new sizes are created
+- Response includes:
+  - `created_count`
+  - `updated_count`
+  - `skipped_count`
+  - `item_errors`
+
+## 5. Existing Variant Update Test
+
+Endpoint:
+
+- `PATCH /api/integrations/inventory/variant`
+
+Use:
+
+- SKU `DZ5485-612`
+- Size `10`
+- Quantity `3`
+- Price `345`
+- Active `true`
+
+PowerShell command:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "quantity": 3,
+  "price": 345,
+  "active": true
+}
+'@
+
+Invoke-RestMethod `
+  -Method PATCH `
+  -Uri "$BASE_URL/api/integrations/inventory/variant" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected result:
+
+- Size `10` variant updates
+- Quantity becomes `3`
+- Price becomes `345`
+- Variant stays active
+- Marketplace, seller profile, listing detail, and checkout availability should reflect the new data
+
+## 6. Bulk Price Update Test
+
+Endpoint:
+
+- `PATCH /api/integrations/inventory/prices`
+
+Use:
+
+- `DZ5485-612` size `10` price `340`
+- `DZ5485-612` size `11` price `355`
+
+PowerShell command:
+
+```powershell
+$body = @'
+{
+  "updates": [
+    { "sku": "DZ5485-612", "size": "10", "price": 340 },
+    { "sku": "DZ5485-612", "size": "11", "price": 355 }
+  ]
+}
+'@
+
+Invoke-RestMethod `
+  -Method PATCH `
+  -Uri "$BASE_URL/api/integrations/inventory/prices" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected result:
+
+- Both targeted variants update price
+- Response includes per-item results
+- `updated_count` should reflect successful updates
+- New prices should show on marketplace cards, seller profile cards, listing detail, and checkout
+
+## 7. Deactivate Variant Test
+
+Endpoint:
+
+- `POST /api/integrations/inventory/deactivate-variant`
+
+Use:
+
+- SKU `DZ5485-612`
+- Size `10`
+
+PowerShell command:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10"
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/deactivate-variant" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected result:
+
+- Size `10` becomes unavailable
+- Size `11` should still remain available
+- Listing remains visible if it still has at least one available variant
+
+## 8. Deactivate Full Listing Test
+
+Endpoint:
+
+- `POST /api/integrations/inventory/deactivate`
+
+Use:
+
+- SKU `DZ5485-612`
+
+PowerShell command:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612"
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/deactivate" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected result:
+
+- Entire listing becomes unavailable for purchase
+- All variants are soft-deactivated
+- No hard delete occurs
+- Order/history data remains intact
+
+## 9. Validation Error Tests
+
+### Missing SKU
+
+```powershell
+$body = @'
+{
+  "size": "10",
+  "quantity": 3,
+  "price": 345,
+  "active": true
+}
+'@
+
+try {
+  Invoke-RestMethod `
+    -Method PATCH `
+    -Uri "$BASE_URL/api/integrations/inventory/variant" `
+    -Headers $AUTH_HEADERS `
+    -Body $body
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `400`
+- Safe validation error such as `SKU is required.`
+
+### Negative Quantity
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "quantity": -1,
+  "price": 345,
+  "active": true
+}
+'@
+
+try {
+  Invoke-RestMethod `
+    -Method PATCH `
+    -Uri "$BASE_URL/api/integrations/inventory/variant" `
+    -Headers $AUTH_HEADERS `
+    -Body $body
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `400`
+- Error about quantity needing to be an integer `>= 0`
+
+### Price Less Than or Equal to 0
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612",
+  "size": "10",
+  "quantity": 3,
+  "price": 0,
+  "active": true
+}
+'@
+
+try {
+  Invoke-RestMethod `
+    -Method PATCH `
+    -Uri "$BASE_URL/api/integrations/inventory/variant" `
+    -Headers $AUTH_HEADERS `
+    -Body $body
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `400`
+- Error like `Price must be greater than 0.`
+
+### Unknown SKU
+
+Use this test only if your staging catalog does **not** intentionally support placeholder catalog matching for that SKU.
+
+```powershell
+$body = @'
+{
+  "items": [
+    {
+      "sku": "NOT-A-REAL-SKU",
+      "variants": [
+        { "size": "10", "quantity": 1, "price": 300 }
+      ]
+    }
+  ]
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected safe result:
+
+- Either:
+  - an item-level error showing SKU could not be resolved
+- Or:
+  - placeholder product behavior, if your current Phase 3 staging behavior allows it
+
+### Malformed JSON
+
+```powershell
+$badJson = '{"items":[{"sku":"DZ5485-612","variants":[{"size":"10","quantity":1,"price":350}]'
+
+try {
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+    -Headers $AUTH_HEADERS `
+    -Body $badJson
+} catch {
+  Show-RelayError $_
+}
+```
+
+Expected result:
+
+- `400`
+- Error like `Request body must be valid JSON.`
+
+## 10. Security Tests
+
+### One seller cannot modify another seller's inventory
+
+1. Use Seller A's API key.
+2. Try to update a SKU that belongs only to Seller B.
+
+Example:
+
+```powershell
+$body = @'
+{
+  "sku": "SELLER-B-SKU",
+  "size": "10",
+  "quantity": 3,
+  "price": 345,
+  "active": true
+}
+'@
+
+Invoke-RestMethod `
+  -Method PATCH `
+  -Uri "$BASE_URL/api/integrations/inventory/variant" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected safe result:
+
+- No cross-seller modification occurs
+- Response should indicate the variant/listing was not found for that seller
+
+### Unapproved seller key cannot access endpoints
+
+If you have a non-approved staging seller with a generated key:
+
+- Request should fail with `403`
+- Error should be `Seller not approved.`
+
+### Revoked key cannot access endpoints
+
+- Request should fail with `401`
+- Error should remain generic: `Invalid API key.`
+
+### Invalid key does not reveal whether a key exists
+
+- Invalid and revoked keys should both fail safely
+- Error text should not say:
+  - "key exists but revoked"
+  - "key not found"
+
+## 11. Rate Limit Test
+
+Relay currently enforces a basic integration limit of **60 requests per minute per API key**.
+
+Use this carefully against staging only.
+
+```powershell
+1..65 | ForEach-Object {
+  try {
+    $response = Invoke-WebRequest `
+      -Method POST `
+      -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+      -Headers $AUTH_HEADERS `
+      -Body '{"items":[]}'
+
+    Write-Host "Request $($_): $($response.StatusCode)"
+  } catch {
+    Show-RelayError $_
+    break
+  }
+}
+```
+
+Expected result:
+
+- Early requests return `200`
+- Eventually you should receive:
+  - `429`
+  - a clear rate limit message
+  - `Retry-After` response header
+
+## 12. Supabase Verification
+
+In **`relay_staging` Supabase**, inspect these tables after testing:
+
+### `seller_api_keys`
+
+Check:
+
+- key row exists for your staging seller
+- `key_prefix` begins with `relay_sk_test_`
+- `key_hash` is stored instead of plaintext key
+- `last_used_at` updates after successful authenticated usage
+- `revoked_at` updates after revocation
+
+### `listings`
+
+Check:
+
+- one seller SKU listing exists for `DZ5485-612`
+- no duplicate seller listings for the same SKU
+- listing status changes appropriately after deactivate tests
+
+### `listing_variants`
+
+Check:
+
+- size `10` and `11` rows exist under the correct listing
+- quantities and prices reflect your update tests
+- `is_active` changes correctly for deactivate tests
+
+### `catalog_products`
+
+Check:
+
+- whether `DZ5485-612` exists as a catalog record
+- whether the listing attached to a catalog product as expected
+
+### `integration_api_logs`
+
+Check:
+
+- one row per integration request
+- `seller_id`
+- `api_key_id`
+- `endpoint`
+- `method`
+- `status_code`
+- `request_id`
+- `error_code`
+- `created_at`
+
+## 13. Frontend Verification
+
+In the Preview UI, confirm:
+
+### Seller inventory dashboard
+
+- the SKU listing appears once
+- sizes, prices, quantities, and active/inactive state match API changes
+
+### Marketplace card
+
+- lowest visible price reflects updated variant pricing
+- size availability reflects active variants
+
+### Seller profile
+
+- listing card reflects current SKU state
+- duplicate SKU cards do not appear
+
+### Listing detail page
+
+- correct sizes are selectable
+- deactivated or unavailable sizes cannot be purchased
+
+### Checkout availability
+
+- active sizes remain purchasable
+- deactivated or sold-out sizes do not proceed normally
+
+### Active/inactive variants
+
+- deactivated variant stays unavailable
+- deactivated full listing is not purchasable
+
+## 14. Cleanup
+
+Use these safe cleanup steps after testing:
+
+### Deactivate the test listing
+
+If you want the listing to remain in staging but not be purchasable:
+
+```powershell
+$body = @'
+{
+  "sku": "DZ5485-612"
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/deactivate" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+### Revoke the test API key
+
+- Open Relay seller settings in Preview
+- Revoke the staging key you used
+
+### Optionally delete staging test rows only
+
+Only do this in **`relay_staging`**, never production.
+
+Suggested targets:
+
+- the test listing in `listings`
+- its rows in `listing_variants`
+- related test log rows in `integration_api_logs` if you want a clean slate
+- revoke or remove the test API key row in `seller_api_keys`
+
+Do **not** delete:
+
+- production rows
+- real order history you still need
+
+## Optional cURL translation
+
+If you prefer `curl.exe` instead of PowerShell REST helpers, the same tests translate directly. Example:
+
+```powershell
+curl.exe -X POST `
+  "$BASE_URL/api/integrations/inventory/upsert" `
+  -H "Authorization: Bearer $API_KEY" `
+  -H "Content-Type: application/json" `
+  --data "{\"items\":[]}"
+```
+
+## Postman notes
+
+If you prefer Postman:
+
+- Set a collection variable for `BASE_URL`
+- Set a collection variable for `API_KEY`
+- Add header:
+  - `Authorization: Bearer {{API_KEY}}`
+- Add header:
+  - `Content-Type: application/json`
+- Reuse the exact JSON bodies from this guide
+
+## Recommended Test Order
+
+1. Prerequisite checks
+2. Missing header / invalid key / revoked key / valid key
+3. Upsert test
+4. Variant update test
+5. Bulk price update test
+6. Deactivate variant test
+7. Deactivate full listing test
+8. Validation error tests
+9. Security tests
+10. Rate limit test
+11. Supabase verification
+12. Frontend verification
+13. Cleanup
