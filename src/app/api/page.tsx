@@ -180,11 +180,11 @@ export default function ApiPage() {
   const activeSection = useActiveSection();
 
   return (
-    <main className="relay-page">
+    <main className="relative min-h-screen bg-transparent text-white">
       <Navbar />
 
       {/* ── Hero ── */}
-      <div className="pt-[72px] border-b border-white/8">
+      <div className="pt-[72px] border-b border-white/8 overflow-hidden">
         <div className="mx-auto max-w-3xl px-6 py-20 text-center">
           <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-[#7ca6ff]">
             Relay Inventory API
@@ -213,11 +213,11 @@ export default function ApiPage() {
       </div>
 
       {/* ── Body ── */}
-      <div className="mx-auto flex w-full max-w-[90rem] px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex items-start w-full max-w-[90rem] px-4 sm:px-6 lg:px-8">
 
         {/* Sidebar */}
-        <aside className="hidden lg:block w-56 flex-shrink-0 pt-10 pr-8">
-          <nav className="sticky top-[92px] space-y-0.5 relay-scrollbar max-h-[calc(100vh-120px)] overflow-y-auto">
+        <nav className="hidden lg:block w-56 flex-shrink-0 pt-10 pr-8 sticky top-[92px] max-h-[calc(100vh-120px)] overflow-y-auto relay-scrollbar">
+          <div className="space-y-0.5">
             {sections.map((s) => (
               <a
                 key={s.id}
@@ -231,8 +231,8 @@ export default function ApiPage() {
                 {s.label}
               </a>
             ))}
-          </nav>
-        </aside>
+          </div>
+        </nav>
 
         {/* Content */}
         <div className="min-w-0 flex-1 border-l border-white/6 py-10 lg:pl-10">
@@ -828,7 +828,6 @@ print(res.json())` },
                 </li>
               </ol>
             </section>
-
             <div className="h-24" />
           </div>
         </div>
