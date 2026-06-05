@@ -12,21 +12,15 @@ export function Navbar() {
   const { currentUser: user, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const navigationLinks = [
+    { href: "/", label: "Home" },
+    { href: "/api", label: "API" },
+  ];
 
   const isActive = (path: string) => {
     if (path === "/" && pathname === "/") return true;
     return pathname.startsWith(path) && path !== "/";
   };
-
-  const navigationLinks = user
-    ? [
-        { href: "/marketplace", label: "Marketplace" },
-        ...(user.role === "buyer" ? [{ href: "/feed", label: "Feed" }] : []),
-        ...(user.role === "seller" ? [{ href: "/sell", label: "Sell" }] : []),
-        { href: "/messages", label: "Messages" },
-        { href: "/orders", label: "Orders" },
-      ]
-    : [];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-[72px] bg-relay-bg/80 backdrop-blur-xl border-b border-white/10">

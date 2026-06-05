@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 
 // Routes accessible without authentication
-const PUBLIC_ROUTES = ["/", "/marketplace", "/auth/login", "/auth/signup", "/listing", "/onboarding", "/profile", "/mobile-auth"];
+const PUBLIC_ROUTES = ["/", "/api", "/marketplace", "/auth/login", "/auth/signup", "/listing", "/onboarding", "/profile", "/mobile-auth"];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => {
