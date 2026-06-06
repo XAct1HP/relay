@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/integrations/
+Disallow: /auth/
+Disallow: /settings/
+
+Sitemap: https://relayco.app/sitemap.xml

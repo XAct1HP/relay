@@ -150,15 +150,15 @@ export default function Home() {
             <div className="mx-auto max-w-4xl text-center">
               {/* Headline */}
               <h1 className="text-4xl font-bold leading-[1.0] tracking-[-0.04em] sm:text-7xl md:text-8xl">
-                <span className="relay-text-gradient">Where resellers</span>
+                <span className="relay-text-gradient">The sneaker marketplace</span>
                 <br />
-                <span className="text-white">build empires.</span>
+                <span className="text-white">built for resellers.</span>
               </h1>
 
               {/* Subhead */}
               <p className="mx-auto mt-7 max-w-xl text-lg leading-relaxed text-white/55 md:text-xl">
-                Profiles, listings, offers, and messaging on one platform.
-                Built for sellers who treat reselling like a business.
+                Sell sneakers online with a 1% fee. Your own seller profile,
+                direct negotiation, and inventory tools on one platform.
               </p>
 
               {/* CTAs */}
@@ -181,7 +181,7 @@ export default function Home() {
 
               {/* Chips */}
               <div className="mt-16 flex flex-wrap items-center justify-center gap-3">
-                {["1% platform fee", "Seller profiles", "Direct negotiation"].map((chip, i) => (
+                {["1% platform fee", "Seller storefronts", "Buy & sell sneakers"].map((chip, i) => (
                   <div key={chip} className="flex items-center gap-3">
                     <span className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-xs font-medium tracking-wide text-white/45">
                       {chip}
@@ -286,20 +286,19 @@ export default function Home() {
             {/* Copy */}
             <Reveal>
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">Why it matters</p>
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">Low-fee sneaker marketplace</p>
                 <h2 className="mt-5 text-3xl font-semibold leading-[1.1] tracking-[-0.04em] text-white sm:text-4xl md:text-5xl">
-                  Other platforms take 9% and bury your name.
+                  Stop paying 9% to sell sneakers online.
                 </h2>
                 <p className="mt-6 text-lg leading-relaxed text-white/50 md:text-xl">
-                  Relay charges 1% and puts your brand front and center. Your
+                  Relay is the sneaker resale platform with a flat 1% fee. Your
                   profile, your reputation, your customers. We just make the
                   infrastructure work.
                 </p>
                 <p className="mt-5 text-base leading-relaxed text-white/35">
-                  Low fees are not a gimmick. They are the foundation of a platform
-                  that actually wants sellers to grow. When you keep more of every
-                  sale, you reinvest in better inventory, better service, and a
-                  stronger business.
+                  Low fees are the foundation of a sneaker business that actually
+                  scales. When you keep more of every sale, you reinvest in better
+                  inventory, better service, and a stronger reselling business.
                 </p>
               </div>
             </Reveal>
@@ -311,7 +310,7 @@ export default function Home() {
                 <div className="relative space-y-4">
                   {/* Competitors */}
                   <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-6 backdrop-blur">
-                    <p className="text-xs uppercase tracking-[0.15em] text-white/30">Traditional platforms</p>
+                    <p className="text-xs uppercase tracking-[0.15em] text-white/30">Other sneaker resale platforms</p>
                     <div className="mt-3 flex items-baseline gap-1">
                       <span className="text-4xl font-bold tracking-tight text-white/25 sm:text-5xl md:text-6xl">9%</span>
                       <span className="text-lg text-white/15">+</span>
@@ -379,9 +378,9 @@ export default function Home() {
             <div className="grid items-center gap-10 lg:grid-cols-[1fr_340px] lg:gap-16 overflow-hidden">
               {/* Left — title, subtitle, and clickable steps */}
               <div className="flex flex-col justify-center">
-                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">How it works</p>
+                <p className="text-xs font-medium uppercase tracking-[0.2em] text-blue-300/60">Start your sneaker business</p>
                 <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl md:text-5xl">
-                  Four steps to your first sale.
+                  Start selling sneakers in four steps.
                 </h2>
 
                 <div className="mt-10 space-y-2">
@@ -468,8 +467,8 @@ export default function Home() {
               </h2>
 
               <p className="mx-auto mt-6 max-w-md text-base leading-relaxed text-white/40">
-                Free to join. 1% when you sell. No monthly fees, no lock-in,
-                no hidden costs.
+                Free to join. 1% when you sell sneakers. No monthly fees, no lock-in,
+                no hidden costs. The sneaker marketplace that puts sellers first.
               </p>
 
               <div className="mt-10">
@@ -493,12 +492,74 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8">
-        <div className="relay-container">
-          <p className="text-center text-sm text-white/30">&copy; 2026 Relay. All rights reserved.</p>
+      {/* SEO / AIO content section */}
+      <section className="relative border-t border-white/[0.04] py-24">
+        <div className="relay-container max-w-5xl">
+          <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            The low-fee sneaker marketplace for serious resellers
+          </h2>
+
+          <div className="mt-8 space-y-6 text-[15px] leading-relaxed text-white/50">
+            <p>
+              Relay is a sneaker resale platform designed for people who treat reselling as a real
+              business. Whether you flip a few pairs a month or manage thousands of SKUs, Relay gives
+              you a seller storefront, direct buyer negotiation, and inventory tools that scale with
+              you. The platform fee is 1% on completed sales. No monthly subscriptions, no listing
+              fees, no hidden costs.
+            </p>
+            <p>
+              Most sneaker marketplaces charge sellers between 9% and 15% per transaction. On a $300
+              pair of sneakers, that means $27 to $45 goes to the platform before you see a dollar.
+              On Relay, you keep $297 of that same sale. For high-volume resellers moving hundreds of
+              pairs a month, the savings add up to thousands of dollars a year.
+            </p>
+            <p>
+              Relay also offers an inventory management API so resellers can sync listings from
+              existing tools, update prices in bulk, and manage stock across platforms. If you use
+              software to run your sneaker business, Relay integrates with your workflow instead of
+              replacing it.
+            </p>
+            <p>
+              If you are looking for a StockX alternative or a GOAT alternative with lower fees and
+              more seller control, Relay is built for you. Create your free account, set up your
+              storefront, and start selling sneakers online today.
+            </p>
+          </div>
+
+          <div className="mt-16 grid gap-8 sm:grid-cols-3">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-white/30">
+                For new resellers
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-white/40">
+                Starting a sneaker reselling business is easier when you keep more of your profit.
+                Relay&apos;s 1% fee means you can reinvest in inventory faster and grow your sneaker
+                business without bleeding margin to platform fees.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-white/30">
+                For established sellers
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-white/40">
+                High-volume resellers use Relay&apos;s API to sync inventory, automate pricing, and
+                manage listings at scale. Direct negotiation with buyers means better margins and
+                repeat customers.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-white/30">
+                For buyers
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-white/40">
+                Buy sneakers directly from verified sellers. Browse the marketplace, make offers, and
+                negotiate prices. Lower seller fees mean more competitive prices for buyers too.
+              </p>
+            </div>
+          </div>
         </div>
-      </footer>
+      </section>
+
     </main>
   );
 }
