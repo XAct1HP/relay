@@ -184,8 +184,13 @@ export default function ApiPage() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <div className="pt-[72px] border-b border-white/8 overflow-hidden">
-        <div className="mx-auto max-w-3xl px-6 py-20 text-center">
+      <div className="relative pt-[72px] border-b border-white/8 overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url('/api-hero-bg.png')" }}
+        />
+        <div className="absolute inset-0 bg-black/50" />
+        <div className="relative mx-auto max-w-3xl px-6 py-20 text-center">
           <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-[#7ca6ff]">
             Relay Inventory API
           </p>
@@ -213,10 +218,10 @@ export default function ApiPage() {
       </div>
 
       {/* ── Body ── */}
-      <div className="mx-auto flex items-start w-full max-w-[90rem] px-4 sm:px-6 lg:px-8">
+      <div className="flex w-full px-6 sm:px-10 lg:px-12 gap-6 sm:gap-10 lg:gap-12">
 
         {/* Sidebar */}
-        <nav className="hidden lg:block w-56 flex-shrink-0 pt-10 pr-8 sticky top-[92px] max-h-[calc(100vh-120px)] overflow-y-auto relay-scrollbar">
+        <nav className="hidden lg:block w-48 flex-shrink-0 pt-10 sticky top-[92px] self-start max-h-[calc(100vh-120px)] overflow-y-auto relay-scrollbar">
           <div className="space-y-0.5">
             {sections.map((s) => (
               <a
@@ -235,8 +240,8 @@ export default function ApiPage() {
         </nav>
 
         {/* Content */}
-        <div className="min-w-0 flex-1 border-l border-white/6 py-10 lg:pl-10">
-          <div className="max-w-3xl space-y-20">
+        <div className="min-w-0 flex-1 py-10">
+          <div className="space-y-20">
 
             {/* ─── Authentication ─── */}
             <section id="authentication" className="scroll-mt-28 space-y-5">

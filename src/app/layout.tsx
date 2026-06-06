@@ -187,7 +187,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className={`${inter.className} min-h-screen overflow-x-hidden`}>
+      <body className={`${inter.className} min-h-screen overflow-x-clip`}>
         <div className="relay-site-bg" />
         <AuthProvider>{children}</AuthProvider>
       </body>
