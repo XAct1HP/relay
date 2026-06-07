@@ -63,7 +63,7 @@ const STEP_LABELS: Record<ListingMode, string[]> = {
 };
 
 const CATALOG_CONDITION_OPTIONS = [
-  { value: "new", label: "New", description: "Relay uses the StockX gallery images only." },
+  { value: "new", label: "New", description: "Relay uses the product gallery images only." },
   { value: "used_good", label: "Used", description: "Add at least one seller photo so buyers can assess condition." },
 ] as const;
 
@@ -246,7 +246,7 @@ export default function SellPage() {
       setSkuLookupMessage(
         source === "local"
           ? "Sneaker details loaded from Relay's local catalog."
-          : "Sneaker details loaded from KicksDB and saved to Relay's catalog."
+          : "Sneaker details loaded and saved to Relay's catalog."
       );
     } catch (error) {
       console.error("SKU lookup error:", error);
@@ -662,7 +662,7 @@ export default function SellPage() {
                       <p className="text-sm font-semibold text-relay-text">SKU Lookup</p>
                     </div>
                     <p className="text-sm text-relay-muted leading-relaxed">
-                      Enter a sneaker SKU to look up catalog details from Relay&apos;s sneaker database or KicksDB. You can edit every filled field before you publish.
+                      Enter a sneaker SKU to look up catalog details in Relay. You can edit every filled field before you publish.
                     </p>
                   </div>
 
@@ -697,7 +697,7 @@ export default function SellPage() {
 
                   {activeLookupGalleryImages.length > 0 && (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                      <p className="text-sm font-medium text-relay-text mb-3">StockX Gallery Preview</p>
+                      <p className="text-sm font-medium text-relay-text mb-3">Gallery Preview</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {activeLookupGalleryImages.map((imageUrl, index) => (
                           <img
@@ -709,7 +709,7 @@ export default function SellPage() {
                         ))}
                       </div>
                       <div className="text-xs text-relay-subtle leading-relaxed mt-3">
-                        <p>Relay uses these StockX gallery photos for catalog listings and excludes 360 spins.</p>
+                        <p>Relay uses these product gallery photos for catalog listings and excludes 360 spins.</p>
                         <p className="mt-2">
                           {linkedSneakerId
                             ? "This listing will be linked to a saved sneaker record."
@@ -913,7 +913,7 @@ export default function SellPage() {
                 </div>
                 {isCatalogListing && condition === "new" && (
                   <p className="text-xs text-relay-subtle mt-2">
-                    New catalog listings use the StockX gallery images only.
+                    New catalog listings use the product gallery images only.
                   </p>
                 )}
                 {isCatalogListing && condition === "used_good" && (
@@ -1075,11 +1075,11 @@ export default function SellPage() {
             <div className="space-y-6">
               {isCatalogListing && activeLookupGalleryImages.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-relay-text mb-3">StockX Gallery Images</label>
+                  <label className="block text-sm font-medium text-relay-text mb-3">Product Gallery Images</label>
                   <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
                     <p className="text-sm text-relay-text font-medium mb-1">Catalog images for this SKU</p>
                     <p className="text-xs text-relay-subtle leading-relaxed">
-                      Relay uses these 5-6 standard StockX product views and ignores the 360 image set.
+                      Relay uses these standard product views and ignores the 360 image set.
                       {condition === "new"
                         ? " For new pairs, these will be the only listing photos."
                         : " For used pairs, these are included alongside your condition photos."}
@@ -1116,7 +1116,7 @@ export default function SellPage() {
                     <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
                       <p className="text-sm text-relay-text font-medium mb-1">At least one real seller photo is required</p>
                       <p className="text-xs text-relay-subtle leading-relaxed">
-                        Buyers need to see the actual condition of a used pair. Your uploaded photos will appear before the StockX gallery images in the listing.
+                        Buyers need to see the actual condition of a used pair. Your uploaded photos will appear before the gallery images in the listing.
                       </p>
                     </div>
                   )}
@@ -1158,7 +1158,7 @@ export default function SellPage() {
                 <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
                   <p className="text-sm font-medium text-relay-text mb-1">No seller photos needed for new pairs</p>
                   <p className="text-xs text-relay-subtle leading-relaxed">
-                    Relay will publish this new catalog listing with the StockX gallery images only.
+                    Relay will publish this new catalog listing with the gallery images only.
                   </p>
                 </div>
               )}
@@ -1423,13 +1423,13 @@ export default function SellPage() {
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
                   <p className="text-sm font-medium text-amber-200 mb-1">Seller photos are currently excluded</p>
                   <p className="text-xs text-amber-100/80">
-                    Because this listing is marked New, Relay will publish only the StockX gallery images.
+                    Because this listing is marked New, Relay will publish only the gallery images.
                   </p>
                 </div>
               )}
               {isCatalogListing && condition === "new" && activeLookupGalleryImages.length > 0 && (
                 <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-                  <p className="text-sm font-medium text-relay-text mb-1">New catalog listing will use StockX gallery photos only</p>
+                  <p className="text-sm font-medium text-relay-text mb-1">New catalog listing will use gallery photos only</p>
                   <p className="text-xs text-relay-subtle">
                     These standard product photos become the full listing image set for new pairs.
                   </p>
@@ -1447,7 +1447,7 @@ export default function SellPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                     <Sparkles size={16} className="text-relay-accent" />
-                    StockX Gallery Images
+                    Product Gallery Images
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {activeLookupGalleryImages.map((imageUrl, index) => (

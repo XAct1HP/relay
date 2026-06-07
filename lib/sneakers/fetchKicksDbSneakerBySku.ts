@@ -1,6 +1,7 @@
 import "server-only";
 
 import { normalizeSku } from "./normalizeSku";
+import { sanitizeSneakerDescription } from "./sanitizeSneakerDescription";
 
 export interface KicksDbSneakerLookupResult {
   sku: string;
@@ -83,7 +84,7 @@ export async function fetchKicksDbSneakerBySku(
       readString(record, ["image_url", "image", "imageUrl", "thumbnail"]) ||
       readFirstStringArrayValue(record, ["images"]) ||
       readNestedString(record, [["image", "url"], ["media", "imageUrl"], ["media", "image", "url"]]);
-    const description = normalizeDescription(readString(record, ["description"]));
+    const description = sanitizeSneakerDescription(readString(record, ["description"]));
     const name =
       readString(record, ["name", "title", "product_name"]) ||
       buildNameFromParts(
@@ -413,23 +414,6 @@ function collapseSku(value: string | null | undefined): string {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-}
-
-function normalizeDescription(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const withLineBreaks = value.replace(/<br\s*\/?>/gi, "\n");
-  const withoutTags = withLineBreaks.replace(/<[^>]+>/g, " ");
-  const normalizedWhitespace = withoutTags
-    .replace(/\r/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-
-  return normalizedWhitespace || null;
 }
 
 function logDev(message: string, payload: unknown) {

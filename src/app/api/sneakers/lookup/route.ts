@@ -6,6 +6,7 @@ import {
   type KicksDbSneakerLookupResult,
 } from "../../../../../lib/sneakers/fetchKicksDbSneakerBySku";
 import { normalizeSku } from "../../../../../lib/sneakers/normalizeSku";
+import { sanitizeSneakerDescription } from "../../../../../lib/sneakers/sanitizeSneakerDescription";
 
 type SneakerRecord = KicksDbSneakerLookupResult & {
   id: string;
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         found: true,
         source: "local",
-        sneaker: localSneaker,
+        sneaker: sanitizeSneakerRecord(localSneaker),
       });
     }
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           found: true,
           source: "local",
-          sneaker: localSneaker,
+          sneaker: sanitizeSneakerRecord(localSneaker),
         });
       }
 
@@ -87,10 +88,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       found: true,
       source: "kicksdb",
-      sneaker: insertedSneaker,
+      sneaker: sanitizeSneakerRecord(insertedSneaker),
     });
   } catch (error) {
     console.error("Sneaker lookup route error:", error);
     return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
+}
+
+function sanitizeSneakerRecord(record: SneakerRecord): SneakerRecord {
+  return {
+    ...record,
+    description: sanitizeSneakerDescription(record.description),
+  };
 }

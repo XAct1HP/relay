@@ -24,6 +24,7 @@ import {
 } from "@/lib/seller-availability";
 import { Listing } from "@/types";
 import useAuth from "@/hooks/useAuth";
+import { sanitizeSneakerDescription } from "../../../../lib/sneakers/sanitizeSneakerDescription";
 
 interface SizeInventory {
   id?: string;
@@ -338,6 +339,10 @@ export default function ListingDetailPage({
     : lowestAvailablePrice > 0
     ? `From $${lowestAvailablePrice}`
     : "Sold out";
+  const totalImages = Math.max(listing.images.length, 1);
+  const displayDescription =
+    sanitizeSneakerDescription(listing.description) ||
+    "No additional description was provided for this listing.";
 
   const handleThumbnailClick = (index: number) => {
     setCurrentImageIndex(index);
@@ -372,18 +377,18 @@ export default function ListingDetailPage({
         </div>
 
         {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] gap-8 mb-8">
           {/* LEFT COLUMN - IMAGE GALLERY */}
-          <div className="flex flex-col gap-4">
+          <div className="flex h-full flex-col gap-4">
             {/* Main Image */}
             <div
-              className={`relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} flex items-center justify-center border border-white/10`}
+              className={`relative aspect-[4/5] sm:aspect-square rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10 p-6 sm:p-8`}
             >
               {listing.images[currentImageIndex] ? (
                 <img
                   src={listing.images[currentImageIndex]}
                   alt={`${listing.brand} ${listing.model} - Image ${currentImageIndex + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -396,7 +401,7 @@ export default function ListingDetailPage({
               {/* Image Counter */}
               <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
                 <p className="text-sm font-medium text-relay-text">
-                  {currentImageIndex + 1} / {listing.images.length}
+                  {currentImageIndex + 1} / {totalImages}
                 </p>
               </div>
 
@@ -422,10 +427,59 @@ export default function ListingDetailPage({
                 </button>
               ))}
             </div>
+
+            <div className="relay-card p-6 lg:flex-1">
+              <h2 className="text-xl font-semibold text-relay-text mb-4">
+                Description
+              </h2>
+              <p className="text-relay-muted leading-relaxed whitespace-pre-wrap">
+                {displayDescription}
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 mt-6 border-t border-white/10">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield size={16} className="text-relay-accent" />
+                    <p className="text-sm font-semibold text-relay-text">Condition</p>
+                  </div>
+                  <p className="text-sm text-relay-subtle">
+                    {listing.condition === "New"
+                      ? "Never worn or used, with original packaging"
+                      : "Pre-owned pair. Review the seller photos carefully to judge actual condition."}
+                  </p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Package size={16} className="text-relay-accent" />
+                    <p className="text-sm font-semibold text-relay-text">Box</p>
+                  </div>
+                  <p className="text-sm text-relay-subtle">
+                    {listing.boxCondition === "Good"
+                      ? "Original box included in good condition with minor wear"
+                      : listing.boxCondition === "New"
+                      ? "Original box included in pristine condition"
+                      : listing.boxCondition === "Fair"
+                      ? "Original box included with significant wear"
+                      : listing.boxCondition === "Poor"
+                      ? "Original box included but heavily damaged"
+                      : "No original box included"}
+                  </p>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Truck size={16} className="text-relay-accent" />
+                    <p className="text-sm font-semibold text-relay-text">Sizing</p>
+                  </div>
+                  <p className="text-sm text-relay-subtle">
+                    Men&apos;s US sizing. Fits true to size. Review the selected size and seller notes before purchasing.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* RIGHT COLUMN - LISTING INFO */}
-          <div className="flex flex-col gap-6">
+          <div className="flex h-full flex-col gap-6">
             {/* Brand & Model Info */}
             <div>
               <p className="relay-eyebrow text-relay-accent mb-2">
@@ -670,58 +724,6 @@ export default function ListingDetailPage({
               </div>
             </Link>
             )}
-          </div>
-        </div>
-
-        {/* DESCRIPTION SECTION */}
-        <div className="relay-card p-6">
-          <h2 className="text-xl font-semibold text-relay-text mb-4">
-            Description
-          </h2>
-          <p className="text-relay-muted leading-relaxed whitespace-pre-wrap mb-6">
-            {listing.description}
-          </p>
-
-          {/* Additional Details */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-white/10">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Shield size={16} className="text-relay-accent" />
-                <p className="text-sm font-semibold text-relay-text">Condition</p>
-              </div>
-              <p className="text-sm text-relay-subtle">
-                {listing.condition === "New"
-                  ? "Never worn or used, with original packaging"
-                  : "Pre-owned pair. Review the seller photos carefully to judge actual condition."}
-              </p>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Package size={16} className="text-relay-accent" />
-                <p className="text-sm font-semibold text-relay-text">Box</p>
-              </div>
-              <p className="text-sm text-relay-subtle">
-                {listing.boxCondition === "Good"
-                  ? "Original box included in good condition with minor wear"
-                  : listing.boxCondition === "New"
-                  ? "Original box included in pristine condition"
-                  : listing.boxCondition === "Fair"
-                  ? "Original box included with significant wear"
-                  : listing.boxCondition === "Poor"
-                  ? "Original box included but heavily damaged"
-                  : "No original box included"}
-              </p>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Truck size={16} className="text-relay-accent" />
-                <p className="text-sm font-semibold text-relay-text">Sizing</p>
-              </div>
-              <p className="text-sm text-relay-subtle">
-                Men&apos;s US sizing. Fits true to size. All Jordan 1s have consistent
-                sizing across colorways.
-              </p>
-            </div>
           </div>
         </div>
     </div>
