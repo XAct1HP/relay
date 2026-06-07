@@ -451,7 +451,7 @@ export default function SellPage() {
       const finalImageUrls = isCatalogListing
         ? condition === "new"
           ? catalogImageUrls
-          : [...imageUrls, ...catalogImageUrls.filter((url) => !imageUrls.includes(url))]
+          : [...catalogImageUrls, ...imageUrls.filter((url) => !catalogImageUrls.includes(url))]
         : imageUrls;
 
       if (isCatalogListing) {
@@ -1301,9 +1301,9 @@ export default function SellPage() {
                         />
 
                         {/* Cover Badge */}
-                        {index === 0 && (
+                        {index === 0 && !isUsedCatalogListing && !isMixedCatalogListing && (
                           <div className="absolute top-2 left-2">
-                            <span className="relay-badge-info text-xs">{isUsedCatalogListing || isMixedCatalogListing ? "Condition" : "Cover"}</span>
+                            <span className="relay-badge-info text-xs">Cover</span>
                           </div>
                         )}
 
@@ -1526,9 +1526,9 @@ export default function SellPage() {
                           alt={`Photo ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
-                        {index === 0 && (
+                        {index === 0 && !isUsedCatalogListing && !isMixedCatalogListing && (
                           <div className="absolute top-1 left-1">
-                            <span className="relay-badge-info text-xs">{isUsedCatalogListing || isMixedCatalogListing ? "Condition" : "Cover"}</span>
+                            <span className="relay-badge-info text-xs">Cover</span>
                           </div>
                         )}
                       </div>
