@@ -627,7 +627,7 @@ export default function SellPage() {
                       <p className="text-sm font-semibold text-relay-text">SKU Lookup</p>
                     </div>
                     <p className="text-sm text-relay-muted leading-relaxed">
-                      Enter a sneaker SKU to look up catalog details from Relay's sneaker database or KicksDB. You can edit every filled field before you publish.
+                      Enter a sneaker SKU to look up catalog details from Relay&apos;s sneaker database or KicksDB. You can edit every filled field before you publish.
                     </p>
                   </div>
 
