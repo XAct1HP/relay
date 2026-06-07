@@ -16,10 +16,11 @@ interface PublishCatalogListingInput {
   gender?: string;
   releaseDate?: string;
   retailPrice?: number | null;
+  galleryImages?: string[];
   imageUrl?: string | null;
   description?: string;
   images?: string[];
-  condition: "new" | "like_new" | "used_excellent" | "used_good" | "used_fair";
+  condition: "new" | "used_good";
   boxCondition: "perfect" | "good" | "damaged" | "no_box";
   approximateSizing: "lightweight" | "normal" | "heavy";
   variants: Array<{
@@ -58,6 +59,8 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
             gender: input.gender || null,
             release_date: input.releaseDate || null,
             retail_price: input.retailPrice ?? null,
+            description: input.description || null,
+            gallery_images: input.galleryImages?.length ? input.galleryImages : [],
             image_url: input.imageUrl || null,
           })
           .eq("id", input.sneakerId);

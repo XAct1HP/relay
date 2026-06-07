@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { BRANDS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
 import { buildLegacySizes, isManualListingBrand, mergeListingVariants } from "@/lib/listings";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { publishCatalogListingAction } from "@/app/sell/actions";
@@ -36,6 +36,8 @@ interface LookedUpSneaker {
   gender: string | null;
   release_date: string | null;
   retail_price: number | null;
+  description: string | null;
+  gallery_images: string[];
   image_url: string | null;
   source: "kicksdb";
 }
@@ -60,6 +62,20 @@ const STEP_LABELS: Record<ListingMode, string[]> = {
   manual: ["Shoe Details", "Sizes & Pricing", "Photos & Description", "Review & Publish"],
 };
 
+const CATALOG_CONDITION_OPTIONS = [
+  { value: "new", label: "New", description: "Relay uses the StockX gallery images only." },
+  { value: "used_good", label: "Used", description: "Add at least one seller photo so buyers can assess condition." },
+] as const;
+
+const MANUAL_CONDITION_OPTIONS = [
+  { value: "new", label: "New", description: "Never worn, original box and tags" },
+  { value: "used_good", label: "Used", description: "Wear is visible, but the pair remains sellable." },
+] as const;
+
+function getConditionDisplayLabel(value: string): string {
+  return value === "new" ? "New" : value ? "Used" : "";
+}
+
 export default function SellPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -80,6 +96,7 @@ export default function SellPage() {
   const [gender, setGender] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
   const [retailPrice, setRetailPrice] = useState("");
+  const [lookupGalleryImages, setLookupGalleryImages] = useState<string[]>([]);
   const [lookupImageUrl, setLookupImageUrl] = useState("");
   const [lookedUpSneakerId, setLookedUpSneakerId] = useState<string | null>(null);
   const [lastLookedUpNormalizedSku, setLastLookedUpNormalizedSku] = useState<string | null>(null);
@@ -110,7 +127,11 @@ export default function SellPage() {
   // Step 1 Validation
   const normalizedSku = normalizeSku(sku);
   const linkedSneakerId = lastLookedUpNormalizedSku === normalizedSku ? lookedUpSneakerId : null;
+  const activeLookupGalleryImages = lastLookedUpNormalizedSku === normalizedSku ? lookupGalleryImages : [];
   const activeLookupImageUrl = lastLookedUpNormalizedSku === normalizedSku ? lookupImageUrl : "";
+  const isUsedCatalogListing = isCatalogListing && condition === "used_good";
+  const shouldUseSellerPhotos = isManualListing || isUsedCatalogListing;
+  const hasUnusedSellerPhotos = isCatalogListing && condition === "new" && photos.length > 0;
   const isStep1Valid =
     condition &&
     boxCondition &&
@@ -123,7 +144,9 @@ export default function SellPage() {
   const isStep2Valid = sizes.length > 0 && sizes.every(s => s.size && s.price > 0 && s.quantity > 0);
 
   // Step 3 Validation
-  const isStep3Valid = description.trim().length >= 4 && (isCatalogListing || photos.length > 0);
+  const isStep3Valid =
+    description.trim().length >= 4 &&
+    (isManualListing || isUsedCatalogListing ? photos.length > 0 : true);
 
   const handleNextStep = () => {
     if (currentStep === 1 && isStep1Valid) {
@@ -160,6 +183,7 @@ export default function SellPage() {
       setGender("");
       setReleaseDate("");
       setRetailPrice("");
+      setLookupGalleryImages([]);
       setLookupImageUrl("");
       setLookedUpSneakerId(null);
       setLastLookedUpNormalizedSku(null);
@@ -193,6 +217,8 @@ export default function SellPage() {
       }
 
       if (!("found" in data) || !data.found || !data.sneaker) {
+        setLookupGalleryImages([]);
+        setLookupImageUrl("");
         setLookedUpSneakerId(null);
         setLastLookedUpNormalizedSku(normalizedSku);
         setSkuLookupSource(null);
@@ -211,6 +237,8 @@ export default function SellPage() {
       setGender(sneaker.gender || "");
       setReleaseDate(sneaker.release_date || "");
       setRetailPrice(sneaker.retail_price !== null && sneaker.retail_price !== undefined ? String(sneaker.retail_price) : "");
+      setDescription(sneaker.description || "");
+      setLookupGalleryImages(Array.isArray(sneaker.gallery_images) ? sneaker.gallery_images.filter(Boolean) : []);
       setLookupImageUrl(sneaker.image_url || "");
       setLookedUpSneakerId(sneaker.id);
       setLastLookedUpNormalizedSku(sneaker.normalized_sku || normalizedSku);
@@ -344,11 +372,16 @@ export default function SellPage() {
         }
       }
 
-      const finalImageUrls = imageUrls.length > 0
-        ? imageUrls
-        : isCatalogListing && activeLookupImageUrl
+      const catalogImageUrls = activeLookupGalleryImages.length > 0
+        ? activeLookupGalleryImages
+        : activeLookupImageUrl
         ? [activeLookupImageUrl]
         : [];
+      const finalImageUrls = isCatalogListing
+        ? condition === "new"
+          ? catalogImageUrls
+          : [...imageUrls, ...catalogImageUrls.filter((url) => !imageUrls.includes(url))]
+        : imageUrls;
 
       if (isCatalogListing) {
         const result = await publishCatalogListingAction({
@@ -362,10 +395,11 @@ export default function SellPage() {
           gender: gender || undefined,
           releaseDate: releaseDate || undefined,
           retailPrice: retailPrice ? Number(retailPrice) : null,
+          galleryImages: catalogImageUrls,
           imageUrl: activeLookupImageUrl || null,
           description,
           images: finalImageUrls,
-          condition: condition as "new" | "like_new" | "used_excellent" | "used_good" | "used_fair",
+          condition: condition as "new" | "used_good",
           boxCondition: boxCondition as "perfect" | "good" | "damaged" | "no_box",
           approximateSizing: approximateSizing as "lightweight" | "normal" | "heavy",
           variants: sizes.map((s) => ({
@@ -450,6 +484,7 @@ export default function SellPage() {
     setGender("");
     setReleaseDate("");
     setRetailPrice("");
+    setLookupGalleryImages([]);
     setLookupImageUrl("");
     setLookedUpSneakerId(null);
     setLastLookedUpNormalizedSku(null);
@@ -660,23 +695,26 @@ export default function SellPage() {
                     )}
                   </div>
 
-                  {activeLookupImageUrl && (
+                  {activeLookupGalleryImages.length > 0 && (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                      <p className="text-sm font-medium text-relay-text mb-3">Catalog Image Preview</p>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <img
-                          src={activeLookupImageUrl}
-                          alt={modelName || "Sneaker preview"}
-                          className="w-full sm:w-32 aspect-square rounded-xl object-cover border border-white/10 bg-white/[0.02]"
-                        />
-                        <div className="text-xs text-relay-subtle leading-relaxed">
-                          <p>This catalog image is for reference and can be used as the listing image if you do not upload your own photos.</p>
-                          <p className="mt-2">
-                            {linkedSneakerId
-                              ? "This listing will be linked to a saved sneaker record."
-                              : "If you edit the SKU, run the lookup again before publishing to relink the sneaker record."}
-                          </p>
-                        </div>
+                      <p className="text-sm font-medium text-relay-text mb-3">StockX Gallery Preview</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {activeLookupGalleryImages.map((imageUrl, index) => (
+                          <img
+                            key={imageUrl}
+                            src={imageUrl}
+                            alt={`${modelName || "Sneaker preview"} ${index + 1}`}
+                            className="w-full aspect-square rounded-xl object-cover border border-white/10 bg-white/[0.02]"
+                          />
+                        ))}
+                      </div>
+                      <div className="text-xs text-relay-subtle leading-relaxed mt-3">
+                        <p>Relay uses these StockX gallery photos for catalog listings and excludes 360 spins.</p>
+                        <p className="mt-2">
+                          {linkedSneakerId
+                            ? "This listing will be linked to a saved sneaker record."
+                            : "If you edit the SKU, run the lookup again before publishing to relink the sneaker record."}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -865,14 +903,24 @@ export default function SellPage() {
                     className="relay-select pr-10 appearance-none"
                   >
                     <option value="">Select condition...</option>
-                    {Object.entries(CONDITIONS).map(([key, { label, description }]) => (
-                      <option key={key} value={key}>
+                    {(isCatalogListing ? CATALOG_CONDITION_OPTIONS : MANUAL_CONDITION_OPTIONS).map(({ value, label, description }) => (
+                      <option key={value} value={value}>
                         {label} - {description}
                       </option>
                     ))}
                   </select>
                   <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
                 </div>
+                {isCatalogListing && condition === "new" && (
+                  <p className="text-xs text-relay-subtle mt-2">
+                    New catalog listings use the StockX gallery images only.
+                  </p>
+                )}
+                {isCatalogListing && condition === "used_good" && (
+                  <p className="text-xs text-relay-subtle mt-2">
+                    Used catalog listings must include at least one seller photo so buyers can judge condition.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1025,57 +1073,109 @@ export default function SellPage() {
           {/* Step 3: Photos & Description */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              {/* Photo Upload Area */}
-              <div>
-                <label className="block text-sm font-medium text-relay-text mb-3">
-                  Photos {isManualListing ? "*" : "(Optional)"}
-                </label>
-                {isCatalogListing && (
+              {isCatalogListing && activeLookupGalleryImages.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-relay-text mb-3">StockX Gallery Images</label>
                   <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                    <p className="text-sm text-relay-text font-medium mb-1">Catalog images are optional for now</p>
+                    <p className="text-sm text-relay-text font-medium mb-1">Catalog images for this SKU</p>
                     <p className="text-xs text-relay-subtle leading-relaxed">
-                      You can upload your own photos, but catalog listings can publish without them. If the SKU lookup returns a product image, Relay can use that preview when no seller photos are attached.
+                      Relay uses these 5-6 standard StockX product views and ignores the 360 image set.
+                      {condition === "new"
+                        ? " For new pairs, these will be the only listing photos."
+                        : " For used pairs, these are included alongside your condition photos."}
                     </p>
                   </div>
-                )}
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`relative border-2 border-dashed rounded-2xl p-8 transition-all ${
-                    dragOverCounter.current > 0
-                      ? "border-relay-accent bg-relay-accent/5"
-                      : "border-white/20 bg-white/[0.02] hover:border-white/30"
-                  }`}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handlePhotoUpload(e.target.files)}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex flex-col items-center justify-center gap-2 text-center"
-                  >
-                    <Camera size={32} className="text-relay-accent" />
-                    <span className="font-medium text-relay-text">
-                      {isCatalogListing ? "Add optional photos or leave this empty" : "Drag & drop photos or click to upload"}
-                    </span>
-                    <span className="text-sm text-relay-subtle">
-                      Up to 10 photos. First photo is cover.
-                    </span>
-                  </button>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {activeLookupGalleryImages.map((imageUrl, index) => (
+                      <div
+                        key={imageUrl}
+                        className="relative rounded-xl overflow-hidden bg-white/[0.02] border border-white/10 aspect-square"
+                      >
+                        <img
+                          src={imageUrl}
+                          alt={`Catalog gallery ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {index === 0 && (
+                          <div className="absolute top-2 left-2">
+                            <span className="relay-badge-info text-xs">Primary</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {(isManualListing || isUsedCatalogListing) && (
+                <div>
+                  <label className="block text-sm font-medium text-relay-text mb-3">
+                    {isUsedCatalogListing ? "Seller Condition Photos *" : "Photos *"}
+                  </label>
+                  {isUsedCatalogListing && (
+                    <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                      <p className="text-sm text-relay-text font-medium mb-1">At least one real seller photo is required</p>
+                      <p className="text-xs text-relay-subtle leading-relaxed">
+                        Buyers need to see the actual condition of a used pair. Your uploaded photos will appear before the StockX gallery images in the listing.
+                      </p>
+                    </div>
+                  )}
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`relative border-2 border-dashed rounded-2xl p-8 transition-all ${
+                      dragOverCounter.current > 0
+                        ? "border-relay-accent bg-relay-accent/5"
+                        : "border-white/20 bg-white/[0.02] hover:border-white/30"
+                    }`}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handlePhotoUpload(e.target.files)}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full flex flex-col items-center justify-center gap-2 text-center"
+                    >
+                      <Camera size={32} className="text-relay-accent" />
+                      <span className="font-medium text-relay-text">
+                        Drag & drop photos or click to upload
+                      </span>
+                      <span className="text-sm text-relay-subtle">
+                        Up to 10 photos. First uploaded photo is shown first.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isCatalogListing && condition === "new" && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">No seller photos needed for new pairs</p>
+                  <p className="text-xs text-relay-subtle leading-relaxed">
+                    Relay will publish this new catalog listing with the StockX gallery images only.
+                  </p>
+                </div>
+              )}
+              {hasUnusedSellerPhotos && (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-sm font-medium text-amber-200 mb-1">Uploaded seller photos will be ignored for a new listing</p>
+                  <p className="text-xs text-amber-100/80 leading-relaxed">
+                    Switch back to Used if you want these seller photos to appear in the final listing.
+                  </p>
+                </div>
+              )}
 
               {/* Photo Grid */}
-              {photos.length > 0 && (
+              {photos.length > 0 && shouldUseSellerPhotos && (
                 <div>
                   <p className="text-sm text-relay-muted mb-3">
-                    {photos.length} of 10 photos ({photos.length === 1 ? "cover" : "first is cover"})
+                    {photos.length} of 10 uploaded photos ({photos.length === 1 ? "first seller photo" : "first photo appears first"})
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {photos.map((photo, index) => (
@@ -1092,7 +1192,7 @@ export default function SellPage() {
                         {/* Cover Badge */}
                         {index === 0 && (
                           <div className="absolute top-2 left-2">
-                            <span className="relay-badge-info text-xs">Cover</span>
+                            <span className="relay-badge-info text-xs">{isUsedCatalogListing ? "Condition" : "Cover"}</span>
                           </div>
                         )}
 
@@ -1244,7 +1344,7 @@ export default function SellPage() {
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">Shoe Condition</p>
                     <p className="text-relay-text font-medium">
-                      {Object.values(CONDITIONS).find(c => Object.keys(CONDITIONS).find(k => k === condition) === condition)?.label || condition}
+                      {getConditionDisplayLabel(condition) || condition}
                     </p>
                   </div>
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
@@ -1292,11 +1392,11 @@ export default function SellPage() {
               </div>
 
               {/* Photos Summary */}
-              {photos.length > 0 && (
+              {photos.length > 0 && shouldUseSellerPhotos && (
                 <div>
                   <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                     <Camera size={16} className="text-relay-accent" />
-                    Photos ({photos.length})
+                    {isUsedCatalogListing ? `Seller Condition Photos (${photos.length})` : `Photos (${photos.length})`}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {photos.map((photo, index) => (
@@ -1311,7 +1411,7 @@ export default function SellPage() {
                         />
                         {index === 0 && (
                           <div className="absolute top-1 left-1">
-                            <span className="relay-badge-info text-xs">Cover</span>
+                            <span className="relay-badge-info text-xs">{isUsedCatalogListing ? "Condition" : "Cover"}</span>
                           </div>
                         )}
                       </div>
@@ -1319,28 +1419,54 @@ export default function SellPage() {
                   </div>
                 </div>
               )}
-              {isCatalogListing && photos.length === 0 && (
-                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-                  <p className="text-sm font-medium text-relay-text mb-1">No product photos attached</p>
-                  <p className="text-xs text-relay-subtle">
-                    {activeLookupImageUrl
-                      ? "This SKU lookup includes a catalog image, so Relay can still show a product photo even without your own uploads."
-                      : "This is okay for catalog listings. The product can later be hydrated with catalog images, or you can edit the listing and add your own photos anytime."}
+              {hasUnusedSellerPhotos && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-sm font-medium text-amber-200 mb-1">Seller photos are currently excluded</p>
+                  <p className="text-xs text-amber-100/80">
+                    Because this listing is marked New, Relay will publish only the StockX gallery images.
                   </p>
                 </div>
               )}
-              {isCatalogListing && activeLookupImageUrl && (
+              {isCatalogListing && condition === "new" && activeLookupGalleryImages.length > 0 && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">New catalog listing will use StockX gallery photos only</p>
+                  <p className="text-xs text-relay-subtle">
+                    These standard product photos become the full listing image set for new pairs.
+                  </p>
+                </div>
+              )}
+              {isCatalogListing && condition === "used_good" && photos.length === 0 && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-sm font-medium text-amber-200 mb-1">Used catalog listings need at least one seller photo</p>
+                  <p className="text-xs text-amber-100/80">
+                    Add one or more real photos so buyers can evaluate the pair&apos;s condition.
+                  </p>
+                </div>
+              )}
+              {isCatalogListing && activeLookupGalleryImages.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                     <Sparkles size={16} className="text-relay-accent" />
-                    Catalog Reference Image
+                    StockX Gallery Images
                   </h3>
-                  <div className="rounded-xl overflow-hidden border border-white/10 bg-white/[0.02] max-w-xs">
-                    <img
-                      src={activeLookupImageUrl}
-                      alt={modelName || "Catalog sneaker"}
-                      className="w-full aspect-square object-cover"
-                    />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {activeLookupGalleryImages.map((imageUrl, index) => (
+                      <div
+                        key={imageUrl}
+                        className="relative rounded-lg overflow-hidden bg-white/[0.02] border border-white/10 aspect-square"
+                      >
+                        <img
+                          src={imageUrl}
+                          alt={`${modelName || "Catalog sneaker"} ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {index === 0 && (
+                          <div className="absolute top-1 left-1">
+                            <span className="relay-badge-info text-xs">Primary</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

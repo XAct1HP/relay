@@ -37,7 +37,7 @@ interface ListingDetail {
   brand: string;
   model: string;
   nickname?: string;
-  condition: "New" | "Like New" | "Used - Excellent" | "Used - Good" | "Used - Fair";
+  condition: "New" | "Used";
   boxCondition: "New" | "Good" | "Fair" | "Poor" | "No Box";
   description: string;
   sizes: SizeInventory[];
@@ -96,10 +96,10 @@ export default function ListingDetailPage({
         if (data && data.status !== "removed") {
           const conditions: Record<string, ListingDetail["condition"]> = {
             new: "New",
-            like_new: "Like New",
-            used_excellent: "Used - Excellent",
-            used_good: "Used - Good",
-            used_fair: "Used - Fair",
+            like_new: "Used",
+            used_excellent: "Used",
+            used_good: "Used",
+            used_fair: "Used",
           };
 
           const boxConditions: Record<string, ListingDetail["boxCondition"]> = {
@@ -138,7 +138,7 @@ export default function ListingDetailPage({
             brand: data.brand,
             model: data.model,
             nickname: data.nickname,
-            condition: conditions[data.condition] || "Used - Good",
+            condition: conditions[data.condition] || "Used",
             boxCondition: boxConditions[data.box_condition] || "No Box",
             description: data.description,
             sizes: sizeSource
@@ -188,7 +188,7 @@ export default function ListingDetailPage({
               brand: previewListing.brand,
               model: previewListing.model,
               nickname: previewListing.nickname,
-              condition: previewListing.condition,
+              condition: previewListing.condition === "New" ? "New" : "Used",
               boxCondition: previewListing.boxCondition,
               description: previewListing.description,
               sizes: previewListing.sizes.map((size) => ({
@@ -345,11 +345,7 @@ export default function ListingDetailPage({
 
   const conditionBadgeColor = {
     New: "bg-emerald-400/10 text-emerald-400 border border-emerald-400/20",
-    "Like New": "bg-blue-400/10 text-blue-400 border border-blue-400/20",
-    "Used - Excellent":
-      "bg-amber-400/10 text-amber-400 border border-amber-400/20",
-    "Used - Good": "bg-orange-400/10 text-orange-400 border border-orange-400/20",
-    "Used - Fair": "bg-red-400/10 text-red-400 border border-red-400/20",
+    Used: "bg-amber-400/10 text-amber-400 border border-amber-400/20",
   };
 
   const boxConditionBadgeColor = {
@@ -694,15 +690,9 @@ export default function ListingDetailPage({
                 <p className="text-sm font-semibold text-relay-text">Condition</p>
               </div>
               <p className="text-sm text-relay-subtle">
-                {listing.condition === "Like New"
-                  ? "Worn 1-2 times, nearly perfect condition with minimal signs of wear"
-                  : listing.condition === "New"
+                {listing.condition === "New"
                   ? "Never worn or used, with original packaging"
-                  : listing.condition === "Used - Excellent"
-                  ? "Lightly worn with visible signs of minor wear only"
-                  : listing.condition === "Used - Good"
-                  ? "Moderately worn with signs of regular use"
-                  : "Heavily worn but functional with visible wear"}
+                  : "Pre-owned pair. Review the seller photos carefully to judge actual condition."}
               </p>
             </div>
             <div>

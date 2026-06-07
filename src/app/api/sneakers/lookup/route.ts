@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const { data: localSneaker, error: localError } = await supabase
       .from("sneakers")
       .select(
-        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, description, gallery_images, image_url, source"
       )
       .eq("normalized_sku", normalizedSku)
       .maybeSingle<SneakerRecord>();
@@ -39,7 +39,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to lookup sneaker." }, { status: 500 });
     }
 
-    if (localSneaker) {
+    const localHasDescription = Boolean(localSneaker?.description);
+    const localHasGalleryImages = Array.isArray(localSneaker?.gallery_images) && localSneaker.gallery_images.length > 0;
+
+    if (localSneaker && localHasDescription && localHasGalleryImages) {
       return NextResponse.json({
         found: true,
         source: "local",
@@ -50,6 +53,14 @@ export async function GET(request: NextRequest) {
     const externalSneaker = await fetchKicksDbSneakerBySku(normalizedSku);
 
     if (!externalSneaker || !externalSneaker.sku || !externalSneaker.normalized_sku || !externalSneaker.name) {
+      if (localSneaker) {
+        return NextResponse.json({
+          found: true,
+          source: "local",
+          sneaker: localSneaker,
+        });
+      }
+
       return NextResponse.json({
         found: false,
         source: null,
@@ -64,7 +75,7 @@ export async function GET(request: NextRequest) {
         onConflict: "normalized_sku",
       })
       .select(
-        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, description, gallery_images, image_url, source"
       )
       .single<SneakerRecord>();
 

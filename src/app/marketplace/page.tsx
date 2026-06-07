@@ -21,7 +21,7 @@ interface ListingDisplay {
   sizeLabels: string[];
   price: number;
   image: string;
-  condition: "New" | "Like New" | "Used - Excellent" | "Used - Good" | "Used - Fair";
+  condition: "New" | "Used";
   seller: {
     name: string;
     avatar: string;
@@ -33,7 +33,7 @@ interface ListingDisplay {
 }
 
 const BRANDS = ALL_BRANDS;
-const CONDITIONS = ["New", "Like New", "Used - Excellent", "Used - Good", "Used - Fair"];
+const CONDITIONS = ["New", "Used"];
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
   { value: "price_asc", label: "Price: Low to High" },
@@ -71,10 +71,10 @@ export default function MarketplacePage() {
         if (data) {
           const conditionMap: Record<string, ListingDisplay["condition"]> = {
             new: "New",
-            like_new: "Like New",
-            used_excellent: "Used - Excellent",
-            used_good: "Used - Good",
-            used_fair: "Used - Fair",
+            like_new: "Used",
+            used_excellent: "Used",
+            used_good: "Used",
+            used_fair: "Used",
           };
 
           const dedupedListings = dedupeSkuListings(data as Listing[]);
@@ -97,7 +97,7 @@ export default function MarketplacePage() {
               sizeLabels: metrics.sizeLabels,
               price: metrics.lowestPrice,
               image: listing.images?.[0] || "default",
-              condition: conditionMap[listing.condition] || "Used - Good" as ListingDisplay["condition"],
+              condition: conditionMap[listing.condition] || "Used",
               seller: {
                 name: listing.seller?.display_name || listing.seller?.full_name || "Unknown Seller",
                 avatar:
@@ -134,7 +134,7 @@ export default function MarketplacePage() {
           sizeLabels: listing.sizes.map((size) => String(size.size)),
           price: Math.min(...listing.sizes.filter((size) => size.quantity > 0).map((size) => size.price)),
           image: listing.images[0] || "default",
-          condition: listing.condition,
+          condition: listing.condition === "New" ? "New" : "Used",
           seller: {
             name: listing.seller.displayName,
             avatar: listing.seller.avatar,
@@ -385,13 +385,7 @@ export default function MarketplacePage() {
                           className={`relay-badge text-xs px-2 py-1 ${
                             listing.condition === "New"
                               ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/20"
-                              : listing.condition === "Like New"
-                              ? "bg-blue-400/10 text-blue-400 border border-blue-400/20"
-                              : listing.condition === "Used - Excellent"
-                              ? "bg-amber-400/10 text-amber-400 border border-amber-400/20"
-                              : listing.condition === "Used - Good"
-                              ? "bg-orange-400/10 text-orange-400 border border-orange-400/20"
-                              : "bg-red-400/10 text-red-400 border border-red-400/20"
+                              : "bg-amber-400/10 text-amber-400 border border-amber-400/20"
                           }`}
                         >
                           {listing.condition}

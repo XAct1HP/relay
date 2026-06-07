@@ -13,6 +13,8 @@ export interface KicksDbSneakerLookupResult {
   gender: string | null;
   release_date: string | null;
   retail_price: number | null;
+  description: string | null;
+  gallery_images: string[];
   image_url: string | null;
   source: "kicksdb";
 }
@@ -75,10 +77,13 @@ export async function fetchKicksDbSneakerBySku(
     const retailPrice =
       readNumber(record, ["retail_price", "retailPrice"]) ||
       readTraitNumber(traits, ["retail price", "retail_price"]);
+    const galleryImages = readFirstStringArray(record, ["gallery"]).slice(0, 6);
     const imageUrl =
+      galleryImages[0] ||
       readString(record, ["image_url", "image", "imageUrl", "thumbnail"]) ||
-      readFirstStringArrayValue(record, ["gallery", "images"]) ||
+      readFirstStringArrayValue(record, ["images"]) ||
       readNestedString(record, [["image", "url"], ["media", "imageUrl"], ["media", "image", "url"]]);
+    const description = normalizeDescription(readString(record, ["description"]));
     const name =
       readString(record, ["name", "title", "product_name"]) ||
       buildNameFromParts(
@@ -99,6 +104,8 @@ export async function fetchKicksDbSneakerBySku(
       gender,
       release_date: releaseDate,
       retail_price: retailPrice,
+      description,
+      gallery_images: galleryImages.length > 0 ? galleryImages : imageUrl ? [imageUrl] : [],
       image_url: imageUrl,
       source: "kicksdb",
     };
@@ -271,23 +278,33 @@ function readString(record: KicksDbRecord, keys: string[]): string | null {
 }
 
 function readFirstStringArrayValue(record: KicksDbRecord, keys: string[]): string | null {
+  const values = readFirstStringArray(record, keys);
+  return values[0] || null;
+}
+
+function readFirstStringArray(record: KicksDbRecord, keys: string[]): string[] {
   for (const key of keys) {
     const value = record[key];
     if (!Array.isArray(value)) {
       continue;
     }
 
+    const collected: string[] = [];
     for (const entry of value) {
       if (typeof entry === "string") {
         const trimmed = entry.trim();
         if (trimmed) {
-          return trimmed;
+          collected.push(trimmed);
         }
       }
     }
+
+    if (collected.length > 0) {
+      return collected;
+    }
   }
 
-  return null;
+  return [];
 }
 
 function readNestedString(record: KicksDbRecord, paths: string[][]): string | null {
@@ -396,6 +413,23 @@ function collapseSku(value: string | null | undefined): string {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeDescription(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const withLineBreaks = value.replace(/<br\s*\/?>/gi, "\n");
+  const withoutTags = withLineBreaks.replace(/<[^>]+>/g, " ");
+  const normalizedWhitespace = withoutTags
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+
+  return normalizedWhitespace || null;
 }
 
 function logDev(message: string, payload: unknown) {
