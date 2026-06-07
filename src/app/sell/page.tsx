@@ -104,6 +104,10 @@ function getUploadFileExtension(file: File): string {
   return extensionFromType || "jpg";
 }
 
+function getConditionPhotoLimitMessage(): string {
+  return "Used and mixed catalog listings require exactly 1 seller condition photo.";
+}
+
 export default function SellPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -160,6 +164,7 @@ export default function SellPage() {
   const isUsedCatalogListing = isCatalogListing && condition === "used_good";
   const isMixedCatalogListing = isCatalogListing && condition === "mixed";
   const shouldUseSellerPhotos = isManualListing || isUsedCatalogListing || isMixedCatalogListing;
+  const maxSellerPhotoCount = isCatalogListing && (isUsedCatalogListing || isMixedCatalogListing) ? 1 : 10;
   const hasUnusedSellerPhotos = isCatalogListing && condition === "new" && photos.length > 0;
   const isStep1Valid =
     condition &&
@@ -177,7 +182,11 @@ export default function SellPage() {
   // Step 3 Validation
   const isStep3Valid =
     description.trim().length >= 4 &&
-    (isManualListing || isUsedCatalogListing || isMixedCatalogListing ? photos.length > 0 : true);
+    (isManualListing
+      ? photos.length > 0
+      : isUsedCatalogListing || isMixedCatalogListing
+      ? photos.length === 1
+      : true);
 
   const handleNextStep = () => {
     if (currentStep === 1 && isStep1Valid) {
@@ -328,9 +337,19 @@ export default function SellPage() {
   const handlePhotoUpload = (files: FileList | null) => {
     if (!files) return;
 
+    if (maxSellerPhotoCount === 1 && files.length > 1) {
+      alert(getConditionPhotoLimitMessage());
+    }
+
+    const availableSlots = Math.max(maxSellerPhotoCount - photos.length, 0);
+    if (availableSlots <= 0) {
+      alert(maxSellerPhotoCount === 1 ? getConditionPhotoLimitMessage() : "You have reached the photo limit for this listing.");
+      return;
+    }
+
     const newPhotos: UploadedPhoto[] = [];
     Array.from(files).forEach(file => {
-      if (file.type.startsWith("image/") && (photos.length + newPhotos.length) < 10) {
+      if (file.type.startsWith("image/") && newPhotos.length < availableSlots) {
         const url = URL.createObjectURL(file);
         newPhotos.push({
           id: Math.random().toString(),
@@ -391,7 +410,10 @@ export default function SellPage() {
           const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.${extension}`;
           const { error: uploadError } = await supabase.storage
             .from("listing-images")
-            .upload(fileName, photo.file);
+            .upload(fileName, photo.file, {
+              contentType: photo.file.type || undefined,
+              upsert: false,
+            });
 
           if (uploadError) {
             console.error("Upload error:", uploadError);
@@ -408,7 +430,7 @@ export default function SellPage() {
       }
 
       if (uploadErrors.length > 0) {
-        alert("One or more photos failed to upload, so the listing was not published. Please try again.");
+        alert(`Photo upload failed: ${uploadErrors[0]}`);
         return;
       }
 
@@ -1198,9 +1220,9 @@ export default function SellPage() {
                   </label>
                   {(isUsedCatalogListing || isMixedCatalogListing) && (
                     <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                      <p className="text-sm text-relay-text font-medium mb-1">At least one real seller photo is required</p>
+                      <p className="text-sm text-relay-text font-medium mb-1">Exactly one real seller photo is required</p>
                       <p className="text-xs text-relay-subtle leading-relaxed">
-                        Buyers need to see the actual condition of any pre-owned pairs. Your uploaded photos will appear before the gallery images in the listing.
+                        Buyers need to see the actual condition of any pre-owned pairs. This seller photo will appear before the gallery images in the listing.
                       </p>
                     </div>
                   )}
@@ -1217,7 +1239,7 @@ export default function SellPage() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      multiple
+                      multiple={maxSellerPhotoCount > 1}
                       accept="image/*"
                       onChange={(e) => handlePhotoUpload(e.target.files)}
                       className="hidden"
@@ -1231,7 +1253,9 @@ export default function SellPage() {
                         Drag & drop photos or click to upload
                       </span>
                       <span className="text-sm text-relay-subtle">
-                        Up to 10 photos. First uploaded photo is shown first.
+                        {maxSellerPhotoCount === 1
+                          ? "Upload exactly 1 condition photo."
+                          : "Up to 10 photos. First uploaded photo is shown first."}
                       </span>
                     </button>
                   </div>
@@ -1259,7 +1283,11 @@ export default function SellPage() {
               {photos.length > 0 && shouldUseSellerPhotos && (
                 <div>
                   <p className="text-sm text-relay-muted mb-3">
-                    {photos.length} of 10 uploaded photos ({photos.length === 1 ? "first seller photo" : "first photo appears first"})
+                    {photos.length} of {maxSellerPhotoCount} uploaded photos {maxSellerPhotoCount === 1
+                      ? "(condition photo)"
+                      : photos.length === 1
+                      ? "(first seller photo)"
+                      : "(first photo appears first)"}
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {photos.map((photo, index) => (
@@ -1529,11 +1557,11 @@ export default function SellPage() {
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
                   <p className="text-sm font-medium text-amber-200 mb-1">
                     {condition === "mixed"
-                      ? "Mixed catalog listings need at least one seller photo"
-                      : "Used catalog listings need at least one seller photo"}
+                      ? "Mixed catalog listings need exactly one seller photo"
+                      : "Used catalog listings need exactly one seller photo"}
                   </p>
                   <p className="text-xs text-amber-100/80">
-                    Add one or more real photos so buyers can evaluate the pair&apos;s condition.
+                    Add one real photo so buyers can evaluate the pair&apos;s condition.
                   </p>
                 </div>
               )}
