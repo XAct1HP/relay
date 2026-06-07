@@ -41,6 +41,7 @@ export function Sidebar() {
   const isActive = (path: string) => {
     if (path === "/" && pathname === "/") return true;
     if (path === "/admin") return pathname === "/admin";
+    if (path === "/dashboard") return pathname === "/dashboard";
     return pathname.startsWith(path) && path !== "/";
   };
 
@@ -49,7 +50,7 @@ export function Sidebar() {
     { href: "/feed", label: "Feed", icon: Rss },
     { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
     { href: "/sell", label: "Sell", icon: Upload },
-    { href: "/dashboard/inventory", label: "My Listings", icon: List },
+    { href: "/my-listings", label: "My Listings", icon: List },
     { href: "/inventory/bulk-import", label: "Bulk Import", icon: FileSpreadsheet },
     { href: "/messages", label: "Messages", icon: MessageSquare },
     { href: "/orders", label: "Orders", icon: Package },

@@ -733,10 +733,19 @@ export default function SellerInventoryDashboard() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
                         <div className="min-w-0">
+                          <div className="mb-2">
+                            <h2
+                              className={`font-semibold leading-tight text-relay-text truncate xl:whitespace-nowrap ${getListingTitleClassName(
+                                listing.displayName
+                              )}`}
+                              title={listing.displayName}
+                            >
+                              {listing.displayName}
+                            </h2>
+                          </div>
                           <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h2 className="text-xl font-semibold text-relay-text truncate">{listing.displayName}</h2>
                             <span className={`${badge.color} border px-3 py-1 rounded-full text-xs font-semibold`}>
                               {badge.label}
                             </span>
@@ -755,17 +764,17 @@ export default function SellerInventoryDashboard() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap xl:flex-nowrap gap-2 xl:shrink-0 xl:self-start">
                           <Link
                             href={`/listing/${listing.id}`}
-                            className="px-4 py-2 bg-[#5f8fff]/20 text-[#7ca6ff] hover:bg-[#5f8fff]/30 text-sm font-medium rounded-full transition-colors border border-[#5f8fff]/30 inline-flex items-center gap-2"
+                            className="px-3 py-2 bg-[#5f8fff]/20 text-[#7ca6ff] hover:bg-[#5f8fff]/30 text-xs xl:text-sm font-medium rounded-full transition-colors border border-[#5f8fff]/30 inline-flex items-center gap-2 whitespace-nowrap"
                           >
                             <Eye size={14} />
                             View
                           </Link>
                           <Link
                             href={`/edit-listing/${listing.id}`}
-                            className="px-4 py-2 bg-white/[0.04] text-white/75 hover:bg-white/[0.08] text-sm font-medium rounded-full transition-colors border border-white/10 inline-flex items-center gap-2"
+                            className="px-3 py-2 bg-white/[0.04] text-white/75 hover:bg-white/[0.08] text-xs xl:text-sm font-medium rounded-full transition-colors border border-white/10 inline-flex items-center gap-2 whitespace-nowrap"
                           >
                             <Pencil size={14} />
                             Edit
@@ -774,7 +783,7 @@ export default function SellerInventoryDashboard() {
                             <button
                               onClick={() => handleToggleStatus(listing.id, listing.status)}
                               disabled={actionLoading === listing.id}
-                              className="px-4 py-2 bg-white/[0.04] text-white/75 hover:bg-white/[0.08] text-sm font-medium rounded-full transition-colors border border-white/10 disabled:opacity-50"
+                              className="px-3 py-2 bg-white/[0.04] text-white/75 hover:bg-white/[0.08] text-xs xl:text-sm font-medium rounded-full transition-colors border border-white/10 disabled:opacity-50 whitespace-nowrap"
                             >
                               {actionLoading === listing.id
                                 ? "Updating..."
@@ -785,18 +794,18 @@ export default function SellerInventoryDashboard() {
                           )}
                           {listing.status !== "removed" &&
                             (showDeleteConfirm === listing.id ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-red-300 text-xs">Delete permanently?</span>
+                              <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap xl:justify-end">
+                                <span className="text-red-300 text-[11px] xl:text-xs whitespace-nowrap">Delete permanently?</span>
                                 <button
                                   onClick={() => handleDelete(listing.id)}
                                   disabled={actionLoading === listing.id}
-                                  className="px-3 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 text-sm font-medium rounded-full transition-colors border border-red-500/30 disabled:opacity-50"
+                                  className="px-3 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 text-xs xl:text-sm font-medium rounded-full transition-colors border border-red-500/30 disabled:opacity-50 whitespace-nowrap"
                                 >
                                   {actionLoading === listing.id ? "Removing..." : "Confirm"}
                                 </button>
                                 <button
                                   onClick={() => setShowDeleteConfirm(null)}
-                                  className="px-3 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] text-sm font-medium rounded-full transition-colors border border-white/10"
+                                  className="px-3 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] text-xs xl:text-sm font-medium rounded-full transition-colors border border-white/10 whitespace-nowrap"
                                 >
                                   Cancel
                                 </button>
@@ -804,7 +813,7 @@ export default function SellerInventoryDashboard() {
                             ) : (
                               <button
                                 onClick={() => setShowDeleteConfirm(listing.id)}
-                                className="px-4 py-2 bg-red-500/15 text-red-300 hover:bg-red-500/25 text-sm font-medium rounded-full transition-colors border border-red-500/25 inline-flex items-center gap-2"
+                                className="px-3 py-2 bg-red-500/15 text-red-300 hover:bg-red-500/25 text-xs xl:text-sm font-medium rounded-full transition-colors border border-red-500/25 inline-flex items-center gap-2 whitespace-nowrap"
                               >
                                 <Trash2 size={14} />
                                 Delete
@@ -995,6 +1004,22 @@ function VariantMetric({ label, value }: { label: string; value: string | number
 
 function getDisplayName(listing: Listing) {
   return [listing.brand, listing.model, listing.nickname].filter(Boolean).join(" ").trim() || "Untitled Listing";
+}
+
+function getListingTitleClassName(displayName: string) {
+  if (displayName.length > 90) {
+    return "text-sm xl:text-base";
+  }
+
+  if (displayName.length > 70) {
+    return "text-base xl:text-lg";
+  }
+
+  if (displayName.length > 48) {
+    return "text-lg xl:text-xl";
+  }
+
+  return "text-xl";
 }
 
 function getSortablePrice(price: number) {

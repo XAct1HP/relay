@@ -382,16 +382,16 @@ export default function ListingDetailPage({
           <div className="flex h-full flex-col gap-4">
             {/* Main Image */}
             <div
-              className={`relative aspect-[4/5] sm:aspect-square rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10 p-6 sm:p-8`}
+              className={`relative rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10 p-4 sm:p-6`}
             >
               {listing.images[currentImageIndex] ? (
                 <img
                   src={listing.images[currentImageIndex]}
                   alt={`${listing.brand} ${listing.model} - Image ${currentImageIndex + 1}`}
-                  className="w-full h-full object-contain"
+                  className="block w-full h-auto max-h-[70vh] object-contain"
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex min-h-[320px] items-center justify-center">
                   <div className="text-relay-subtle text-lg">
                     Image {currentImageIndex + 1}
                   </div>
