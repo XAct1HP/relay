@@ -408,57 +408,57 @@ export default function ListingDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] gap-8 mb-8">
           {/* LEFT COLUMN - IMAGE GALLERY */}
           <div className="flex h-full flex-col gap-4">
-            {/* Main Image */}
-            <div
-              className={`relative rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10`}
-            >
-              {listing.images[currentImageIndex] ? (
-                <img
-                  src={listing.images[currentImageIndex]}
-                  alt={`${listing.brand} ${listing.model} - Image ${currentImageIndex + 1}`}
-                  className="block w-full h-auto max-h-[70vh] object-contain"
-                />
-              ) : (
-                <div className="flex min-h-[320px] items-center justify-center">
-                  <div className="text-relay-subtle text-lg">
-                    Image {currentImageIndex + 1}
-                  </div>
-                </div>
-              )}
-
-              {/* Image Counter */}
+            <div className="flex items-start gap-3">
               {hasMultipleImages && (
-                <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
-                  <p className="text-sm font-medium text-relay-text">
-                    {currentImageIndex + 1} / {totalImages}
-                  </p>
+                <div className="flex w-[64px] flex-shrink-0 flex-col gap-2">
+                  {listing.images.map((imageUrl, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleThumbnailClick(index)}
+                      className={`w-[64px] h-[64px] rounded-xl overflow-hidden border-2 transition-all ${
+                        currentImageIndex === index
+                          ? "border-relay-accent"
+                          : "border-white/10 hover:border-white/20"
+                      } bg-gradient-to-br ${listing.gradient} flex items-center justify-center cursor-pointer`}
+                    >
+                      {imageUrl ? (
+                        <img src={imageUrl} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-relay-subtle">{index + 1}</span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
 
-            </div>
+              {/* Main Image */}
+              <div
+                className={`relative min-w-0 flex-1 rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10`}
+              >
+                {listing.images[currentImageIndex] ? (
+                  <img
+                    src={listing.images[currentImageIndex]}
+                    alt={`${listing.brand} ${listing.model} - Image ${currentImageIndex + 1}`}
+                    className="block w-full h-auto max-h-[70vh] object-contain"
+                  />
+                ) : (
+                  <div className="flex min-h-[320px] items-center justify-center">
+                    <div className="text-relay-subtle text-lg">
+                      Image {currentImageIndex + 1}
+                    </div>
+                  </div>
+                )}
 
-            {/* Thumbnail Strip */}
-            {hasMultipleImages && (
-              <div className="flex gap-2 overflow-x-auto relay-scrollbar pb-2">
-                {listing.images.map((imageUrl, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleThumbnailClick(index)}
-                    className={`flex-shrink-0 w-[60px] h-[60px] rounded-xl overflow-hidden border-2 transition-all ${
-                      currentImageIndex === index
-                        ? "border-relay-accent"
-                        : "border-white/10 hover:border-white/20"
-                    } bg-gradient-to-br ${listing.gradient} flex items-center justify-center cursor-pointer`}
-                  >
-                    {imageUrl ? (
-                      <img src={imageUrl} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xs text-relay-subtle">{index + 1}</span>
-                    )}
-                  </button>
-                ))}
+                {/* Image Counter */}
+                {hasMultipleImages && (
+                  <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
+                    <p className="text-sm font-medium text-relay-text">
+                      {currentImageIndex + 1} / {totalImages}
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="relay-card p-6 lg:flex-1">
               <h2 className="text-xl font-semibold text-relay-text mb-4">
