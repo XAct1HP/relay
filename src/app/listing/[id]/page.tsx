@@ -28,9 +28,10 @@ import { sanitizeSneakerDescription } from "../../../../lib/sneakers/sanitizeSne
 
 interface SizeInventory {
   id?: string;
-  size: number;
+  size: string;
   quantity: number;
   price: number;
+  condition: "new" | "used";
 }
 
 interface ListingDetail {
@@ -38,7 +39,7 @@ interface ListingDetail {
   brand: string;
   model: string;
   nickname?: string;
-  condition: "New" | "Used";
+  condition: "New" | "Used" | "New + Used";
   boxCondition: "New" | "Good" | "Fair" | "Poor" | "No Box";
   description: string;
   sizes: SizeInventory[];
@@ -61,6 +62,10 @@ interface ListingDetail {
   gradient: string;
 }
 
+function getSizeVariantKey(sizeData: SizeInventory) {
+  return sizeData.id || `${sizeData.size}-${sizeData.condition}`;
+}
+
 export default function ListingDetailPage({
   params,
 }: {
@@ -69,7 +74,7 @@ export default function ListingDetailPage({
   const router = useRouter();
   const { currentUser } = useAuth();
   const { enabled: testModeEnabled, loading: testModeLoading } = usePublicTestMode();
-  const [selectedSize, setSelectedSize] = useState<number | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,7 +95,7 @@ export default function ListingDetailPage({
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, seller:profiles(*), listing_variants(id, size, quantity, price, is_active)")
+          .select("*, seller:profiles(*), listing_variants(id, size, quantity, price, condition, is_active)")
           .eq("id", params.id)
           .maybeSingle();
 
@@ -101,6 +106,7 @@ export default function ListingDetailPage({
             used_excellent: "Used",
             used_good: "Used",
             used_fair: "Used",
+            mixed: "New + Used",
           };
 
           const boxConditions: Record<string, ListingDetail["boxCondition"]> = {
@@ -119,7 +125,7 @@ export default function ListingDetailPage({
           };
 
           const variantRows = (data.listing_variants as any[]) || [];
-          const sizeSource: Array<{ id?: string; size: any; quantity: number; price: number }> = variantRows.length > 0
+          const sizeSource: Array<{ id?: string; size: any; quantity: number; price: number; condition: "new" | "used" }> = variantRows.length > 0
             ? variantRows
                 .filter((variant) => variant.is_active !== false)
                 .map((variant) => ({
@@ -127,11 +133,13 @@ export default function ListingDetailPage({
                   size: variant.size,
                   quantity: variant.quantity || 0,
                   price: Number(variant.price) || 0,
+                  condition: variant.condition === "used" ? "used" : "new",
                 }))
             : (data.sizes as any[])?.map((s) => ({
                 size: s.size,
                 quantity: s.quantity || 0,
                 price: Number(s.price) || 0,
+                condition: s.condition === "used" ? "used" : data.condition === "mixed" || data.condition?.startsWith("used") ? "used" : "new",
               })) || [];
 
           const formatted: ListingDetail = {
@@ -145,11 +153,12 @@ export default function ListingDetailPage({
             sizes: sizeSource
               .map((s) => ({
                 id: s.id,
-                size: Number(s.size),
+                size: String(s.size),
                 quantity: s.quantity || 0,
                 price: Number(s.price) || 0,
+                condition: s.condition,
               }))
-              .filter((s) => Number.isFinite(s.size)),
+              .filter((s) => s.size),
             images: data.images || [],
             averageRating: 4.8,
             reviewCount: 0,
@@ -177,6 +186,13 @@ export default function ListingDetailPage({
 
           setSellerId(data.seller_id);
           setListing(formatted);
+          setSelectedVariantId(
+            formatted.sizes.find((size) => size.quantity > 0)
+              ? getSizeVariantKey(formatted.sizes.find((size) => size.quantity > 0)!)
+              : formatted.sizes[0]
+              ? getSizeVariantKey(formatted.sizes[0])
+              : null
+          );
           setIsPreviewListing(false);
           return;
         }
@@ -189,14 +205,20 @@ export default function ListingDetailPage({
               brand: previewListing.brand,
               model: previewListing.model,
               nickname: previewListing.nickname,
-              condition: previewListing.condition === "New" ? "New" : "Used",
+              condition:
+                previewListing.condition === "New"
+                  ? "New"
+                  : previewListing.condition === "New + Used"
+                  ? "New + Used"
+                  : "Used",
               boxCondition: previewListing.boxCondition,
               description: previewListing.description,
               sizes: previewListing.sizes.map((size) => ({
                 id: size.id,
-                size: size.size,
+                size: String(size.size),
                 quantity: size.quantity,
                 price: size.price,
+                condition: size.condition === "used" ? "used" : "new",
               })),
               images: previewListing.images,
               averageRating: 4.8,
@@ -217,6 +239,9 @@ export default function ListingDetailPage({
               gradient: previewListing.gradient,
             });
             setSellerId(null);
+            setSelectedVariantId(
+              previewListing.sizes.find((size) => size.quantity > 0)?.id || previewListing.sizes[0]?.id || null
+            );
             setIsPreviewListing(true);
             return;
           }
@@ -306,7 +331,7 @@ export default function ListingDetailPage({
     );
   }
 
-  const selectedSizeData = listing.sizes.find((s) => s.size === selectedSize);
+  const selectedSizeData = listing.sizes.find((s) => getSizeVariantKey(s) === selectedVariantId) || null;
   const availableSizes = listing.sizes.filter((s) => s.quantity > 0);
   const sellerVacationNotice = getVacationModeNotice();
   const sellerOnVacation = isPreviewListing
@@ -349,17 +374,20 @@ export default function ListingDetailPage({
   };
 
   const conditionBadgeColor = {
-    New: "bg-emerald-400/10 text-emerald-400 border border-emerald-400/20",
-    Used: "bg-amber-400/10 text-amber-400 border border-amber-400/20",
+    New: "bg-emerald-400 text-black border border-emerald-300",
+    Used: "bg-amber-300 text-black border border-amber-200",
+    "New + Used": "bg-sky-300 text-black border border-sky-200",
   };
 
   const boxConditionBadgeColor = {
-    New: "bg-emerald-400/10 text-emerald-400 border border-emerald-400/20",
+    New: "bg-emerald-400 text-black border border-emerald-300",
     Good: "bg-blue-400/10 text-blue-400 border border-blue-400/20",
     Fair: "bg-amber-400/10 text-amber-400 border border-amber-400/20",
     Poor: "bg-orange-400/10 text-orange-400 border border-orange-400/20",
     "No Box": "bg-red-400/10 text-red-400 border border-red-400/20",
   };
+
+  const hasMultipleImages = listing.images.length > 1;
 
   return (
     <div>
@@ -382,7 +410,7 @@ export default function ListingDetailPage({
           <div className="flex h-full flex-col gap-4">
             {/* Main Image */}
             <div
-              className={`relative rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10 p-4 sm:p-6`}
+              className={`relative rounded-2xl overflow-hidden bg-gradient-to-br ${listing.gradient} border border-white/10`}
             >
               {listing.images[currentImageIndex] ? (
                 <img
@@ -399,34 +427,38 @@ export default function ListingDetailPage({
               )}
 
               {/* Image Counter */}
-              <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
-                <p className="text-sm font-medium text-relay-text">
-                  {currentImageIndex + 1} / {totalImages}
-                </p>
-              </div>
+              {hasMultipleImages && (
+                <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
+                  <p className="text-sm font-medium text-relay-text">
+                    {currentImageIndex + 1} / {totalImages}
+                  </p>
+                </div>
+              )}
 
             </div>
 
             {/* Thumbnail Strip */}
-            <div className="flex gap-2 overflow-x-auto relay-scrollbar pb-2">
-              {listing.images.map((imageUrl, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleThumbnailClick(index)}
-                  className={`flex-shrink-0 w-[60px] h-[60px] rounded-xl overflow-hidden border-2 transition-all ${
-                    currentImageIndex === index
-                      ? "border-relay-accent"
-                      : "border-white/10 hover:border-white/20"
-                  } bg-gradient-to-br ${listing.gradient} flex items-center justify-center cursor-pointer`}
-                >
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-relay-subtle">{index + 1}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            {hasMultipleImages && (
+              <div className="flex gap-2 overflow-x-auto relay-scrollbar pb-2">
+                {listing.images.map((imageUrl, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleThumbnailClick(index)}
+                    className={`flex-shrink-0 w-[60px] h-[60px] rounded-xl overflow-hidden border-2 transition-all ${
+                      currentImageIndex === index
+                        ? "border-relay-accent"
+                        : "border-white/10 hover:border-white/20"
+                    } bg-gradient-to-br ${listing.gradient} flex items-center justify-center cursor-pointer`}
+                  >
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs text-relay-subtle">{index + 1}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="relay-card p-6 lg:flex-1">
               <h2 className="text-xl font-semibold text-relay-text mb-4">
@@ -445,6 +477,8 @@ export default function ListingDetailPage({
                   <p className="text-sm text-relay-subtle">
                     {listing.condition === "New"
                       ? "Never worn or used, with original packaging"
+                      : listing.condition === "New + Used"
+                      ? "This listing includes both brand-new and pre-owned variants. Select the exact variant to review its condition and price."
                       : "Pre-owned pair. Review the seller photos carefully to judge actual condition."}
                   </p>
                 </div>
@@ -537,27 +571,30 @@ export default function ListingDetailPage({
             {/* SIZE SELECTOR */}
             <div className="relay-card p-6">
               <h2 className="text-sm font-semibold text-relay-text mb-4 uppercase tracking-wide">
-                Select Size
+                Select Variant
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {listing.sizes.map((sizeData) => (
                   <button
-                    key={sizeData.size}
-                    onClick={() => setSelectedSize(sizeData.size)}
+                    key={getSizeVariantKey(sizeData)}
+                    onClick={() => setSelectedVariantId(getSizeVariantKey(sizeData))}
                     disabled={sizeData.quantity === 0}
-                    className={`inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
-                      selectedSize === sizeData.size
+                    className={`inline-flex min-h-[64px] flex-col items-center justify-center rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
+                      selectedVariantId === getSizeVariantKey(sizeData)
                         ? "border-2 border-relay-accent bg-relay-accent/20 text-relay-accent ring-1 ring-relay-accent/25"
                         : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20"
                     }`}
                   >
-                    {sizeData.size}
+                    <span>Size {sizeData.size}</span>
+                    <span className="mt-1 text-[11px] uppercase tracking-[0.16em] text-white/55">
+                      {sizeData.condition === "used" ? "Used" : "New"}
+                    </span>
                   </button>
                 ))}
               </div>
               {selectedSizeData && (
                 <p className="text-sm text-relay-muted">
-                  {selectedSizeData.quantity} available
+                  {selectedSizeData.quantity} available · {selectedSizeData.condition === "used" ? "Used pair" : "New pair"}
                 </p>
               )}
             </div>
@@ -590,9 +627,9 @@ export default function ListingDetailPage({
                   const variantParam = selectedSizeData?.id
                     ? `&variant=${encodeURIComponent(selectedSizeData.id)}`
                     : "";
-                  router.push(`/checkout?listing=${params.id}&size=${selectedSize}${variantParam}`);
+                  router.push(`/checkout?listing=${params.id}&size=${encodeURIComponent(selectedSizeData?.size || "")}${variantParam}`);
                 }}
-                disabled={selectedSize === null || isPreviewListing || sellerOnVacation}
+                disabled={!selectedSizeData || isPreviewListing || sellerOnVacation}
                 className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingCart size={20} />

@@ -31,6 +31,7 @@ export interface SizeOption {
   size: string;
   price: number;
   quantity: number;
+  condition?: 'new' | 'used';
 }
 
 export interface ListingVariant {
@@ -39,6 +40,7 @@ export interface ListingVariant {
   size: string;
   price: number;
   quantity: number;
+  condition: 'new' | 'used';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -78,7 +80,7 @@ export interface Listing {
   brand: string;
   model: string;
   nickname: string | null;
-  condition: 'new' | 'like_new' | 'used_excellent' | 'used_good' | 'used_fair';
+  condition: 'new' | 'like_new' | 'used_excellent' | 'used_good' | 'used_fair' | 'mixed';
   box_condition: 'perfect' | 'good' | 'damaged' | 'no_box';
   approx_sizing: 'lightweight' | 'normal' | 'heavy';
   description: string;

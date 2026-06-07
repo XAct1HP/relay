@@ -1,10 +1,16 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildLegacySizes, mergeListingVariants, normalizeSku, type VariantInput } from "@/lib/listings";
+import {
+  buildLegacySizes,
+  mergeListingVariants,
+  normalizeSku,
+  type VariantCondition,
+  type VariantInput,
+} from "@/lib/listings";
 
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
-type ListingCondition = "new" | "like_new" | "used_excellent" | "used_good" | "used_fair";
+type ListingCondition = "new" | "like_new" | "used_excellent" | "used_good" | "used_fair" | "mixed";
 type BoxCondition = "perfect" | "good" | "damaged" | "no_box";
 type ApproxSizing = "lightweight" | "normal" | "heavy";
 
@@ -12,6 +18,7 @@ export interface InventoryUpsertVariantInput {
   size: string;
   quantity: number;
   price: number;
+  condition?: VariantCondition;
 }
 
 export interface InventoryUpsertInput {
@@ -455,6 +462,7 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
       size: String(variant.size || "").trim(),
       price: Number(variant.price),
       quantity: Number(variant.quantity),
+      condition: (variant.condition === "used" ? "used" : "new") as VariantCondition,
       is_active: true,
     }))
     .filter((variant) => variant.size);

@@ -21,7 +21,7 @@ interface ListingDisplay {
   sizeLabels: string[];
   price: number;
   image: string;
-  condition: "New" | "Used";
+  condition: "New" | "Used" | "New + Used";
   seller: {
     name: string;
     avatar: string;
@@ -33,7 +33,7 @@ interface ListingDisplay {
 }
 
 const BRANDS = ALL_BRANDS;
-const CONDITIONS = ["New", "Used"];
+const CONDITIONS = ["New", "Used", "New + Used"];
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
   { value: "price_asc", label: "Price: Low to High" },
@@ -75,6 +75,7 @@ export default function MarketplacePage() {
             used_excellent: "Used",
             used_good: "Used",
             used_fair: "Used",
+            mixed: "New + Used",
           };
 
           const dedupedListings = dedupeSkuListings(data as Listing[]);
@@ -134,7 +135,7 @@ export default function MarketplacePage() {
           sizeLabels: listing.sizes.map((size) => String(size.size)),
           price: Math.min(...listing.sizes.filter((size) => size.quantity > 0).map((size) => size.price)),
           image: listing.images[0] || "default",
-          condition: listing.condition === "New" ? "New" : "Used",
+          condition: listing.condition === "New" ? "New" : listing.condition === "New + Used" ? "New + Used" : "Used",
           seller: {
             name: listing.seller.displayName,
             avatar: listing.seller.avatar,
@@ -384,8 +385,10 @@ export default function MarketplacePage() {
                         <span
                           className={`relay-badge text-xs px-2 py-1 ${
                             listing.condition === "New"
-                              ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/20"
-                              : "bg-amber-400/10 text-amber-400 border border-amber-400/20"
+                              ? "bg-emerald-400 text-black border border-emerald-300"
+                              : listing.condition === "New + Used"
+                              ? "bg-sky-300 text-black border border-sky-200"
+                              : "bg-amber-300 text-black border border-amber-200"
                           }`}
                         >
                           {listing.condition}

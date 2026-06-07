@@ -16,6 +16,7 @@ interface SizeRow {
   size: string;
   price: number;
   quantity: number;
+  condition: "new" | "used";
 }
 
 interface UploadedPhoto {
@@ -65,6 +66,7 @@ const STEP_LABELS: Record<ListingMode, string[]> = {
 const CATALOG_CONDITION_OPTIONS = [
   { value: "new", label: "New", description: "Relay uses the product gallery images only." },
   { value: "used_good", label: "Used", description: "Add at least one seller photo so buyers can assess condition." },
+  { value: "mixed", label: "New + Used", description: "Set the condition for each size row in the next step." },
 ] as const;
 
 const MANUAL_CONDITION_OPTIONS = [
@@ -73,7 +75,23 @@ const MANUAL_CONDITION_OPTIONS = [
 ] as const;
 
 function getConditionDisplayLabel(value: string): string {
-  return value === "new" ? "New" : value ? "Used" : "";
+  if (value === "new") {
+    return "New";
+  }
+
+  if (value === "mixed") {
+    return "New + Used";
+  }
+
+  return value ? "Used" : "";
+}
+
+function getVariantConditionLabel(value: "new" | "used"): string {
+  return value === "used" ? "Used" : "New";
+}
+
+function getDefaultVariantCondition(listingCondition: string): "new" | "used" {
+  return listingCondition === "used_good" ? "used" : "new";
 }
 
 export default function SellPage() {
@@ -130,7 +148,8 @@ export default function SellPage() {
   const activeLookupGalleryImages = lastLookedUpNormalizedSku === normalizedSku ? lookupGalleryImages : [];
   const activeLookupImageUrl = lastLookedUpNormalizedSku === normalizedSku ? lookupImageUrl : "";
   const isUsedCatalogListing = isCatalogListing && condition === "used_good";
-  const shouldUseSellerPhotos = isManualListing || isUsedCatalogListing;
+  const isMixedCatalogListing = isCatalogListing && condition === "mixed";
+  const shouldUseSellerPhotos = isManualListing || isUsedCatalogListing || isMixedCatalogListing;
   const hasUnusedSellerPhotos = isCatalogListing && condition === "new" && photos.length > 0;
   const isStep1Valid =
     condition &&
@@ -141,12 +160,14 @@ export default function SellPage() {
     (isCatalogListing ? !!normalizedSku : true);
 
   // Step 2 Validation
-  const isStep2Valid = sizes.length > 0 && sizes.every(s => s.size && s.price > 0 && s.quantity > 0);
+  const isStep2Valid =
+    sizes.length > 0 &&
+    sizes.every((s) => s.size && s.price > 0 && s.quantity > 0 && (!isMixedCatalogListing || Boolean(s.condition)));
 
   // Step 3 Validation
   const isStep3Valid =
     description.trim().length >= 4 &&
-    (isManualListing || isUsedCatalogListing ? photos.length > 0 : true);
+    (isManualListing || isUsedCatalogListing || isMixedCatalogListing ? photos.length > 0 : true);
 
   const handleNextStep = () => {
     if (currentStep === 1 && isStep1Valid) {
@@ -280,6 +301,7 @@ export default function SellPage() {
         size: "",
         price: 0,
         quantity: 1,
+        condition: getDefaultVariantCondition(condition),
       },
     ]);
   };
@@ -399,13 +421,14 @@ export default function SellPage() {
           imageUrl: activeLookupImageUrl || null,
           description,
           images: finalImageUrls,
-          condition: condition as "new" | "used_good",
+          condition: condition as "new" | "used_good" | "mixed",
           boxCondition: boxCondition as "perfect" | "good" | "damaged" | "no_box",
           approximateSizing: approximateSizing as "lightweight" | "normal" | "heavy",
           variants: sizes.map((s) => ({
             size: s.size,
             price: s.price,
             quantity: s.quantity,
+            condition: isMixedCatalogListing ? s.condition : getDefaultVariantCondition(condition),
           })),
         });
 
@@ -421,6 +444,7 @@ export default function SellPage() {
             size: s.size,
             price: s.price,
             quantity: s.quantity,
+            condition: isMixedCatalogListing ? s.condition : getDefaultVariantCondition(condition),
           }))
         );
 
@@ -921,6 +945,11 @@ export default function SellPage() {
                     Used catalog listings must include at least one seller photo so buyers can judge condition.
                   </p>
                 )}
+                {isCatalogListing && condition === "mixed" && (
+                  <p className="text-xs text-relay-subtle mt-2">
+                    Mixed catalog listings let you split each size row between new and used pairs on the next step.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -968,7 +997,9 @@ export default function SellPage() {
             <div className="space-y-6">
               <div>
                 <p className="text-relay-muted text-sm mb-4">
-                  Add each size you have available with its price and quantity.
+                  {isMixedCatalogListing
+                    ? "Add each size/condition variant with its own price and quantity."
+                    : "Add each size you have available with its price and quantity."}
                 </p>
               </div>
 
@@ -978,7 +1009,7 @@ export default function SellPage() {
                     const fees = sizeRow.price ? calculateFees(sizeRow.price) : null;
                     return (
                       <div key={sizeRow.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                        <div className={`grid grid-cols-1 ${isMixedCatalogListing ? "sm:grid-cols-4" : "sm:grid-cols-3"} gap-4 mb-4`}>
                           {/* Size Dropdown */}
                           <div>
                             <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
@@ -996,6 +1027,23 @@ export default function SellPage() {
                               <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
                             </div>
                           </div>
+
+                          {isMixedCatalogListing && (
+                            <div>
+                              <label className="block text-xs font-medium text-relay-subtle mb-2">Condition</label>
+                              <div className="relative">
+                                <select
+                                  value={sizeRow.condition}
+                                  onChange={(e) => updateSize(sizeRow.id, "condition", e.target.value as "new" | "used")}
+                                  className="relay-select pr-8 appearance-none"
+                                >
+                                  <option value="new">New</option>
+                                  <option value="used">Used</option>
+                                </select>
+                                <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+                              </div>
+                            </div>
+                          )}
 
                           {/* Price Input */}
                           <div>
@@ -1037,6 +1085,12 @@ export default function SellPage() {
                           </div>
                         </div>
 
+                        {isMixedCatalogListing && (
+                          <div className="mb-3 inline-flex rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-relay-text">
+                            {getVariantConditionLabel(sizeRow.condition)} pair
+                          </div>
+                        )}
+
                         {/* Fee Breakdown */}
                         {fees && sizeRow.price > 0 && (
                           <div className="text-xs space-y-1 pt-3 border-t border-white/5">
@@ -1065,7 +1119,7 @@ export default function SellPage() {
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all text-relay-accent font-medium"
               >
                 <Plus size={18} />
-                Add Size
+                {isMixedCatalogListing ? "Add Size Variant" : "Add Size"}
               </button>
             </div>
           )}
@@ -1082,6 +1136,8 @@ export default function SellPage() {
                       Relay uses these standard product views and ignores the 360 image set.
                       {condition === "new"
                         ? " For new pairs, these will be the only listing photos."
+                        : condition === "mixed"
+                        ? " For mixed listings, these support your seller condition photos."
                         : " For used pairs, these are included alongside your condition photos."}
                     </p>
                   </div>
@@ -1107,16 +1163,16 @@ export default function SellPage() {
                 </div>
               )}
 
-              {(isManualListing || isUsedCatalogListing) && (
+              {(isManualListing || isUsedCatalogListing || isMixedCatalogListing) && (
                 <div>
                   <label className="block text-sm font-medium text-relay-text mb-3">
-                    {isUsedCatalogListing ? "Seller Condition Photos *" : "Photos *"}
+                    {isUsedCatalogListing || isMixedCatalogListing ? "Seller Condition Photos *" : "Photos *"}
                   </label>
-                  {isUsedCatalogListing && (
+                  {(isUsedCatalogListing || isMixedCatalogListing) && (
                     <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
                       <p className="text-sm text-relay-text font-medium mb-1">At least one real seller photo is required</p>
                       <p className="text-xs text-relay-subtle leading-relaxed">
-                        Buyers need to see the actual condition of a used pair. Your uploaded photos will appear before the gallery images in the listing.
+                        Buyers need to see the actual condition of any pre-owned pairs. Your uploaded photos will appear before the gallery images in the listing.
                       </p>
                     </div>
                   )}
@@ -1192,7 +1248,7 @@ export default function SellPage() {
                         {/* Cover Badge */}
                         {index === 0 && (
                           <div className="absolute top-2 left-2">
-                            <span className="relay-badge-info text-xs">{isUsedCatalogListing ? "Condition" : "Cover"}</span>
+                            <span className="relay-badge-info text-xs">{isUsedCatalogListing || isMixedCatalogListing ? "Condition" : "Cover"}</span>
                           </div>
                         )}
 
@@ -1367,6 +1423,9 @@ export default function SellPage() {
                     <thead>
                       <tr className="border-b border-white/10">
                         <th className="text-left py-2 px-3 text-relay-subtle font-medium">Size</th>
+                        {isMixedCatalogListing && (
+                          <th className="text-left py-2 px-3 text-relay-subtle font-medium">Condition</th>
+                        )}
                         <th className="text-left py-2 px-3 text-relay-subtle font-medium">Price</th>
                         <th className="text-left py-2 px-3 text-relay-subtle font-medium">Qty</th>
                         <th className="text-right py-2 px-3 text-relay-subtle font-medium">Your Earnings</th>
@@ -1378,6 +1437,9 @@ export default function SellPage() {
                         return (
                           <tr key={sizeRow.id} className="border-b border-white/5">
                             <td className="py-3 px-3 text-relay-text font-medium">Size {sizeRow.size}</td>
+                            {isMixedCatalogListing && (
+                              <td className="py-3 px-3 text-relay-text">{getVariantConditionLabel(sizeRow.condition)}</td>
+                            )}
                             <td className="py-3 px-3 text-relay-text">{formatCurrency(sizeRow.price)}</td>
                             <td className="py-3 px-3 text-relay-text">{sizeRow.quantity}</td>
                             <td className="py-3 px-3 text-emerald-400 font-medium text-right">
@@ -1396,7 +1458,7 @@ export default function SellPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                     <Camera size={16} className="text-relay-accent" />
-                    {isUsedCatalogListing ? `Seller Condition Photos (${photos.length})` : `Photos (${photos.length})`}
+                    {isUsedCatalogListing || isMixedCatalogListing ? `Seller Condition Photos (${photos.length})` : `Photos (${photos.length})`}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {photos.map((photo, index) => (
@@ -1411,7 +1473,7 @@ export default function SellPage() {
                         />
                         {index === 0 && (
                           <div className="absolute top-1 left-1">
-                            <span className="relay-badge-info text-xs">{isUsedCatalogListing ? "Condition" : "Cover"}</span>
+                            <span className="relay-badge-info text-xs">{isUsedCatalogListing || isMixedCatalogListing ? "Condition" : "Cover"}</span>
                           </div>
                         )}
                       </div>
@@ -1435,9 +1497,13 @@ export default function SellPage() {
                   </p>
                 </div>
               )}
-              {isCatalogListing && condition === "used_good" && photos.length === 0 && (
+              {isCatalogListing && (condition === "used_good" || condition === "mixed") && photos.length === 0 && (
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-sm font-medium text-amber-200 mb-1">Used catalog listings need at least one seller photo</p>
+                  <p className="text-sm font-medium text-amber-200 mb-1">
+                    {condition === "mixed"
+                      ? "Mixed catalog listings need at least one seller photo"
+                      : "Used catalog listings need at least one seller photo"}
+                  </p>
                   <p className="text-xs text-amber-100/80">
                     Add one or more real photos so buyers can evaluate the pair&apos;s condition.
                   </p>

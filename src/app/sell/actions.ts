@@ -20,13 +20,14 @@ interface PublishCatalogListingInput {
   imageUrl?: string | null;
   description?: string;
   images?: string[];
-  condition: "new" | "used_good";
+  condition: "new" | "used_good" | "mixed";
   boxCondition: "perfect" | "good" | "damaged" | "no_box";
   approximateSizing: "lightweight" | "normal" | "heavy";
   variants: Array<{
     size: string;
     price: number;
     quantity: number;
+    condition?: "new" | "used";
   }>;
 }
 

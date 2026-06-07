@@ -30,6 +30,7 @@ interface InventoryVariant {
   size: string;
   quantity: number;
   price: number;
+  condition: "new" | "used";
   isActive: boolean;
 }
 
@@ -108,9 +109,9 @@ export default function SellerInventoryDashboard() {
     }
 
     try {
-      const { data, error } = await supabase
+        const { data, error } = await supabase
         .from("listings")
-        .select("*, listing_variants(id, size, price, quantity, is_active)")
+        .select("*, listing_variants(id, size, price, quantity, condition, is_active)")
         .eq("seller_id", sellerId)
         .neq("status", "removed")
         .order("updated_at", { ascending: false });
@@ -868,7 +869,9 @@ export default function SellerInventoryDashboard() {
                                 )}
 
                                 <div>
-                                  <p className="text-relay-text font-semibold">Size {variant.size}</p>
+                                  <p className="text-relay-text font-semibold">
+                                    Size {variant.size} · {variant.condition === "used" ? "Used" : "New"}
+                                  </p>
                                   <p className="text-sm text-white/50 mt-1">
                                     {variant.isActive && variant.quantity > 0
                                       ? "Variant available for purchase"
@@ -1064,6 +1067,7 @@ function formatInventoryListings(listings: Listing[]): InventoryListingRow[] {
         size: variant.size,
         quantity: variant.quantity,
         price: variant.price,
+        condition: variant.condition,
         isActive: variant.isActive,
       })),
     } satisfies InventoryListingRow;

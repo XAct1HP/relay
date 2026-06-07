@@ -3,7 +3,7 @@ export interface RelayTestMarketplaceListing {
   brand: string;
   model: string;
   nickname?: string;
-  condition: "New" | "Like New" | "Used - Excellent" | "Used - Good" | "Used - Fair";
+  condition: "New" | "Used" | "New + Used";
   boxCondition: "New" | "Good" | "Fair" | "Poor" | "No Box";
   description: string;
   images: string[];
@@ -21,6 +21,7 @@ export interface RelayTestMarketplaceListing {
     size: number;
     quantity: number;
     price: number;
+    condition?: "new" | "used";
   }>;
   gradient: string;
   createdAt: string;
@@ -65,7 +66,7 @@ const PLACEHOLDER_LISTINGS: RelayTestMarketplaceListing[] = [
     brand: "Adidas",
     model: "Yeezy Boost 350 V2",
     nickname: "Onyx",
-    condition: "Like New",
+    condition: "Used",
     boxCondition: "Good",
     description:
       "Preview listing with a broader size spread and used condition styling. Great for checking how price sorting and size summaries behave with multiple active variants.",
@@ -88,7 +89,7 @@ const PLACEHOLDER_LISTINGS: RelayTestMarketplaceListing[] = [
     brand: "Custom",
     model: "Hand-Painted Dunk Low",
     nickname: "Sunset Splash",
-    condition: "Used - Excellent",
+    condition: "Used",
     boxCondition: "No Box",
     description:
       "Preview manual listing for staging. This one is here to make sure custom and independent-brand style cards still look right next to SKU-based listings.",

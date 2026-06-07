@@ -5,12 +5,16 @@ export interface VariantInput {
   size: string;
   price: number;
   quantity: number;
+  condition?: VariantCondition;
   is_active?: boolean;
 }
+
+export type VariantCondition = "new" | "used";
 
 export interface ListingVariantRow extends VariantInput {
   id: string;
   listing_id: string;
+  condition: VariantCondition;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -35,33 +39,36 @@ export function isManualListingBrand(brand: string | null | undefined): boolean 
 }
 
 export function buildVariantPayload(rows: VariantInput[]): VariantInput[] {
-  const bySize = new Map<string, VariantInput>();
+  const byVariant = new Map<string, VariantInput>();
 
   for (const row of rows) {
     const size = String(row.size || "").trim();
     const price = Number(row.price);
     const quantity = Number(row.quantity);
+    const condition = normalizeVariantCondition(row.condition);
 
     if (!size || !Number.isFinite(price) || price <= 0 || !Number.isFinite(quantity) || quantity < 0) {
       continue;
     }
 
-    bySize.set(size, {
+    byVariant.set(getVariantKey(size, condition), {
       size,
       price,
       quantity,
+      condition,
       is_active: row.is_active ?? true,
     });
   }
 
-  return Array.from(bySize.values()).sort(compareVariantSizes);
+  return Array.from(byVariant.values()).sort(compareVariantSizes);
 }
 
-export function buildLegacySizes(rows: VariantInput[]): Array<{ size: string; price: number; quantity: number }> {
+export function buildLegacySizes(rows: VariantInput[]): Array<{ size: string; price: number; quantity: number; condition: VariantCondition }> {
   return buildVariantPayload(rows).map((row) => ({
     size: row.size,
     price: row.price,
     quantity: row.quantity,
+    condition: normalizeVariantCondition(row.condition),
   }));
 }
 
@@ -69,20 +76,27 @@ export function mergeVariantInputs(existing: VariantInput[], incoming: VariantIn
   const merged = new Map<string, VariantInput>();
 
   for (const row of buildVariantPayload(existing)) {
-    merged.set(row.size, { ...row, is_active: row.is_active ?? true });
+    merged.set(getVariantKey(row.size, normalizeVariantCondition(row.condition)), {
+      ...row,
+      condition: normalizeVariantCondition(row.condition),
+      is_active: row.is_active ?? true,
+    });
   }
 
   for (const row of buildVariantPayload(incoming)) {
-    const current = merged.get(row.size);
+    const condition = normalizeVariantCondition(row.condition);
+    const key = getVariantKey(row.size, condition);
+    const current = merged.get(key);
     if (current) {
-      merged.set(row.size, {
+      merged.set(key, {
         size: row.size,
         price: row.price,
         quantity: current.quantity + row.quantity,
+        condition,
         is_active: true,
       });
     } else {
-      merged.set(row.size, { ...row, is_active: true });
+      merged.set(key, { ...row, condition, is_active: true });
     }
   }
 
@@ -95,9 +109,10 @@ export async function fetchListingVariants(
 ): Promise<ListingVariantRow[]> {
   const { data, error } = await supabase
     .from("listing_variants")
-    .select("id, listing_id, size, price, quantity, is_active, created_at, updated_at")
+    .select("id, listing_id, size, price, quantity, condition, is_active, created_at, updated_at")
     .eq("listing_id", listingId)
-    .order("size", { ascending: true });
+    .order("size", { ascending: true })
+    .order("condition", { ascending: true });
 
   if (error) {
     throw error;
@@ -117,7 +132,7 @@ export async function resolveListingVariant(
   if (variantId) {
     const { data, error } = await supabase
       .from("listing_variants")
-      .select("id, listing_id, size, price, quantity, is_active, created_at, updated_at")
+      .select("id, listing_id, size, price, quantity, condition, is_active, created_at, updated_at")
       .eq("id", variantId)
       .eq("listing_id", listingId)
       .maybeSingle();
@@ -137,20 +152,22 @@ export async function resolveListingVariant(
 
   const { data, error } = await supabase
     .from("listing_variants")
-    .select("id, listing_id, size, price, quantity, is_active, created_at, updated_at")
+    .select("id, listing_id, size, price, quantity, condition, is_active, created_at, updated_at")
     .eq("listing_id", listingId)
     .eq("size", size)
-    .maybeSingle();
+    .order("condition", { ascending: true });
 
   if (error) {
     throw error;
   }
 
-  if (!data || data.is_active === false) {
+  const firstActive = ((data || []) as ListingVariantRow[]).find((row) => row.is_active !== false);
+
+  if (!firstActive) {
     return null;
   }
 
-  return data as ListingVariantRow;
+  return firstActive;
 }
 
 export async function mergeListingVariants(
@@ -164,10 +181,13 @@ export async function mergeListingVariants(
   }
 
   const existingRows = await fetchListingVariants(supabase, listingId);
-  const existingBySize = new Map(existingRows.map((row) => [row.size, row]));
+  const existingByVariant = new Map(
+    existingRows.map((row) => [getVariantKey(row.size, row.condition), row])
+  );
 
   for (const row of incoming) {
-    const existing = existingBySize.get(row.size);
+    const condition = normalizeVariantCondition(row.condition);
+    const existing = existingByVariant.get(getVariantKey(row.size, condition));
 
     if (existing) {
       const { error } = await supabase
@@ -175,6 +195,7 @@ export async function mergeListingVariants(
         .update({
           price: row.price,
           quantity: existing.quantity + row.quantity,
+          condition,
           is_active: true,
         })
         .eq("id", existing.id);
@@ -188,6 +209,7 @@ export async function mergeListingVariants(
         size: row.size,
         price: row.price,
         quantity: row.quantity,
+        condition,
         is_active: true,
       });
 
@@ -205,12 +227,16 @@ export async function replaceListingVariants(
 ): Promise<void> {
   const incoming = buildVariantPayload(rows);
   const existingRows = await fetchListingVariants(supabase, listingId);
-  const existingBySize = new Map(existingRows.map((row) => [row.size, row]));
-  const seenSizes = new Set<string>();
+  const existingByVariant = new Map(
+    existingRows.map((row) => [getVariantKey(row.size, row.condition), row])
+  );
+  const seenVariants = new Set<string>();
 
   for (const row of incoming) {
-    seenSizes.add(row.size);
-    const existing = existingBySize.get(row.size);
+    const condition = normalizeVariantCondition(row.condition);
+    const key = getVariantKey(row.size, condition);
+    seenVariants.add(key);
+    const existing = existingByVariant.get(key);
 
     if (existing) {
       const { error } = await supabase
@@ -218,6 +244,7 @@ export async function replaceListingVariants(
         .update({
           price: row.price,
           quantity: row.quantity,
+          condition,
           is_active: row.is_active ?? true,
         })
         .eq("id", existing.id);
@@ -231,6 +258,7 @@ export async function replaceListingVariants(
         size: row.size,
         price: row.price,
         quantity: row.quantity,
+        condition,
         is_active: row.is_active ?? true,
       });
 
@@ -240,7 +268,9 @@ export async function replaceListingVariants(
     }
   }
 
-  const rowsToDisable = existingRows.filter((row) => !seenSizes.has(row.size));
+  const rowsToDisable = existingRows.filter(
+    (row) => !seenVariants.has(getVariantKey(row.size, row.condition))
+  );
   for (const row of rowsToDisable) {
     const { error } = await supabase
       .from("listing_variants")
@@ -261,8 +291,23 @@ function compareVariantSizes(a: VariantInput, b: VariantInput): number {
   const bSize = Number(b.size);
 
   if (Number.isFinite(aSize) && Number.isFinite(bSize)) {
-    return aSize - bSize;
+    if (aSize !== bSize) {
+      return aSize - bSize;
+    }
+  } else {
+    const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
+    if (sizeCompare !== 0) {
+      return sizeCompare;
+    }
   }
 
-  return a.size.localeCompare(b.size, undefined, { numeric: true });
+  return normalizeVariantCondition(a.condition).localeCompare(normalizeVariantCondition(b.condition));
+}
+
+function getVariantKey(size: string, condition: VariantCondition) {
+  return `${size}::${condition}`;
+}
+
+function normalizeVariantCondition(condition: string | null | undefined): VariantCondition {
+  return condition === "used" ? "used" : "new";
 }

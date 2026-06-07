@@ -3,7 +3,12 @@ interface DisplayVariant {
   size: string;
   price: number;
   quantity: number;
+  condition: "new" | "used";
   isActive: boolean;
+}
+
+function toVariantCondition(value: string | null | undefined): "new" | "used" {
+  return value === "used" ? "used" : "new";
 }
 
 export interface NormalizedDisplayVariant extends DisplayVariant {}
@@ -15,11 +20,13 @@ type ListingDisplayInput = {
   sku_normalized?: string | null;
   images?: string[];
   sizes?: any[];
+  condition?: string;
   listing_variants?: Array<{
     id?: string;
     size?: string;
     price?: number;
     quantity?: number;
+    condition?: string;
     is_active?: boolean;
   }>;
   created_at?: string;
@@ -39,10 +46,13 @@ export function getListingDisplayMetrics(listing: ListingDisplayInput): ListingD
   const availableVariants = variants.filter((variant) => variant.isActive && variant.quantity > 0 && variant.price > 0);
   const source = availableVariants.length > 0 ? availableVariants : variants.filter((variant) => variant.isActive && variant.price > 0);
 
-  const sizeLabels = source.map((variant) => variant.size);
-  const sizes = sizeLabels
+  const sizeLabels = Array.from(new Set(source.map((variant) => variant.size)));
+  const sizes = Array.from(
+    new Set(
+      source.map((variant) => Number(variant.size)).filter((size) => Number.isFinite(size))
+    )
+  )
     .map((size) => Number(size))
-    .filter((size) => Number.isFinite(size))
     .sort((a, b) => a - b);
   const prices = source.map((variant) => variant.price).filter((price) => price > 0);
 
@@ -117,6 +127,7 @@ function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
         size: String(variant.size || "").trim(),
         price: Number(variant.price) || 0,
         quantity: Number(variant.quantity) || 0,
+        condition: toVariantCondition(variant.condition),
         isActive: variant.is_active !== false,
       }))
       .filter((variant) => variant.size)
@@ -129,6 +140,11 @@ function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
       size: String(variant?.size || "").trim(),
       price: Number(variant?.price) || 0,
       quantity: Number(variant?.quantity) || 0,
+      condition: toVariantCondition(
+        variant?.condition === "used" || listing.condition === "mixed" || listing.condition?.startsWith("used")
+          ? "used"
+          : "new"
+      ),
       isActive: true,
     }))
     .filter((variant) => variant.size)
@@ -144,8 +160,15 @@ function compareVariantSize(a: DisplayVariant, b: DisplayVariant): number {
   const bSize = Number(b.size);
 
   if (Number.isFinite(aSize) && Number.isFinite(bSize)) {
-    return aSize - bSize;
+    if (aSize !== bSize) {
+      return aSize - bSize;
+    }
+  } else {
+    const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
+    if (sizeCompare !== 0) {
+      return sizeCompare;
+    }
   }
 
-  return a.size.localeCompare(b.size, undefined, { numeric: true });
+  return a.condition.localeCompare(b.condition);
 }

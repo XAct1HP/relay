@@ -170,7 +170,7 @@ export async function exportInventoryCsvAction() {
   try {
     const { data, error } = await supabase
       .from("listings")
-      .select("sku, brand, model, nickname, status, sizes, listing_variants(id, size, quantity, price, is_active)")
+      .select("sku, brand, model, nickname, condition, status, sizes, listing_variants(id, size, quantity, price, condition, is_active)")
       .eq("seller_id", user.id)
       .neq("status", "removed")
       .order("updated_at", { ascending: false });
@@ -188,6 +188,7 @@ export async function exportInventoryCsvAction() {
               productName,
               brand: listing.brand || "",
               size: String(variant.size || "").trim(),
+              condition: variant.condition === "used" ? "Used" : "New",
               quantity: Number(variant.quantity) || 0,
               price: Number(variant.price) || 0,
               active: variant.is_active !== false,
@@ -197,6 +198,10 @@ export async function exportInventoryCsvAction() {
               productName,
               brand: listing.brand || "",
               size: String(variant?.size || "").trim(),
+              condition:
+                variant?.condition === "used" || listing.condition === "mixed" || String(listing.condition || "").startsWith("used")
+                  ? "Used"
+                  : "New",
               quantity: Number(variant?.quantity) || 0,
               price: Number(variant?.price) || 0,
               active: listing.status === "active" || listing.status === "sold_out",
@@ -205,7 +210,7 @@ export async function exportInventoryCsvAction() {
       return variantRows.filter((variant: any) => variant.size);
     });
 
-    const headers = ["SKU", "Product Name", "Brand", "Size", "Quantity", "Price", "Active"];
+    const headers = ["SKU", "Product Name", "Brand", "Size", "Condition", "Quantity", "Price", "Active"];
     const csv = [
       headers.join(","),
       ...rows.map((row) =>
@@ -214,6 +219,7 @@ export async function exportInventoryCsvAction() {
           escapeCsvValue(row.productName),
           escapeCsvValue(row.brand),
           escapeCsvValue(row.size),
+          escapeCsvValue(row.condition),
           escapeCsvValue(String(row.quantity)),
           escapeCsvValue(formatCsvPrice(row.price)),
           escapeCsvValue(row.active ? "true" : "false"),
