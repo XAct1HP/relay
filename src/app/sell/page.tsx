@@ -94,18 +94,28 @@ function getDefaultVariantCondition(listingCondition: string): "new" | "used" {
   return listingCondition === "used_good" ? "used" : "new";
 }
 
-function getUploadFileExtension(file: File): string {
-  const extensionFromName = file.name.split(".").pop()?.trim().toLowerCase();
-  if (extensionFromName) {
-    return extensionFromName;
-  }
-
-  const extensionFromType = file.type.split("/").pop()?.trim().toLowerCase();
-  return extensionFromType || "jpg";
-}
-
 function getConditionPhotoLimitMessage(): string {
   return "Used and mixed catalog listings require exactly 1 seller condition photo.";
+}
+
+async function uploadListingPhoto(file: File): Promise<{ url: string } | { error: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/listings/upload-photo", {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
+
+  if (!response.ok || !data?.url) {
+    return {
+      error: data?.error || "Failed to upload photo.",
+    };
+  }
+
+  return { url: data.url };
 }
 
 export default function SellPage() {
@@ -406,26 +416,15 @@ export default function SellPage() {
       const uploadErrors: string[] = [];
       if (photos.length > 0) {
         for (const photo of photos) {
-          const extension = getUploadFileExtension(photo.file);
-          const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.${extension}`;
-          const { error: uploadError } = await supabase.storage
-            .from("listing-images")
-            .upload(fileName, photo.file, {
-              contentType: photo.file.type || undefined,
-              upsert: false,
-            });
+          const uploadResult = await uploadListingPhoto(photo.file);
 
-          if (uploadError) {
-            console.error("Upload error:", uploadError);
-            uploadErrors.push(uploadError.message);
+          if ("error" in uploadResult) {
+            console.error("Upload error:", uploadResult.error);
+            uploadErrors.push(uploadResult.error);
             continue;
           }
 
-          const { data } = supabase.storage
-            .from("listing-images")
-            .getPublicUrl(fileName);
-
-          imageUrls.push(data?.publicUrl || "");
+          imageUrls.push(uploadResult.url);
         }
       }
 

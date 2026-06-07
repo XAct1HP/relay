@@ -16,6 +16,26 @@ interface SizeRow {
   quantity: number;
 }
 
+async function uploadListingPhoto(file: File): Promise<{ url: string } | { error: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/listings/upload-photo", {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
+
+  if (!response.ok || !data?.url) {
+    return {
+      error: data?.error || "Failed to upload photo.",
+    };
+  }
+
+  return { url: data.url };
+}
+
 export default function EditListingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -102,25 +122,18 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
 
   const handleNewPhotoUpload = async (files: FileList | null) => {
     if (!files || !currentUser?.id) return;
-    const supabase = createClient();
 
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("image/") || existingImages.length >= 10) continue;
 
-      const fileName = `${currentUser!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from("listing-images")
-        .upload(fileName, file);
+      const uploadResult = await uploadListingPhoto(file);
 
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
+      if ("error" in uploadResult) {
+        console.error("Upload error:", uploadResult.error);
         continue;
       }
 
-      const { data } = supabase.storage.from("listing-images").getPublicUrl(fileName);
-      if (data?.publicUrl) {
-        setExistingImages((prev) => [...prev, data.publicUrl]);
-      }
+      setExistingImages((prev) => [...prev, uploadResult.url]);
     }
   };
 
