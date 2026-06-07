@@ -1,14 +1,22 @@
 "use server";
 
 import { createServerClientInstance } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-admin";
 import { resolveCatalogProductBySku } from "@/lib/catalog-server";
 import { InventoryUpsertError, upsertSellerSkuInventory } from "@/lib/inventory";
 
 interface PublishCatalogListingInput {
   sku: string;
+  sneakerId?: string | null;
   brand?: string;
   model: string;
+  catalogModel?: string;
   nickname?: string;
+  colorway?: string;
+  gender?: string;
+  releaseDate?: string;
+  retailPrice?: number | null;
+  imageUrl?: string | null;
   description?: string;
   images?: string[];
   condition: "new" | "like_new" | "used_excellent" | "used_good" | "used_fair";
@@ -36,11 +44,38 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
   }
 
   try {
+    if (input.sneakerId) {
+      try {
+        const admin = createAdminClient();
+        const { error: sneakerUpdateError } = await admin
+          .from("sneakers")
+          .update({
+            brand: input.brand || null,
+            name: input.model,
+            model: input.catalogModel || null,
+            nickname: input.nickname || null,
+            colorway: input.colorway || null,
+            gender: input.gender || null,
+            release_date: input.releaseDate || null,
+            retail_price: input.retailPrice ?? null,
+            image_url: input.imageUrl || null,
+          })
+          .eq("id", input.sneakerId);
+
+        if (sneakerUpdateError) {
+          console.error("Catalog sneaker metadata sync failed:", sneakerUpdateError);
+        }
+      } catch (sneakerSyncError) {
+        console.error("Catalog sneaker metadata sync failed:", sneakerSyncError);
+      }
+    }
+
     const catalogProduct = await resolveCatalogProductBySku(supabase, input.sku);
     const result = await upsertSellerSkuInventory(supabase, {
       seller_id: user.id,
       sku: input.sku,
       product: {
+        sneaker_id: input.sneakerId || null,
         catalog_product_id: catalogProduct?.id || null,
         brand: input.brand || catalogProduct?.brand,
         model: input.model || catalogProduct?.model,

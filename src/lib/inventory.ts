@@ -18,6 +18,7 @@ export interface InventoryUpsertInput {
   seller_id: string;
   sku: string;
   product?: {
+    sneaker_id?: string | null;
     catalog_product_id?: string | null;
     brand?: string | null;
     model?: string | null;
@@ -103,6 +104,7 @@ interface NormalizedInventoryInput {
   normalizedSku: string;
   displaySku: string;
   product: {
+    sneakerId: string | null;
     catalogProductId: string | null;
     brand: string;
     model: string;
@@ -133,6 +135,7 @@ export async function upsertSellerSkuInventory(
     const { error: updateError } = await supabase
       .from("listings")
       .update({
+        sneaker_id: normalized.product.sneakerId || existingListing.sneaker_id || null,
         catalog_product_id: normalized.product.catalogProductId || existingListing.catalog_product_id || null,
         brand: normalized.product.brand,
         model: normalized.product.model,
@@ -165,6 +168,7 @@ export async function upsertSellerSkuInventory(
 
   const insertPayload = {
     seller_id: normalized.sellerId,
+    sneaker_id: normalized.product.sneakerId,
     catalog_product_id: normalized.product.catalogProductId,
     brand: normalized.product.brand,
     model: normalized.product.model,
@@ -488,6 +492,7 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
     displaySku,
     product: {
       catalogProductId: product.catalog_product_id?.trim() || null,
+      sneakerId: product.sneaker_id?.trim() || null,
       brand: fallbackBrand,
       model: fallbackModel,
       nickname: product.nickname?.trim() || null,
@@ -509,7 +514,7 @@ async function findExistingSellerSkuListing(
 ) {
   const { data, error } = await supabase
     .from("listings")
-    .select("id, status, images, catalog_product_id")
+    .select("id, status, images, catalog_product_id, sneaker_id")
     .eq("seller_id", sellerId)
     .eq("sku_normalized", normalizedSku)
     .neq("status", "removed")

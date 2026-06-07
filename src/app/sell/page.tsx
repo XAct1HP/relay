@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BRANDS, CONDITIONS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
-import { buildLegacySizes, isManualListingBrand, mergeListingVariants, normalizeSku } from "@/lib/listings";
-import { getCatalogProductSeed } from "@/lib/catalog";
+import { buildLegacySizes, isManualListingBrand, mergeListingVariants } from "@/lib/listings";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { publishCatalogListingAction } from "@/app/sell/actions";
 import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight, ScanSearch, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
+import { normalizeSku } from "../../../lib/sneakers/normalizeSku";
 
 interface SizeRow {
   id: string;
@@ -23,6 +23,34 @@ interface UploadedPhoto {
   url: string;
   file: File;
 }
+
+interface LookedUpSneaker {
+  id: string;
+  sku: string;
+  normalized_sku: string;
+  brand: string | null;
+  name: string | null;
+  model: string | null;
+  nickname: string | null;
+  colorway: string | null;
+  gender: string | null;
+  release_date: string | null;
+  retail_price: number | null;
+  image_url: string | null;
+  source: "kicksdb";
+}
+
+type SkuLookupResponse =
+  | {
+      found: true;
+      source: "local" | "kicksdb";
+      sneaker: LookedUpSneaker;
+    }
+  | {
+      found: false;
+      source: null;
+      sneaker: null;
+    };
 
 type Step = 1 | 2 | 3 | 4;
 type ListingMode = "catalog" | "manual";
@@ -38,14 +66,23 @@ export default function SellPage() {
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isPublishing, setIsPublishing] = useState(false);
   const [listingMode, setListingMode] = useState<ListingMode>("catalog");
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogHint, setCatalogHint] = useState<string | null>(null);
+  const [skuLookupLoading, setSkuLookupLoading] = useState(false);
+  const [skuLookupMessage, setSkuLookupMessage] = useState<string | null>(null);
+  const [skuLookupSource, setSkuLookupSource] = useState<"local" | "kicksdb" | null>(null);
 
   // Step 1: Shoe Details
   const [brand, setBrand] = useState("");
   const [sku, setSku] = useState("");
   const [modelName, setModelName] = useState("");
+  const [catalogModel, setCatalogModel] = useState("");
   const [nickname, setNickname] = useState("");
+  const [colorway, setColorway] = useState("");
+  const [gender, setGender] = useState("");
+  const [releaseDate, setReleaseDate] = useState("");
+  const [retailPrice, setRetailPrice] = useState("");
+  const [lookupImageUrl, setLookupImageUrl] = useState("");
+  const [lookedUpSneakerId, setLookedUpSneakerId] = useState<string | null>(null);
+  const [lastLookedUpNormalizedSku, setLastLookedUpNormalizedSku] = useState<string | null>(null);
   const [condition, setCondition] = useState("");
   const [boxCondition, setBoxCondition] = useState("");
   const [approximateSizing, setApproximateSizing] = useState("");
@@ -72,6 +109,8 @@ export default function SellPage() {
 
   // Step 1 Validation
   const normalizedSku = normalizeSku(sku);
+  const linkedSneakerId = lastLookedUpNormalizedSku === normalizedSku ? lookedUpSneakerId : null;
+  const activeLookupImageUrl = lastLookedUpNormalizedSku === normalizedSku ? lookupImageUrl : "";
   const isStep1Valid =
     condition &&
     boxCondition &&
@@ -105,7 +144,8 @@ export default function SellPage() {
   const switchListingMode = (nextMode: ListingMode) => {
     setListingMode(nextMode);
     setCurrentStep(1);
-    setCatalogHint(null);
+    setSkuLookupMessage(null);
+    setSkuLookupSource(null);
     setPublishSuccess(false);
     setPublishedWasMerged(false);
 
@@ -115,41 +155,91 @@ export default function SellPage() {
       }
     } else {
       setSku("");
-      setCatalogHint(null);
+      setCatalogModel("");
+      setColorway("");
+      setGender("");
+      setReleaseDate("");
+      setRetailPrice("");
+      setLookupImageUrl("");
+      setLookedUpSneakerId(null);
+      setLastLookedUpNormalizedSku(null);
       if (!brand) {
         setBrand("Custom");
       }
     }
   };
 
-  const handleLoadCatalogDetails = async () => {
+  const handleLookupSku = async () => {
     if (!normalizedSku) {
-      setCatalogHint("Enter a valid SKU to prefill the catalog listing.");
+      setSkuLookupMessage("Enter a valid SKU to look up this sneaker.");
       return;
     }
 
-    setCatalogLoading(true);
-    setCatalogHint(null);
+    setSkuLookupLoading(true);
+    setSkuLookupMessage(null);
+    setSkuLookupSource(null);
 
     try {
-      const seed = await getCatalogProductSeed(sku);
+      const response = await fetch(`/api/sneakers/lookup?sku=${encodeURIComponent(sku)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
 
-      if (!seed) {
-        setCatalogHint("We couldn't build catalog placeholder data for that SKU yet.");
+      const data = (await response.json()) as SkuLookupResponse | { error?: string };
+
+      if (!response.ok) {
+        setSkuLookupMessage(data && "error" in data && data.error ? data.error : "Failed to look up that SKU.");
         return;
       }
 
-      setSku(seed.sku);
-      setBrand(seed.brand);
-      setModelName(seed.model);
-      setNickname(seed.nickname);
-      setDescription((current) => current.trim() || seed.description);
-      setCatalogHint("Placeholder catalog details loaded. Swap this helper for a real catalog API later.");
+      if (!("found" in data) || !data.found || !data.sneaker) {
+        setLookedUpSneakerId(null);
+        setLastLookedUpNormalizedSku(normalizedSku);
+        setSkuLookupSource(null);
+        setSkuLookupMessage("We could not find that SKU. You can still create the listing manually.");
+        return;
+      }
+
+      const { sneaker, source } = data;
+
+      setSku(sneaker.sku || normalizedSku);
+      setBrand(sneaker.brand || "");
+      setModelName(sneaker.name || sneaker.model || "");
+      setCatalogModel(sneaker.model || "");
+      setNickname(sneaker.nickname || "");
+      setColorway(sneaker.colorway || "");
+      setGender(sneaker.gender || "");
+      setReleaseDate(sneaker.release_date || "");
+      setRetailPrice(sneaker.retail_price !== null && sneaker.retail_price !== undefined ? String(sneaker.retail_price) : "");
+      setLookupImageUrl(sneaker.image_url || "");
+      setLookedUpSneakerId(sneaker.id);
+      setLastLookedUpNormalizedSku(sneaker.normalized_sku || normalizedSku);
+      setSkuLookupSource(source);
+      setSkuLookupMessage(
+        source === "local"
+          ? "Sneaker details loaded from Relay's local catalog."
+          : "Sneaker details loaded from KicksDB and saved to Relay's catalog."
+      );
     } catch (error) {
-      console.error("Catalog seed error:", error);
-      setCatalogHint("Failed to generate placeholder catalog details. You can still enter the title manually.");
+      console.error("SKU lookup error:", error);
+      setSkuLookupMessage("Failed to look up that SKU. You can still create the listing manually.");
     } finally {
-      setCatalogLoading(false);
+      setSkuLookupLoading(false);
+    }
+  };
+
+  const handleSkuChange = (value: string) => {
+    const nextNormalizedSku = normalizeSku(value);
+
+    setSku(value.toUpperCase());
+
+    if (nextNormalizedSku !== lastLookedUpNormalizedSku) {
+      setLookedUpSneakerId(null);
+      setSkuLookupSource(null);
+    }
+
+    if (skuLookupMessage && nextNormalizedSku !== normalizedSku) {
+      setSkuLookupMessage(null);
     }
   };
 
@@ -254,14 +344,27 @@ export default function SellPage() {
         }
       }
 
+      const finalImageUrls = imageUrls.length > 0
+        ? imageUrls
+        : isCatalogListing && activeLookupImageUrl
+        ? [activeLookupImageUrl]
+        : [];
+
       if (isCatalogListing) {
         const result = await publishCatalogListingAction({
           sku: sku,
+          sneakerId: linkedSneakerId,
           brand,
           model: modelName,
+          catalogModel,
           nickname: nickname || undefined,
+          colorway: colorway || undefined,
+          gender: gender || undefined,
+          releaseDate: releaseDate || undefined,
+          retailPrice: retailPrice ? Number(retailPrice) : null,
+          imageUrl: activeLookupImageUrl || null,
           description,
-          images: imageUrls,
+          images: finalImageUrls,
           condition: condition as "new" | "like_new" | "used_excellent" | "used_good" | "used_fair",
           boxCondition: boxCondition as "perfect" | "good" | "damaged" | "no_box",
           approximateSizing: approximateSizing as "lightweight" | "normal" | "heavy",
@@ -298,9 +401,10 @@ export default function SellPage() {
             box_condition: boxCondition,
             approx_sizing: approximateSizing,
             description,
-            images: imageUrls,
+            images: finalImageUrls,
             sizes: legacySizes,
-            sku: isCatalogListing ? normalizedSku : null,
+            sku: normalizedSku || null,
+            sneaker_id: linkedSneakerId,
             status: requiresReview ? "pending_review" : "active",
           })
           .select()
@@ -340,7 +444,15 @@ export default function SellPage() {
     setBrand("");
     setSku("");
     setModelName("");
+    setCatalogModel("");
     setNickname("");
+    setColorway("");
+    setGender("");
+    setReleaseDate("");
+    setRetailPrice("");
+    setLookupImageUrl("");
+    setLookedUpSneakerId(null);
+    setLastLookedUpNormalizedSku(null);
     setCondition("");
     setBoxCondition("");
     setApproximateSizing("");
@@ -351,7 +463,8 @@ export default function SellPage() {
     setCurrentStep(1);
     setPublishSuccess(false);
     setPublishedWasMerged(false);
-    setCatalogHint(null);
+    setSkuLookupMessage(null);
+    setSkuLookupSource(null);
   };
 
   // Calculate total potential earnings
@@ -436,7 +549,7 @@ export default function SellPage() {
               </div>
             </div>
             <p className="text-sm text-relay-muted leading-relaxed">
-              Enter a SKU, load placeholder product details, and list multiple sizes with separate prices and quantities. Photos are optional for now.
+              Enter a SKU, look up sneaker metadata, and list multiple sizes with separate prices and quantities. Photos are optional when a catalog image is available.
             </p>
           </button>
 
@@ -511,10 +624,10 @@ export default function SellPage() {
                   <div className="rounded-2xl border border-relay-accent/20 bg-relay-accent/5 p-5">
                     <div className="flex items-center gap-2 mb-2">
                       <Sparkles size={16} className="text-relay-accent" />
-                      <p className="text-sm font-semibold text-relay-text">Catalog Placeholder Helper</p>
+                      <p className="text-sm font-semibold text-relay-text">SKU Lookup</p>
                     </div>
                     <p className="text-sm text-relay-muted leading-relaxed">
-                      Relay does not have a live catalog API wired in yet. Use the SKU helper below to seed clean placeholder title and description data that we can replace with a real catalog lookup later.
+                      Enter a sneaker SKU to look up catalog details from Relay's sneaker database or KicksDB. You can edit every filled field before you publish.
                     </p>
                   </div>
 
@@ -525,35 +638,148 @@ export default function SellPage() {
                         type="text"
                         placeholder="e.g., DZ5485-612"
                         value={sku}
-                        onChange={(e) => setSku(e.target.value.toUpperCase())}
+                        onChange={(e) => handleSkuChange(e.target.value)}
                         className="relay-input flex-1"
                       />
                       <button
                         type="button"
-                        onClick={handleLoadCatalogDetails}
-                        disabled={!normalizedSku || catalogLoading}
+                        onClick={handleLookupSku}
+                        disabled={!normalizedSku || skuLookupLoading}
                         className="relay-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {catalogLoading ? "Loading..." : "Load Product Details"}
+                        {skuLookupLoading ? "Looking up..." : "Lookup SKU"}
                       </button>
                     </div>
                     <p className="text-xs text-relay-subtle mt-1">
                       Relay uses SKU to keep one listing per seller for each sneaker.
                     </p>
-                    {catalogHint && (
-                      <p className="text-xs text-relay-accent mt-2">{catalogHint}</p>
+                    {skuLookupMessage && (
+                      <p className={`text-xs mt-2 ${skuLookupSource ? "text-emerald-400" : "text-relay-accent"}`}>
+                        {skuLookupMessage}
+                      </p>
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-relay-text mb-2">Brand *</label>
-                    <input
-                      type="text"
-                      placeholder="Auto-filled from catalog helper"
-                      value={brand}
-                      onChange={(e) => setBrand(e.target.value)}
-                      className="relay-input"
-                    />
+                  {activeLookupImageUrl && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                      <p className="text-sm font-medium text-relay-text mb-3">Catalog Image Preview</p>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <img
+                          src={activeLookupImageUrl}
+                          alt={modelName || "Sneaker preview"}
+                          className="w-full sm:w-32 aspect-square rounded-xl object-cover border border-white/10 bg-white/[0.02]"
+                        />
+                        <div className="text-xs text-relay-subtle leading-relaxed">
+                          <p>This catalog image is for reference and can be used as the listing image if you do not upload your own photos.</p>
+                          <p className="mt-2">
+                            {linkedSneakerId
+                              ? "This listing will be linked to a saved sneaker record."
+                              : "If you edit the SKU, run the lookup again before publishing to relink the sneaker record."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Brand *</label>
+                      <input
+                        type="text"
+                        placeholder="Auto-filled from SKU lookup"
+                        value={brand}
+                        onChange={(e) => setBrand(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Product Title / Name *</label>
+                      <input
+                        type="text"
+                        placeholder="Auto-filled from SKU lookup"
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Model</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Dunk Low, AJ4, 990v6"
+                        value={catalogModel}
+                        onChange={(e) => setCatalogModel(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Nickname</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Panda, Bred, Chicago"
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Colorway</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., White / Black"
+                        value={colorway}
+                        onChange={(e) => setColorway(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Gender</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Men, Women, GS"
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Release Date</label>
+                      <input
+                        type="date"
+                        value={releaseDate}
+                        onChange={(e) => setReleaseDate(e.target.value)}
+                        className="relay-input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-relay-text mb-2">Retail Price</label>
+                      <div className="relative">
+                        <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-relay-subtle" />
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={retailPrice}
+                          onChange={(e) => setRetailPrice(e.target.value)}
+                          className="relay-input"
+                          style={{ paddingLeft: "2rem" }}
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -591,37 +817,37 @@ export default function SellPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">
-                  {isCatalogListing ? "Product Title *" : "Model Name *"}
-                </label>
-                <input
-                  type="text"
-                  placeholder={isCatalogListing ? "Auto-filled from catalog helper" : "e.g., Air Jordan 1 Retro High OG"}
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  className="relay-input"
-                />
-              </div>
+              {isManualListing && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-relay-text mb-2">Model Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Air Jordan 1 Retro High OG"
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      className="relay-input"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">
-                  {isCatalogListing ? "Style / Colorway (Optional)" : "Nickname (Optional)"}
-                </label>
-                <input
-                  type="text"
-                  placeholder={isCatalogListing ? "e.g., Chicago, Panda, Onyx" : "e.g., Chicago, Bred, etc."}
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  className="relay-input"
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-relay-text mb-2">Nickname (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Chicago, Bred, etc."
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      className="relay-input"
+                    />
+                  </div>
+                </>
+              )}
 
               {isCatalogListing && (
                 <div>
                   <label className="block text-sm font-medium text-relay-text mb-2">Catalog Description *</label>
                   <textarea
-                    placeholder="The placeholder helper can fill this, or you can write your own description."
+                    placeholder="Add selling notes, condition notes, or any context for this SKU listing."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={4}
@@ -808,7 +1034,7 @@ export default function SellPage() {
                   <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
                     <p className="text-sm text-relay-text font-medium mb-1">Catalog images are optional for now</p>
                     <p className="text-xs text-relay-subtle leading-relaxed">
-                      You can upload your own photos, but catalog listings can publish without them. Once a real catalog lookup is connected, these images can be refreshed from official product data.
+                      You can upload your own photos, but catalog listings can publish without them. If the SKU lookup returns a product image, Relay can use that preview when no seller photos are attached.
                     </p>
                   </div>
                 )}
@@ -911,7 +1137,7 @@ export default function SellPage() {
                 <textarea
                   placeholder={
                     isCatalogListing
-                      ? "Describe the product, release, sizing notes, or leave the catalog placeholder text."
+                      ? "Describe the product, release, sizing notes, or any seller-specific details for this SKU."
                       : "Describe the condition, any defects, original packaging, etc. (minimum 4 characters)"
                   }
                   value={description}
@@ -973,10 +1199,46 @@ export default function SellPage() {
                     <p className="text-relay-subtle mb-1">{isCatalogListing ? "Product Title" : "Model"}</p>
                     <p className="text-relay-text font-medium">{modelName}</p>
                   </div>
+                  {isCatalogListing && catalogModel && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Model</p>
+                      <p className="text-relay-text font-medium">{catalogModel}</p>
+                    </div>
+                  )}
                   {nickname && (
                     <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                       <p className="text-relay-subtle mb-1">Nickname</p>
                       <p className="text-relay-text font-medium">{nickname}</p>
+                    </div>
+                  )}
+                  {isCatalogListing && colorway && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Colorway</p>
+                      <p className="text-relay-text font-medium">{colorway}</p>
+                    </div>
+                  )}
+                  {isCatalogListing && gender && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Gender</p>
+                      <p className="text-relay-text font-medium">{gender}</p>
+                    </div>
+                  )}
+                  {isCatalogListing && releaseDate && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Release Date</p>
+                      <p className="text-relay-text font-medium">{releaseDate}</p>
+                    </div>
+                  )}
+                  {isCatalogListing && retailPrice && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Retail Price</p>
+                      <p className="text-relay-text font-medium">{formatCurrency(Number(retailPrice) || 0)}</p>
+                    </div>
+                  )}
+                  {isCatalogListing && linkedSneakerId && (
+                    <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
+                      <p className="text-relay-subtle mb-1">Linked Sneaker Record</p>
+                      <p className="text-relay-text font-medium">Saved to Relay catalog</p>
                     </div>
                   )}
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
@@ -1061,8 +1323,25 @@ export default function SellPage() {
                 <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
                   <p className="text-sm font-medium text-relay-text mb-1">No product photos attached</p>
                   <p className="text-xs text-relay-subtle">
-                    This is okay for catalog listings. The product can later be hydrated with catalog images, or you can edit the listing and add your own photos anytime.
+                    {activeLookupImageUrl
+                      ? "This SKU lookup includes a catalog image, so Relay can still show a product photo even without your own uploads."
+                      : "This is okay for catalog listings. The product can later be hydrated with catalog images, or you can edit the listing and add your own photos anytime."}
                   </p>
+                </div>
+              )}
+              {isCatalogListing && activeLookupImageUrl && (
+                <div>
+                  <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
+                    <Sparkles size={16} className="text-relay-accent" />
+                    Catalog Reference Image
+                  </h3>
+                  <div className="rounded-xl overflow-hidden border border-white/10 bg-white/[0.02] max-w-xs">
+                    <img
+                      src={activeLookupImageUrl}
+                      alt={modelName || "Catalog sneaker"}
+                      className="w-full aspect-square object-cover"
+                    />
+                  </div>
                 </div>
               )}
 

@@ -7,7 +7,9 @@ import {
 } from "../../../../../lib/sneakers/fetchKicksDbSneakerBySku";
 import { normalizeSku } from "../../../../../lib/sneakers/normalizeSku";
 
-type SneakerRecord = KicksDbSneakerLookupResult;
+type SneakerRecord = KicksDbSneakerLookupResult & {
+  id: string;
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +29,7 @@ export async function GET(request: NextRequest) {
     const { data: localSneaker, error: localError } = await supabase
       .from("sneakers")
       .select(
-        "sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
       )
       .eq("normalized_sku", normalizedSku)
       .maybeSingle<SneakerRecord>();
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
         onConflict: "normalized_sku",
       })
       .select(
-        "sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, image_url, source"
       )
       .single<SneakerRecord>();
 
