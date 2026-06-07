@@ -36,60 +36,55 @@ export async function fetchKicksDbSneakerBySku(
   }
 
   const baseUrl = apiBaseUrl.replace(/\/+$/, "");
-  const url = new URL(`${baseUrl}/v3/unified/gtin`);
-  url.search = new URLSearchParams({
-    identifier: "",
-    identifier_type: "",
-    sku: normalizedSku,
-    query: "",
-    source: "stockx",
-    page: "1",
-    limit: "20",
-    sort: "updated_at:desc",
-  }).toString();
-
   try {
-    logDev("KicksDB request URL:", url.toString());
+    const searchTerms = Array.from(
+      new Set([normalizedSku, collapseSku(normalizedSku)].filter(Boolean))
+    );
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        Authorization: apiKey,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+    let record: KicksDbRecord | null = null;
 
-    logDev("KicksDB response status:", response.status);
-
-    if (!response.ok) {
-      const failedBody = await response.text();
-      logDev("KicksDB failed response body:", failedBody);
-      return null;
+    for (const searchTerm of searchTerms) {
+      const candidate = await lookupStockxProductByQuery(baseUrl, apiKey, searchTerm, normalizedSku);
+      if (candidate) {
+        record = candidate;
+        break;
+      }
     }
-
-    const payload: unknown = await response.json();
-    const records = extractSneakerRecords(payload);
-    const record = records.find((candidate) => isUsableSneakerRecord(candidate, normalizedSku));
 
     if (!record) {
       return null;
     }
 
+    const traits = extractTraits(record);
     const rawSku = readString(record, ["sku", "styleCode", "style_code"]) || normalizedSku;
     const normalizedRecordSku = normalizeSku(rawSku) || normalizedSku;
-    const brand = readString(record, ["brand", "brand_name"]);
-    const model = readString(record, ["model", "silhouette"]);
-    const nickname = readString(record, ["nickname"]);
-    const colorway = readString(record, ["colorway", "color"]);
-    const gender = readString(record, ["gender"]);
-    const releaseDate = readString(record, ["release_date", "releaseDate"]);
-    const retailPrice = readNumber(record, ["retail_price", "retailPrice"]);
+    const brand = readString(record, ["brand", "brand_name"]) || readTrait(traits, ["brand"]);
+    const model =
+      readString(record, ["model", "primary_title", "silhouette"]) ||
+      readTrait(traits, ["model", "silhouette"]);
+    const nickname =
+      readString(record, ["nickname", "secondary_title"]) ||
+      readTrait(traits, ["nickname"]);
+    const colorway =
+      readString(record, ["colorway", "color"]) ||
+      readTrait(traits, ["colorway", "color"]);
+    const gender = readString(record, ["gender"]) || readTrait(traits, ["gender"]);
+    const releaseDate =
+      readString(record, ["release_date", "releaseDate"]) ||
+      readTrait(traits, ["release date", "release_date"]);
+    const retailPrice =
+      readNumber(record, ["retail_price", "retailPrice"]) ||
+      readTraitNumber(traits, ["retail price", "retail_price"]);
     const imageUrl =
       readString(record, ["image_url", "image", "imageUrl", "thumbnail"]) ||
+      readFirstStringArrayValue(record, ["gallery", "images"]) ||
       readNestedString(record, [["image", "url"], ["media", "imageUrl"], ["media", "image", "url"]]);
     const name =
       readString(record, ["name", "title", "product_name"]) ||
+      buildNameFromParts(
+        readString(record, ["primary_title"]) || model,
+        readString(record, ["secondary_title"]) || nickname
+      ) ||
       [brand, model, nickname].filter(Boolean).join(" ").trim() ||
       null;
 
@@ -113,100 +108,152 @@ export async function fetchKicksDbSneakerBySku(
   }
 }
 
-function extractSneakerRecords(payload: unknown): KicksDbRecord[] {
-  if (!payload || typeof payload !== "object") {
+async function lookupStockxProductByQuery(
+  baseUrl: string,
+  apiKey: string,
+  query: string,
+  normalizedSku: string
+): Promise<KicksDbRecord | null> {
+  const url = new URL(`${baseUrl}/v3/stockx/products`);
+  url.search = new URLSearchParams({
+    "display[traits]": "true",
+    "display[variants]": "true",
+    "display[identifiers]": "true",
+    "display[prices]": "true",
+    "display[statistics]": "true",
+    query,
+    sort: "rank",
+    page: "1",
+    limit: "20",
+    market: "US",
+  }).toString();
+
+  logDev("KicksDB request URL:", url.toString());
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Authorization: apiKey,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  logDev("KicksDB response status:", response.status);
+
+  if (!response.ok) {
+    const failedBody = await response.text();
+    logDev("KicksDB failed response body:", failedBody);
+    return null;
+  }
+
+  const payload: unknown = await response.json();
+  const records = extractStockxProducts(payload);
+
+  if (records.length === 0) {
+    return null;
+  }
+
+  return pickBestSkuMatch(records, normalizedSku);
+}
+
+function extractStockxProducts(payload: unknown): KicksDbRecord[] {
+  if (!isRecord(payload)) {
     return [];
   }
 
-  const root = payload as KicksDbRecord;
-  const candidates: KicksDbRecord[] = [];
-
-  collectRecords(root, candidates);
-
-  if (isRecord(root.data)) {
-    collectRecords(root.data, candidates);
+  const data = payload.data;
+  if (!Array.isArray(data)) {
+    return [];
   }
 
-  if (Array.isArray(root.data)) {
-    collectArrayRecords(root.data, candidates);
-  }
-
-  if (Array.isArray(root.results)) {
-    collectArrayRecords(root.results, candidates);
-  }
-
-  if (Array.isArray(root.items)) {
-    collectArrayRecords(root.items, candidates);
-  }
-
-  if (Array.isArray(root.products)) {
-    collectArrayRecords(root.products, candidates);
-  }
-
-  if (isRecord(root.result)) {
-    collectRecords(root.result, candidates);
-  }
-
-  if (isRecord(root.product)) {
-    collectRecords(root.product, candidates);
-  }
-
-  return dedupeRecords(candidates);
+  return data.filter(isRecord);
 }
 
-function collectRecords(value: unknown, candidates: KicksDbRecord[]) {
-  if (!isRecord(value)) {
-    return;
-  }
+function pickBestSkuMatch(records: KicksDbRecord[], normalizedSku: string): KicksDbRecord | null {
+  const targetCollapsedSku = collapseSku(normalizedSku);
+  const scored = records
+    .map((record) => ({
+      record,
+      score: scoreSkuMatch(record, normalizedSku, targetCollapsedSku),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
 
-  candidates.push(value);
-
-  for (const nestedKey of ["data", "result", "product", "item"]) {
-    const nestedValue = value[nestedKey];
-
-    if (isRecord(nestedValue)) {
-      candidates.push(nestedValue);
-    }
-
-    if (Array.isArray(nestedValue)) {
-      collectArrayRecords(nestedValue, candidates);
-    }
-  }
+  return scored[0]?.record || null;
 }
 
-function collectArrayRecords(values: unknown[], candidates: KicksDbRecord[]) {
-  for (const value of values) {
-    if (isRecord(value)) {
-      candidates.push(value);
-    }
+function scoreSkuMatch(record: KicksDbRecord, normalizedSku: string, collapsedSku: string): number {
+  const recordSku = readString(record, ["sku", "styleCode", "style_code"]);
+  const normalizedRecordSku = normalizeSku(recordSku);
+  const collapsedRecordSku = collapseSku(normalizedRecordSku);
+
+  if (normalizedRecordSku === normalizedSku) {
+    return 100;
   }
+
+  if (collapsedRecordSku && collapsedRecordSku === collapsedSku) {
+    return 90;
+  }
+
+  const searchableValues = [
+    readString(record, ["title", "name", "product_name", "slug", "link"]),
+    ...extractVariantIdentifiers(record),
+  ]
+    .filter(Boolean)
+    .map((value) => collapseSku(value));
+
+  if (searchableValues.some((value) => value === collapsedSku)) {
+    return 70;
+  }
+
+  if (searchableValues.some((value) => value.includes(collapsedSku))) {
+    return 40;
+  }
+
+  const hasUsableName = Boolean(
+    readString(record, ["title", "name", "product_name", "primary_title"]) ||
+      readString(record, ["model"])
+  );
+
+  if (hasUsableName && normalizedRecordSku) {
+    return 10;
+  }
+
+  return 0;
 }
 
-function dedupeRecords(records: KicksDbRecord[]): KicksDbRecord[] {
-  const seen = new Set<KicksDbRecord>();
-  const deduped: KicksDbRecord[] = [];
+function extractVariantIdentifiers(record: KicksDbRecord): string[] {
+  const variants = record.variants;
+  if (!Array.isArray(variants)) {
+    return [];
+  }
 
-  for (const record of records) {
-    if (seen.has(record)) {
+  const values: string[] = [];
+
+  for (const variant of variants) {
+    if (!isRecord(variant)) {
       continue;
     }
 
-    seen.add(record);
-    deduped.push(record);
+    const identifiers = variant.identifiers;
+    if (!Array.isArray(identifiers)) {
+      continue;
+    }
+
+    for (const identifier of identifiers) {
+      if (!isRecord(identifier)) {
+        continue;
+      }
+
+      const value = identifier.identifier;
+      if (typeof value === "string" && value.trim()) {
+        values.push(value.trim());
+      }
+    }
   }
 
-  return deduped;
-}
-
-function isUsableSneakerRecord(record: KicksDbRecord, fallbackSku: string): boolean {
-  const rawSku = readString(record, ["sku", "styleCode", "style_code"]) || fallbackSku;
-  const normalizedRecordSku = normalizeSku(rawSku);
-  const name =
-    readString(record, ["name", "title", "product_name"]) ||
-    readString(record, ["model", "silhouette"]) ||
-    readString(record, ["brand", "brand_name"]);
-
-  return Boolean(normalizedRecordSku && name);
+  return values;
 }
 
 function readString(record: KicksDbRecord, keys: string[]): string | null {
@@ -216,6 +263,26 @@ function readString(record: KicksDbRecord, keys: string[]): string | null {
       const trimmed = value.trim();
       if (trimmed) {
         return trimmed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function readFirstStringArrayValue(record: KicksDbRecord, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    for (const entry of value) {
+      if (typeof entry === "string") {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          return trimmed;
+        }
       }
     }
   }
@@ -247,6 +314,51 @@ function readNestedString(record: KicksDbRecord, paths: string[][]): string | nu
   return null;
 }
 
+function extractTraits(record: KicksDbRecord): Record<string, string> {
+  const traits = record.traits;
+  if (!Array.isArray(traits)) {
+    return {};
+  }
+
+  const mapped: Record<string, string> = {};
+
+  for (const trait of traits) {
+    if (!isRecord(trait)) {
+      continue;
+    }
+
+    const traitName = typeof trait.trait === "string" ? trait.trait.trim().toLowerCase() : "";
+    const traitValue = typeof trait.value === "string" ? trait.value.trim() : "";
+
+    if (traitName && traitValue) {
+      mapped[traitName] = traitValue;
+    }
+  }
+
+  return mapped;
+}
+
+function readTrait(traits: Record<string, string>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = traits[key.toLowerCase()];
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function readTraitNumber(traits: Record<string, string>, keys: string[]): number | null {
+  const value = readTrait(traits, keys);
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function readNumber(record: KicksDbRecord, keys: string[]): number | null {
   for (const key of keys) {
     const value = record[key];
@@ -268,6 +380,22 @@ function readNumber(record: KicksDbRecord, keys: string[]): number | null {
 
 function isRecord(value: unknown): value is KicksDbRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function buildNameFromParts(primary: string | null, secondary: string | null): string | null {
+  const parts = [primary, secondary].filter(Boolean);
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return parts.join(" ").trim() || null;
+}
+
+function collapseSku(value: string | null | undefined): string {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 function logDev(message: string, payload: unknown) {
