@@ -94,6 +94,16 @@ function getDefaultVariantCondition(listingCondition: string): "new" | "used" {
   return listingCondition === "used_good" ? "used" : "new";
 }
 
+function getUploadFileExtension(file: File): string {
+  const extensionFromName = file.name.split(".").pop()?.trim().toLowerCase();
+  if (extensionFromName) {
+    return extensionFromName;
+  }
+
+  const extensionFromType = file.type.split("/").pop()?.trim().toLowerCase();
+  return extensionFromType || "jpg";
+}
+
 export default function SellPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -374,15 +384,18 @@ export default function SellPage() {
 
       // Upload photos to storage
       const imageUrls: string[] = [];
+      const uploadErrors: string[] = [];
       if (photos.length > 0) {
         for (const photo of photos) {
-          const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.jpg`;
+          const extension = getUploadFileExtension(photo.file);
+          const fileName = `${currentUser!.id}/${Date.now()}-${photo.id}.${extension}`;
           const { error: uploadError } = await supabase.storage
             .from("listing-images")
             .upload(fileName, photo.file);
 
           if (uploadError) {
             console.error("Upload error:", uploadError);
+            uploadErrors.push(uploadError.message);
             continue;
           }
 
@@ -392,6 +405,21 @@ export default function SellPage() {
 
           imageUrls.push(data?.publicUrl || "");
         }
+      }
+
+      if (uploadErrors.length > 0) {
+        alert("One or more photos failed to upload, so the listing was not published. Please try again.");
+        return;
+      }
+
+      if (shouldUseSellerPhotos && photos.length > 0 && imageUrls.length !== photos.length) {
+        alert("Not all seller photos finished uploading. Please try again before publishing.");
+        return;
+      }
+
+      if ((isUsedCatalogListing || isMixedCatalogListing) && imageUrls.length === 0) {
+        alert("At least one seller condition photo must upload successfully before publishing.");
+        return;
       }
 
       const catalogImageUrls = activeLookupGalleryImages.length > 0
