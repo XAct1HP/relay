@@ -5,6 +5,7 @@ import {
   buildLegacySizes,
   mergeListingVariants,
   normalizeSku,
+  replaceListingVariants,
   type VariantCondition,
   type VariantInput,
 } from "@/lib/listings";
@@ -23,6 +24,7 @@ export interface InventoryUpsertVariantInput {
 }
 
 export interface InventoryUsedItemInput {
+  id?: string;
   size: string;
   price: number;
   quantity?: number;
@@ -58,6 +60,10 @@ export interface InventoryUpsertResult {
   variantCount: number;
   usedItemCount: number;
   status: ListingStatus;
+}
+
+export interface InventoryReplaceSkuListingInput extends InventoryUpsertInput {
+  listing_id: string;
 }
 
 export interface InventoryVariantUpdateInput {
@@ -137,6 +143,7 @@ interface NormalizedInventoryInput {
   };
   variants: VariantInput[];
   usedItems: Array<{
+    id: string | null;
     size: string;
     price: number;
     quantity: 1;
@@ -257,6 +264,99 @@ export async function upsertSellerSkuInventory(
     variantCount: normalized.variants.length,
     usedItemCount: normalized.usedItems.length,
     status: createdListing.status as ListingStatus,
+  };
+}
+
+export async function replaceSellerSkuListingInventory(
+  supabase: SupabaseClient,
+  input: InventoryReplaceSkuListingInput
+): Promise<InventoryUpsertResult> {
+  const listingId = String(input.listing_id || "").trim();
+  if (!listingId) {
+    throw new InventoryUpsertError("invalid_listing_id", "A valid listing is required.");
+  }
+
+  const normalized = normalizeInventoryUpsertInput(input);
+
+  const { data: existingListing, error: existingListingError } = await supabase
+    .from("listings")
+    .select("id, seller_id, status, images, listing_type")
+    .eq("id", listingId)
+    .eq("seller_id", normalized.sellerId)
+    .maybeSingle();
+
+  if (existingListingError) {
+    throw new InventoryUpsertError("listing_lookup_failed", existingListingError.message);
+  }
+
+  if (!existingListing) {
+    throw new InventoryUpsertError(
+      "listing_not_found",
+      "You can only update inventory for your own SKU listings."
+    );
+  }
+
+  if (existingListing.listing_type && existingListing.listing_type !== "sku") {
+    throw new InventoryUpsertError(
+      "invalid_listing_type",
+      "This inventory flow only supports existing SKU listings."
+    );
+  }
+
+  const { data: duplicateListing, error: duplicateListingError } = await supabase
+    .from("listings")
+    .select("id")
+    .eq("seller_id", normalized.sellerId)
+    .eq("sku_normalized", normalized.normalizedSku)
+    .neq("status", "removed")
+    .neq("id", listingId)
+    .limit(1)
+    .maybeSingle();
+
+  if (duplicateListingError) {
+    throw new InventoryUpsertError("listing_lookup_failed", duplicateListingError.message);
+  }
+
+  if (duplicateListing?.id) {
+    throw new InventoryUpsertError(
+      "duplicate_sku_listing",
+      "You already have another listing with this SKU. Edit that listing instead."
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("listings")
+    .update({
+      sneaker_id: normalized.product.sneakerId || null,
+      catalog_product_id: normalized.product.catalogProductId || null,
+      brand: normalized.product.brand,
+      model: normalized.product.model,
+      nickname: normalized.product.nickname,
+      description: normalized.product.description,
+      images: normalized.product.images.length > 0 ? normalized.product.images : existingListing.images || [],
+      condition: normalized.product.condition,
+      box_condition: normalized.product.boxCondition,
+      approx_sizing: normalized.product.approxSizing,
+      sku: normalized.displaySku,
+      status: existingListing.status === "removed" ? normalized.product.status : existingListing.status,
+    })
+    .eq("id", listingId)
+    .eq("seller_id", normalized.sellerId);
+
+  if (updateError) {
+    throw new InventoryUpsertError("listing_update_failed", updateError.message);
+  }
+
+  await replaceListingVariants(supabase, listingId, normalized.variants);
+  await replaceListingUsedItems(supabase, listingId, normalized.usedItems);
+
+  return {
+    listingId,
+    normalizedSku: normalized.normalizedSku,
+    merged: true,
+    variantCount: normalized.variants.length,
+    usedItemCount: normalized.usedItems.length,
+    status: existingListing.status,
   };
 }
 
@@ -516,6 +616,7 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
 
   const usedItems = (input.used_items || [])
     .map((item) => ({
+      id: item.id ? String(item.id).trim() : null,
       size: String(item.size || "").trim(),
       price: Number(item.price),
       quantity: item.quantity === undefined ? 1 : Number(item.quantity),
@@ -601,6 +702,7 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
     },
     variants,
     usedItems: usedItems.map((item) => ({
+      id: item.id,
       size: item.size,
       price: item.price,
       quantity: 1,
@@ -639,6 +741,95 @@ async function upsertListingUsedItems(
       "used_item_upsert_failed",
       error.message || "Failed to store itemized used inventory."
     );
+  }
+}
+
+async function replaceListingUsedItems(
+  supabase: SupabaseClient,
+  listingId: string,
+  usedItems: NormalizedInventoryInput["usedItems"]
+): Promise<void> {
+  const { data: existingRows, error: existingRowsError } = await supabase
+    .from("listing_used_items")
+    .select("id")
+    .eq("listing_id", listingId);
+
+  if (existingRowsError) {
+    throw new InventoryUpsertError("used_item_lookup_failed", existingRowsError.message);
+  }
+
+  const existingById = new Map(
+    ((existingRows || []) as Array<{ id: string }>).map((row) => [row.id, row])
+  );
+  const seenIds = new Set<string>();
+
+  for (const item of usedItems) {
+    if (item.id && existingById.has(item.id)) {
+      const { error } = await supabase
+        .from("listing_used_items")
+        .update({
+          size: item.size,
+          price: item.price,
+          quantity: 1,
+          condition: item.condition,
+          condition_photo_url: item.conditionPhotoUrl,
+          is_active: item.isActive,
+        })
+        .eq("id", item.id)
+        .eq("listing_id", listingId);
+
+      if (error) {
+        throw new InventoryUpsertError(
+          "used_item_update_failed",
+          error.message || "Failed to update itemized used inventory."
+        );
+      }
+
+      seenIds.add(item.id);
+      continue;
+    }
+
+    const { data: insertedRow, error } = await supabase
+      .from("listing_used_items")
+      .insert({
+        listing_id: listingId,
+        size: item.size,
+        price: item.price,
+        quantity: 1,
+        condition: item.condition,
+        condition_photo_url: item.conditionPhotoUrl,
+        is_active: item.isActive,
+      })
+      .select("id")
+      .single();
+
+    if (error || !insertedRow) {
+      throw new InventoryUpsertError(
+        "used_item_insert_failed",
+        error?.message || "Failed to insert itemized used inventory."
+      );
+    }
+
+    seenIds.add(insertedRow.id);
+  }
+
+  const rowsToDeactivate = ((existingRows || []) as Array<{ id: string }>).filter(
+    (row) => !seenIds.has(row.id)
+  );
+
+  for (const row of rowsToDeactivate) {
+    const { error } = await supabase
+      .from("listing_used_items")
+      .update({ is_active: false })
+      .eq("id", row.id)
+      .eq("listing_id", listingId);
+
+    if (error) {
+      throw new InventoryUpsertError(
+        "used_item_deactivate_failed",
+        error.message || "Failed to deactivate removed used inventory."
+      );
+    }
   }
 }
 
