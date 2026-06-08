@@ -294,7 +294,7 @@ export default function ApiPage() {
                     ["items", "array", "Yes", "Array of inventory items to upsert."],
                     ["items[].sku", "string", "Yes", "Product SKU (e.g. DZ5485-612). Normalized to uppercase."],
                     ["items[].condition", "string", "No", "New, Used, or New + Used. If omitted, Relay infers it from variant conditions."],
-                    ["items[].condition_photo_url", "string", "Used/Mixed only", "Exactly one public photo URL required for Used and New + Used listings."],
+                    ["items[].condition_photo_url", "string", "JSON fallback only", "Optional fallback if your integration already has a public image URL. Most used and mixed tools should upload a file instead."],
                     ["items[].box_condition", "string", "No", "perfect, good, damaged, or no_box. Defaults to perfect."],
                     ["items[].approximate_sizing", "string", "No", "lightweight, normal, or heavy. Defaults to normal."],
                     ["items[].brand", "string", "No", "Override brand if you want to provide your own product data."],
@@ -330,18 +330,16 @@ export default function ApiPage() {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
-                <Code label="Request" code={`{
+                <Code label="JSON Fallback Request" code={`{
   "items": [
     {
       "sku": "DZ5485-612",
-      "condition": "New + Used",
+      "condition": "Used",
       "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
       "box_condition": "good",
       "approximate_sizing": "normal",
       "variants": [
-        { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
-        { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
-        { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
+        { "size": "10", "condition": "used", "quantity": 1, "price": 315 }
       ]
     }
   ]
@@ -355,24 +353,22 @@ export default function ApiPage() {
               </div>
 
               <Tabs tabs={[
-                { label: "cURL JSON", code: `curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
+                { label: "cURL JSON Fallback", code: `curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \\
   -d '{
     "items": [
       {
         "sku": "DZ5485-612",
-        "condition": "New + Used",
+        "condition": "Used",
         "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
         "variants": [
-          { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
-          { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
-          { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
+          { "size": "10", "condition": "used", "quantity": 1, "price": 315 }
         ]
       }
     ]
   }'` },
-                { label: "TS JSON", code: `const res = await fetch(
+                { label: "TS JSON Fallback", code: `const res = await fetch(
   "https://relayco.app/api/integrations/inventory/upsert",
   {
     method: "POST",
@@ -384,12 +380,10 @@ export default function ApiPage() {
       items: [
         {
           sku: "DZ5485-612",
-          condition: "New + Used",
+          condition: "Used",
           condition_photo_url: "https://cdn.example.com/condition/dz5485-612.jpg",
           variants: [
-            { size: "10", condition: "new", quantity: 1, price: 350 },
             { size: "10", condition: "used", quantity: 1, price: 315 },
-            { size: "11", condition: "new", quantity: 2, price: 360 },
           ],
         },
       ],
@@ -425,7 +419,7 @@ const res = await fetch("https://relayco.app/api/integrations/inventory/upsert",
 });
 
 const data = await res.json();` },
-                { label: "Python", code: `import requests
+                { label: "Python JSON Fallback", code: `import requests
 
 res = requests.post(
     "https://relayco.app/api/integrations/inventory/upsert",
@@ -437,12 +431,10 @@ res = requests.post(
         "items": [
             {
                 "sku": "DZ5485-612",
-                "condition": "New + Used",
+                "condition": "Used",
                 "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
                 "variants": [
-                    {"size": "10", "condition": "new", "quantity": 1, "price": 350},
                     {"size": "10", "condition": "used", "quantity": 1, "price": 315},
-                    {"size": "11", "condition": "new", "quantity": 2, "price": 360},
                 ],
             }
         ]
@@ -458,8 +450,9 @@ print(res.json())` },
                 <Param>condition_photo_file</Param>, or indexed fields like <Param>condition_photo_0</Param>.
                 Relay uploads that file server-side, saves it into the listing image set, and then
                 processes the listing normally. JSON <Param>condition_photo_url</Param> still works
-                when you already have a public URL. Duplicate size + condition rows are rejected,
-                and valid items in the same batch still process even if another item fails.
+                when you already have a public URL, but it is the fallback path rather than the
+                recommended one. Duplicate size + condition rows are rejected, and valid items in
+                the same batch still process even if another item fails.
               </Callout>
 
               <Code label="Multipart Example" code={`curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
