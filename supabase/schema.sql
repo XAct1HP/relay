@@ -156,6 +156,28 @@ CREATE INDEX idx_listing_variants_listing_id ON listing_variants(listing_id);
 CREATE INDEX idx_listing_variants_active ON listing_variants(listing_id, is_active);
 
 -- ============================================================================
+-- LISTING_USED_ITEMS TABLE
+-- ============================================================================
+CREATE TABLE listing_used_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  size TEXT NOT NULL CHECK (btrim(size) <> ''),
+  price NUMERIC(10, 2) NOT NULL CHECK (price > 0),
+  quantity INT NOT NULL DEFAULT 1 CHECK (quantity = 1),
+  condition TEXT NOT NULL DEFAULT 'used_good'
+    CHECK (condition IN ('like_new', 'used_excellent', 'used_good', 'used_fair')),
+  condition_photo_url TEXT NOT NULL CHECK (btrim(condition_photo_url) <> ''),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_listing_used_items_listing_photo_unique
+  ON listing_used_items(listing_id, condition_photo_url);
+CREATE INDEX idx_listing_used_items_listing_id ON listing_used_items(listing_id);
+CREATE INDEX idx_listing_used_items_active ON listing_used_items(listing_id, is_active);
+
+-- ============================================================================
 -- FOLLOWS TABLE
 -- ============================================================================
 CREATE TABLE follows (
@@ -254,11 +276,13 @@ CREATE TABLE custom_offers (
   sender_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   listing_variant_id UUID REFERENCES listing_variants(id) ON DELETE SET NULL,
+  listing_used_item_id UUID REFERENCES listing_used_items(id) ON DELETE SET NULL,
   size TEXT NOT NULL,
   original_price NUMERIC(10, 2) NOT NULL,
   offer_price NUMERIC(10, 2) NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'accepted', 'declined', 'expired')),
+  CHECK (num_nonnulls(listing_variant_id, listing_used_item_id) <= 1),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL
 );
@@ -268,6 +292,7 @@ CREATE INDEX idx_custom_offers_conversation_id ON custom_offers(conversation_id)
 CREATE INDEX idx_custom_offers_sender_id ON custom_offers(sender_id);
 CREATE INDEX idx_custom_offers_listing_id ON custom_offers(listing_id);
 CREATE INDEX idx_custom_offers_listing_variant_id ON custom_offers(listing_variant_id);
+CREATE INDEX idx_custom_offers_listing_used_item_id ON custom_offers(listing_used_item_id);
 CREATE INDEX idx_custom_offers_status ON custom_offers(status);
 
 -- ============================================================================
@@ -277,6 +302,7 @@ CREATE TABLE orders (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   listing_id UUID NOT NULL REFERENCES listings(id) ON DELETE RESTRICT,
   listing_variant_id UUID REFERENCES listing_variants(id) ON DELETE SET NULL,
+  listing_used_item_id UUID REFERENCES listing_used_items(id) ON DELETE SET NULL,
   buyer_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   seller_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   custom_offer_id UUID REFERENCES custom_offers(id) ON DELETE SET NULL,
@@ -322,6 +348,7 @@ CREATE TABLE orders (
   return_status TEXT CHECK (return_status IS NULL OR return_status IN ('pending', 'shipped', 'delivered')),
   return_created_at TIMESTAMPTZ,
   return_delivered_at TIMESTAMPTZ,
+  CHECK (num_nonnulls(listing_variant_id, listing_used_item_id) <= 1),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -329,6 +356,7 @@ CREATE TABLE orders (
 -- Create indexes for frequently queried columns
 CREATE INDEX idx_orders_listing_id ON orders(listing_id);
 CREATE INDEX idx_orders_listing_variant_id ON orders(listing_variant_id);
+CREATE INDEX idx_orders_listing_used_item_id ON orders(listing_used_item_id);
 CREATE INDEX idx_orders_buyer_id ON orders(buyer_id);
 CREATE INDEX idx_orders_seller_id ON orders(seller_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -489,6 +517,10 @@ CREATE TRIGGER prepare_listing_identity_before_write
 
 CREATE TRIGGER update_listing_variants_updated_at
   BEFORE UPDATE ON listing_variants
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER update_listing_used_items_updated_at
+  BEFORE UPDATE ON listing_used_items
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER update_orders_updated_at
@@ -701,6 +733,7 @@ ALTER TABLE integration_api_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE catalog_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listing_variants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE listing_used_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
@@ -849,6 +882,72 @@ CREATE POLICY "Sellers can delete listing variants" ON listing_variants
       SELECT 1
       FROM listings
       WHERE listings.id = listing_variants.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Everyone can read listing used items" ON listing_used_items
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_used_items.listing_id
+        AND (
+          listings.status = 'active'
+          OR listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+          OR EXISTS (
+            SELECT 1 FROM orders
+            WHERE orders.listing_id = listing_used_items.listing_id
+              AND (orders.buyer_id = auth.uid() OR orders.seller_id = auth.uid())
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can insert listing used items" ON listing_used_items
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_used_items.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can update listing used items" ON listing_used_items
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_used_items.listing_id
+        AND (
+          listings.seller_id = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+          )
+        )
+    )
+  );
+
+CREATE POLICY "Sellers can delete listing used items" ON listing_used_items
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1
+      FROM listings
+      WHERE listings.id = listing_used_items.listing_id
         AND (
           listings.seller_id = auth.uid()
           OR EXISTS (

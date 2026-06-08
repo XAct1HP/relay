@@ -3,7 +3,11 @@
 import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { resolveCatalogProductBySku } from "@/lib/catalog-server";
-import { InventoryUpsertError, upsertSellerSkuInventory } from "@/lib/inventory";
+import {
+  InventoryUpsertError,
+  type UsedInventoryCondition,
+  upsertSellerSkuInventory,
+} from "@/lib/inventory";
 
 interface PublishCatalogListingInput {
   sku: string;
@@ -20,14 +24,18 @@ interface PublishCatalogListingInput {
   imageUrl?: string | null;
   description?: string;
   images?: string[];
-  condition: "new" | "used_good" | "mixed";
   boxCondition: "perfect" | "good" | "damaged" | "no_box";
   approximateSizing: "lightweight" | "normal" | "heavy";
   variants: Array<{
     size: string;
     price: number;
     quantity: number;
-    condition?: "new" | "used";
+  }>;
+  usedItems?: Array<{
+    size: string;
+    price: number;
+    condition: UsedInventoryCondition;
+    conditionPhotoUrl: string;
   }>;
 }
 
@@ -46,6 +54,55 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
   }
 
   try {
+    const normalizedVariants = (input.variants || [])
+      .map((variant) => ({
+        size: String(variant.size || "").trim(),
+        price: Number(variant.price),
+        quantity: Number(variant.quantity),
+      }))
+      .filter((variant) => variant.size);
+
+    const normalizedUsedItems = (input.usedItems || [])
+      .map((item) => ({
+        size: String(item.size || "").trim(),
+        price: Number(item.price),
+        condition: item.condition,
+        conditionPhotoUrl: String(item.conditionPhotoUrl || "").trim(),
+      }))
+      .filter((item) => item.size || item.conditionPhotoUrl);
+
+    if (normalizedVariants.length === 0 && normalizedUsedItems.length === 0) {
+      return {
+        success: false as const,
+        error: "Add at least one DS/new row or one used pair before publishing.",
+      };
+    }
+
+    if (normalizedVariants.some((variant) => !variant.size || variant.price <= 0 || variant.quantity < 1)) {
+      return {
+        success: false as const,
+        error: "Each DS/new row must include a size, a positive price, and quantity of at least 1.",
+      };
+    }
+
+    if (
+      normalizedUsedItems.some(
+        (item) => !item.size || item.price <= 0 || !item.conditionPhotoUrl
+      )
+    ) {
+      return {
+        success: false as const,
+        error: "Each used pair must include a size, positive price, and condition photo.",
+      };
+    }
+
+    const derivedCondition =
+      normalizedVariants.length > 0 && normalizedUsedItems.length > 0
+        ? ("mixed" as const)
+        : normalizedUsedItems.length > 0
+        ? ("used_good" as const)
+        : ("new" as const);
+
     if (input.sneakerId) {
       try {
         const admin = createAdminClient();
@@ -86,12 +143,22 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
         nickname: input.nickname || catalogProduct?.nickname || undefined,
         description: input.description || catalogProduct?.description,
         images: input.images?.length ? input.images : catalogProduct?.images || [],
-        condition: input.condition,
+        condition: derivedCondition,
         box_condition: input.boxCondition,
         approx_sizing: input.approximateSizing,
         status: "active",
       },
-      variants: input.variants,
+      variants: normalizedVariants.map((variant) => ({
+        ...variant,
+        condition: "new",
+      })),
+      used_items: normalizedUsedItems.map((item) => ({
+        size: item.size,
+        price: item.price,
+        quantity: 1,
+        condition: item.condition,
+        condition_photo_url: item.conditionPhotoUrl,
+      })),
     });
 
     return {

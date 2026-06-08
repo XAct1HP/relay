@@ -11,6 +11,7 @@ import {
 
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
 type ListingCondition = "new" | "like_new" | "used_excellent" | "used_good" | "used_fair" | "mixed";
+export type UsedInventoryCondition = "like_new" | "used_excellent" | "used_good" | "used_fair";
 type BoxCondition = "perfect" | "good" | "damaged" | "no_box";
 type ApproxSizing = "lightweight" | "normal" | "heavy";
 
@@ -19,6 +20,15 @@ export interface InventoryUpsertVariantInput {
   quantity: number;
   price: number;
   condition?: VariantCondition;
+}
+
+export interface InventoryUsedItemInput {
+  size: string;
+  price: number;
+  quantity?: number;
+  condition?: UsedInventoryCondition | "used";
+  condition_photo_url: string;
+  is_active?: boolean;
 }
 
 export interface InventoryUpsertInput {
@@ -38,6 +48,7 @@ export interface InventoryUpsertInput {
     status?: ListingStatus | null;
   };
   variants: InventoryUpsertVariantInput[];
+  used_items?: InventoryUsedItemInput[];
 }
 
 export interface InventoryUpsertResult {
@@ -45,6 +56,7 @@ export interface InventoryUpsertResult {
   normalizedSku: string;
   merged: boolean;
   variantCount: number;
+  usedItemCount: number;
   status: ListingStatus;
 }
 
@@ -124,6 +136,14 @@ interface NormalizedInventoryInput {
     status: ListingStatus;
   };
   variants: VariantInput[];
+  usedItems: Array<{
+    size: string;
+    price: number;
+    quantity: 1;
+    condition: UsedInventoryCondition;
+    conditionPhotoUrl: string;
+    isActive: boolean;
+  }>;
 }
 
 export async function upsertSellerSkuInventory(
@@ -163,12 +183,14 @@ export async function upsertSellerSkuInventory(
     }
 
     await mergeListingVariants(supabase, existingListing.id, normalized.variants);
+    await upsertListingUsedItems(supabase, existingListing.id, normalized.usedItems);
 
     return {
       listingId: existingListing.id,
       normalizedSku: normalized.normalizedSku,
       merged: true,
       variantCount: normalized.variants.length,
+      usedItemCount: normalized.usedItems.length,
       status: existingListing.status,
     };
   }
@@ -206,12 +228,14 @@ export async function upsertSellerSkuInventory(
 
       if (conflictedListing) {
         await mergeListingVariants(supabase, conflictedListing.id, normalized.variants);
+        await upsertListingUsedItems(supabase, conflictedListing.id, normalized.usedItems);
 
         return {
           listingId: conflictedListing.id,
           normalizedSku: normalized.normalizedSku,
           merged: true,
           variantCount: normalized.variants.length,
+          usedItemCount: normalized.usedItems.length,
           status: conflictedListing.status,
         };
       }
@@ -224,12 +248,14 @@ export async function upsertSellerSkuInventory(
   }
 
   await mergeListingVariants(supabase, createdListing.id, normalized.variants);
+  await upsertListingUsedItems(supabase, createdListing.id, normalized.usedItems);
 
   return {
     listingId: createdListing.id,
     normalizedSku: normalized.normalizedSku,
     merged: false,
     variantCount: normalized.variants.length,
+    usedItemCount: normalized.usedItems.length,
     status: createdListing.status as ListingStatus,
   };
 }
@@ -467,10 +493,6 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
     }))
     .filter((variant) => variant.size);
 
-  if (variants.length === 0) {
-    throw new InventoryUpsertError("missing_variants", "At least one valid variant is required.");
-  }
-
   for (const variant of variants) {
     if (!Number.isFinite(variant.price) || variant.price <= 0) {
       throw new InventoryUpsertError(
@@ -484,6 +506,62 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
         `Variant size ${variant.size} must have an integer quantity greater than or equal to 0.`
       );
     }
+    if (variant.condition === "used") {
+      throw new InventoryUpsertError(
+        "used_variants_not_supported",
+        "Used inventory must be submitted as itemized used_items with exactly one condition photo per pair."
+      );
+    }
+  }
+
+  const usedItems = (input.used_items || [])
+    .map((item) => ({
+      size: String(item.size || "").trim(),
+      price: Number(item.price),
+      quantity: item.quantity === undefined ? 1 : Number(item.quantity),
+      condition: normalizeUsedInventoryCondition(item.condition),
+      conditionPhotoUrl: String(item.condition_photo_url || "").trim(),
+      isActive: item.is_active !== false,
+    }))
+    .filter((item) => item.size || item.conditionPhotoUrl);
+  const seenUsedItemPhotoRefs = new Set<string>();
+
+  for (const item of usedItems) {
+    if (!item.size) {
+      throw new InventoryUpsertError("invalid_used_item_size", "Each used inventory unit must include a size.");
+    }
+    if (!Number.isFinite(item.price) || item.price <= 0) {
+      throw new InventoryUpsertError(
+        "invalid_used_item_price",
+        `Used inventory size ${item.size} must have a price greater than 0.`
+      );
+    }
+    if (item.quantity !== 1) {
+      throw new InventoryUpsertError(
+        "invalid_used_item_quantity",
+        `Used inventory size ${item.size} must have quantity exactly 1.`
+      );
+    }
+    if (!item.conditionPhotoUrl) {
+      throw new InventoryUpsertError(
+        "missing_used_item_photo",
+        `Used inventory size ${item.size} must include exactly one condition photo reference.`
+      );
+    }
+    if (seenUsedItemPhotoRefs.has(item.conditionPhotoUrl)) {
+      throw new InventoryUpsertError(
+        "duplicate_used_item_photo",
+        `Condition photo ${item.conditionPhotoUrl} cannot represent multiple used inventory units in the same listing.`
+      );
+    }
+    seenUsedItemPhotoRefs.add(item.conditionPhotoUrl);
+  }
+
+  if (variants.length === 0 && usedItems.length === 0) {
+    throw new InventoryUpsertError(
+      "missing_variants",
+      "At least one DS variant or one used inventory unit is required."
+    );
   }
 
   const product = input.product || {};
@@ -493,6 +571,16 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
   const description =
     product.description?.trim() ||
     `Catalog placeholder for SKU ${displaySku}. Update this listing when richer product data is available.`;
+  const inferredCondition = inferListingConditionFromInventory({
+    hasDsVariants: variants.length > 0,
+    hasUsedItems: usedItems.length > 0,
+  });
+  const normalizedListingCondition = normalizeListingCondition(product.condition) || inferredCondition;
+
+  validateListingConditionMatchesInventory(normalizedListingCondition, {
+    hasDsVariants: variants.length > 0,
+    hasUsedItems: usedItems.length > 0,
+  });
 
   return {
     sellerId,
@@ -506,13 +594,133 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
       nickname: product.nickname?.trim() || null,
       description,
       images: Array.isArray(product.images) ? product.images.filter(Boolean) : [],
-      condition: product.condition || "new",
+      condition: normalizedListingCondition,
       boxCondition: product.box_condition || "perfect",
       approxSizing: product.approx_sizing || "normal",
       status: product.status || "active",
     },
     variants,
+    usedItems: usedItems.map((item) => ({
+      size: item.size,
+      price: item.price,
+      quantity: 1,
+      condition: item.condition,
+      conditionPhotoUrl: item.conditionPhotoUrl,
+      isActive: item.isActive,
+    })),
   };
+}
+
+async function upsertListingUsedItems(
+  supabase: SupabaseClient,
+  listingId: string,
+  usedItems: NormalizedInventoryInput["usedItems"]
+): Promise<void> {
+  if (usedItems.length === 0) {
+    return;
+  }
+
+  const payload = usedItems.map((item) => ({
+    listing_id: listingId,
+    size: item.size,
+    price: item.price,
+    quantity: 1,
+    condition: item.condition,
+    condition_photo_url: item.conditionPhotoUrl,
+    is_active: item.isActive,
+  }));
+
+  const { error } = await supabase.from("listing_used_items").upsert(payload, {
+    onConflict: "listing_id,condition_photo_url",
+  });
+
+  if (error) {
+    throw new InventoryUpsertError(
+      "used_item_upsert_failed",
+      error.message || "Failed to store itemized used inventory."
+    );
+  }
+}
+
+function normalizeListingCondition(
+  value: ListingCondition | null | undefined
+): ListingCondition | null {
+  if (!value) {
+    return null;
+  }
+
+  if (
+    value === "new" ||
+    value === "like_new" ||
+    value === "used_excellent" ||
+    value === "used_good" ||
+    value === "used_fair" ||
+    value === "mixed"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeUsedInventoryCondition(
+  value: InventoryUsedItemInput["condition"]
+): UsedInventoryCondition {
+  if (value === "like_new" || value === "used_excellent" || value === "used_fair") {
+    return value;
+  }
+
+  return "used_good";
+}
+
+function inferListingConditionFromInventory(input: {
+  hasDsVariants: boolean;
+  hasUsedItems: boolean;
+}): ListingCondition {
+  if (input.hasDsVariants && input.hasUsedItems) {
+    return "mixed";
+  }
+
+  if (input.hasUsedItems) {
+    return "used_good";
+  }
+
+  return "new";
+}
+
+function validateListingConditionMatchesInventory(
+  condition: ListingCondition,
+  input: {
+    hasDsVariants: boolean;
+    hasUsedItems: boolean;
+  }
+) {
+  if (input.hasDsVariants && input.hasUsedItems) {
+    if (condition !== "mixed") {
+      throw new InventoryUpsertError(
+        "invalid_listing_condition",
+        "Listings that combine DS inventory and used inventory must use condition mixed."
+      );
+    }
+    return;
+  }
+
+  if (input.hasUsedItems) {
+    if (condition === "new" || condition === "mixed") {
+      throw new InventoryUpsertError(
+        "invalid_listing_condition",
+        "Used-only inventory must use a used listing condition."
+      );
+    }
+    return;
+  }
+
+  if (condition !== "new") {
+    throw new InventoryUpsertError(
+      "invalid_listing_condition",
+      "DS-only inventory must use the new listing condition."
+    );
+  }
 }
 
 async function findExistingSellerSkuListing(

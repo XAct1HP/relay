@@ -46,6 +46,19 @@ export interface ListingVariant {
   updated_at: string;
 }
 
+export interface ListingUsedItem {
+  id: string;
+  listing_id: string;
+  size: string;
+  price: number;
+  quantity: number;
+  condition: 'like_new' | 'used_excellent' | 'used_good' | 'used_fair';
+  condition_photo_url: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CatalogProduct {
   id: string;
   sku: string;
@@ -93,6 +106,7 @@ export interface Listing {
   updated_at: string;
   seller?: User;
   listing_variants?: ListingVariant[];
+  listing_used_items?: ListingUsedItem[];
 }
 
 // Social feed post
@@ -123,6 +137,7 @@ export interface Order {
   id: string;
   listing_id: string;
   listing_variant_id?: string | null;
+  listing_used_item_id?: string | null;
   buyer_id: string;
   seller_id: string;
   size: string;

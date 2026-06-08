@@ -5,6 +5,7 @@ import { resolveCatalogProductBySku } from "@/lib/catalog-server";
 import {
   bulkUpdateSellerInventory,
   InventoryUpsertError,
+  type UsedInventoryCondition,
   updateSellerListingVariant,
   upsertSellerSkuInventory,
 } from "@/lib/inventory";
@@ -20,9 +21,18 @@ interface ExternalInventoryVariantInput {
   condition?: unknown;
 }
 
+interface ExternalUsedInventoryItemInput {
+  size: unknown;
+  price: unknown;
+  quantity?: unknown;
+  condition?: unknown;
+  condition_photo_url?: unknown;
+}
+
 interface ExternalInventoryItemInput {
   sku: unknown;
   variants: unknown;
+  used_items?: unknown;
   condition?: unknown;
   box_condition?: unknown;
   approximate_sizing?: unknown;
@@ -49,11 +59,20 @@ interface NormalizedIntegrationVariant {
   condition: "new" | "used";
 }
 
+interface NormalizedIntegrationUsedItem {
+  size: string;
+  quantity: 1;
+  price: number;
+  condition: UsedInventoryCondition;
+  conditionPhotoUrl: string;
+}
+
 interface NormalizedIntegrationItem {
   itemIndex: number;
   originalSku: string;
   normalizedSku: string;
   variants: NormalizedIntegrationVariant[];
+  usedItems: NormalizedIntegrationUsedItem[];
   listingCondition: "new" | "used_good" | "mixed";
   boxCondition: "perfect" | "good" | "damaged" | "no_box";
   approximateSizing: "lightweight" | "normal" | "heavy";
@@ -76,6 +95,7 @@ interface NormalizedIntegrationItem {
 interface ExistingListingSnapshot {
   listingId?: string;
   variantSet: Set<string>;
+  usedItemPhotoSet: Set<string>;
 }
 
 interface SneakerLookupRecord {
@@ -287,10 +307,17 @@ export async function processIntegrationInventoryUpsert(
           status: "active",
         },
         variants: item.variants,
+        used_items: item.usedItems.map((usedItem) => ({
+          size: usedItem.size,
+          price: usedItem.price,
+          quantity: 1,
+          condition: usedItem.condition,
+          condition_photo_url: usedItem.conditionPhotoUrl,
+        })),
       });
 
       if (!existingListing) {
-        createdCount += item.variants.length;
+        createdCount += item.variants.length + item.usedItems.length;
       } else {
         for (const variant of item.variants) {
           const variantKey = getExistingVariantKey(variant.size, variant.condition);
@@ -301,9 +328,18 @@ export async function processIntegrationInventoryUpsert(
             existingListing.variantSet.add(variantKey);
           }
         }
+
+        for (const usedItem of item.usedItems) {
+          if (existingListing.usedItemPhotoSet.has(usedItem.conditionPhotoUrl)) {
+            updatedCount += 1;
+          } else {
+            createdCount += 1;
+            existingListing.usedItemPhotoSet.add(usedItem.conditionPhotoUrl);
+          }
+        }
       }
     } catch (error) {
-      skippedCount += item.variants.length;
+      skippedCount += item.variants.length + item.usedItems.length;
       itemErrors.push({
         item_index: item.itemIndex,
         sku: item.originalSku,
@@ -515,10 +551,14 @@ function validateIntegrationItems(items: unknown) {
     const conditionPhotoUrl = normalizeOptionalUrl(rawItem?.condition_photo_url);
     const rawVariants = Array.isArray(rawItem?.variants)
       ? (rawItem?.variants as ExternalInventoryVariantInput[])
-      : null;
+      : [];
+    const rawUsedItems = Array.isArray(rawItem?.used_items)
+      ? (rawItem?.used_items as ExternalUsedInventoryItemInput[])
+      : [];
+    const rowCount = getIntegrationItemRowCount(rawVariants, rawUsedItems);
 
     if (!normalizedSku) {
-      skippedCount += rawVariants?.length || 1;
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku || undefined,
@@ -528,19 +568,19 @@ function validateIntegrationItems(items: unknown) {
       continue;
     }
 
-    if (!rawVariants || rawVariants.length === 0) {
+    if (rawVariants.length === 0 && rawUsedItems.length === 0) {
       skippedCount += 1;
       errors.push({
         item_index: itemIndex,
         sku: rawSku,
-        field: "variants",
-        message: "At least one variant is required.",
+        field: "item",
+        message: "At least one DS variant or one used inventory unit is required.",
       });
       continue;
     }
 
     if (!boxCondition) {
-      skippedCount += rawVariants?.length || 1;
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku || undefined,
@@ -551,7 +591,7 @@ function validateIntegrationItems(items: unknown) {
     }
 
     if (!approximateSizing) {
-      skippedCount += rawVariants?.length || 1;
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku || undefined,
@@ -562,7 +602,7 @@ function validateIntegrationItems(items: unknown) {
     }
 
     if (rawItem?.condition !== undefined && !requestedCondition) {
-      skippedCount += rawVariants?.length || 1;
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku || undefined,
@@ -573,7 +613,7 @@ function validateIntegrationItems(items: unknown) {
     }
 
     if (rawItem?.condition_photo_url !== undefined && !conditionPhotoUrl) {
-      skippedCount += rawVariants?.length || 1;
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku || undefined,
@@ -584,7 +624,10 @@ function validateIntegrationItems(items: unknown) {
     }
 
     const variants: NormalizedIntegrationVariant[] = [];
+    const usedItems: NormalizedIntegrationUsedItem[] = [];
     const seenVariants = new Set<string>();
+    const seenUsedItemPhotos = new Set<string>();
+    const legacyUsedVariants: NormalizedIntegrationVariant[] = [];
     let hasVariantError = false;
 
     for (const rawVariant of rawVariants) {
@@ -640,6 +683,38 @@ function validateIntegrationItems(items: unknown) {
         continue;
       }
 
+      if (variantCondition === "used") {
+        if (rawUsedItems.length > 0) {
+          hasVariantError = true;
+          errors.push({
+            item_index: itemIndex,
+            sku: rawSku,
+            field: "item",
+            message: "Do not send used variants in variants when used_items are present. Used inventory must be itemized in used_items.",
+          });
+          continue;
+        }
+
+        if (quantity !== 1) {
+          hasVariantError = true;
+          errors.push({
+            item_index: itemIndex,
+            sku: rawSku,
+            field: "quantity",
+            message: `Used variant size ${size} must have quantity exactly 1.`,
+          });
+          continue;
+        }
+
+        legacyUsedVariants.push({
+          size,
+          quantity,
+          price,
+          condition: "used",
+        });
+        continue;
+      }
+
       const normalizedVariantKey = getExistingVariantKey(size.toUpperCase(), variantCondition);
       if (seenVariants.has(normalizedVariantKey)) {
         hasVariantError = true;
@@ -661,58 +736,156 @@ function validateIntegrationItems(items: unknown) {
       });
     }
 
-    if (hasVariantError || variants.length === 0) {
-      skippedCount += rawVariants.length;
+    if (hasVariantError) {
+      skippedCount += rowCount;
       continue;
     }
 
-    const effectiveCondition = requestedCondition || inferListingConditionFromVariants(variants);
+    for (const rawUsedItem of rawUsedItems) {
+      const size = String(rawUsedItem?.size || "").trim();
+      const quantity = rawUsedItem?.quantity === undefined ? 1 : Number(rawUsedItem.quantity);
+      const price = Number(rawUsedItem?.price);
+      const usedCondition = normalizeIntegrationUsedItemCondition(rawUsedItem?.condition);
+      const usedPhotoUrl = normalizeOptionalUrl(rawUsedItem?.condition_photo_url);
 
-    if (requestedCondition === "new" && variants.some((variant) => variant.condition !== "new")) {
-      skippedCount += rawVariants.length;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "New listings can only include new variants.",
-      });
-      continue;
-    }
+      if (!size) {
+        hasVariantError = true;
+        errors.push({
+          item_index: itemIndex,
+          sku: rawSku,
+          field: "size",
+          message: "Used inventory size is required.",
+        });
+        continue;
+      }
 
-    if (requestedCondition === "used_good" && variants.some((variant) => variant.condition !== "used")) {
-      skippedCount += rawVariants.length;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "Used listings can only include used variants.",
-      });
-      continue;
-    }
+      if (!Number.isFinite(price) || price <= 0) {
+        hasVariantError = true;
+        errors.push({
+          item_index: itemIndex,
+          sku: rawSku,
+          field: "price",
+          message: `Used inventory size ${size} must have a price greater than 0.`,
+        });
+        continue;
+      }
 
-    if (effectiveCondition === "mixed") {
-      const hasNewVariant = variants.some((variant) => variant.condition === "new");
-      const hasUsedVariant = variants.some((variant) => variant.condition === "used");
+      if (quantity !== 1) {
+        hasVariantError = true;
+        errors.push({
+          item_index: itemIndex,
+          sku: rawSku,
+          field: "quantity",
+          message: `Used inventory size ${size} must have quantity exactly 1.`,
+        });
+        continue;
+      }
 
-      if (!hasNewVariant || !hasUsedVariant) {
-        skippedCount += rawVariants.length;
+      if (!usedPhotoUrl) {
+        hasVariantError = true;
         errors.push({
           item_index: itemIndex,
           sku: rawSku,
           field: "item",
-          message: "New + Used listings must include at least one new variant and one used variant.",
+          message: `Used inventory size ${size} must include a valid condition_photo_url.`,
         });
         continue;
       }
+
+      if (seenUsedItemPhotos.has(usedPhotoUrl)) {
+        hasVariantError = true;
+        errors.push({
+          item_index: itemIndex,
+          sku: rawSku,
+          field: "item",
+          message: `Condition photo ${usedPhotoUrl} cannot represent multiple used pairs for SKU ${rawSku}.`,
+        });
+        continue;
+      }
+
+      seenUsedItemPhotos.add(usedPhotoUrl);
+      usedItems.push({
+        size,
+        quantity: 1,
+        price,
+        condition: usedCondition,
+        conditionPhotoUrl: usedPhotoUrl,
+      });
     }
 
-    if ((effectiveCondition === "used_good" || effectiveCondition === "mixed") && !conditionPhotoUrl) {
-      skippedCount += rawVariants.length;
+    if (hasVariantError) {
+      skippedCount += rowCount;
+      continue;
+    }
+
+    if (legacyUsedVariants.length > 1) {
+      skippedCount += rowCount;
       errors.push({
         item_index: itemIndex,
         sku: rawSku,
         field: "item",
-        message: "Used and New + Used listings require a condition photo.",
+        message: "Used inventory must be itemized in used_items. One condition photo cannot represent multiple used pairs.",
+      });
+      continue;
+    }
+
+    if (legacyUsedVariants.length === 1) {
+      if (!conditionPhotoUrl) {
+        skippedCount += rowCount;
+        errors.push({
+          item_index: itemIndex,
+          sku: rawSku,
+          field: "item",
+          message: "Used inventory requires a condition photo.",
+        });
+        continue;
+      }
+
+      usedItems.push({
+        size: legacyUsedVariants[0].size,
+        quantity: 1,
+        price: legacyUsedVariants[0].price,
+        condition: inferUsedItemConditionFromListingCondition(requestedCondition),
+        conditionPhotoUrl,
+      });
+      seenUsedItemPhotos.add(conditionPhotoUrl);
+    }
+
+    const effectiveCondition = inferListingConditionFromInventory({
+      hasNewVariants: variants.length > 0,
+      hasUsedItems: usedItems.length > 0,
+      requestedCondition,
+    });
+
+    if (requestedCondition === "new" && usedItems.length > 0) {
+      skippedCount += rowCount;
+      errors.push({
+        item_index: itemIndex,
+        sku: rawSku,
+        field: "item",
+        message: "New listings can only include DS inventory.",
+      });
+      continue;
+    }
+
+    if (requestedCondition === "used_good" && variants.length > 0) {
+      skippedCount += rowCount;
+      errors.push({
+        item_index: itemIndex,
+        sku: rawSku,
+        field: "item",
+        message: "Used listings cannot include DS variants. Put used inventory in used_items only.",
+      });
+      continue;
+    }
+
+    if (requestedCondition === "mixed" && (variants.length === 0 || usedItems.length === 0)) {
+      skippedCount += rowCount;
+      errors.push({
+        item_index: itemIndex,
+        sku: rawSku,
+        field: "item",
+        message: "New + Used listings must include at least one DS variant and one used inventory unit.",
       });
       continue;
     }
@@ -724,10 +897,11 @@ function validateIntegrationItems(items: unknown) {
       originalSku: rawSku.toUpperCase(),
       normalizedSku,
       variants,
+      usedItems,
       listingCondition: effectiveCondition,
       boxCondition,
       approximateSizing,
-      conditionPhotoUrl,
+      conditionPhotoUrl: usedItems[0]?.conditionPhotoUrl || conditionPhotoUrl,
       metadata: {
         brand: asOptionalString(rawItem?.brand),
         name: asOptionalString(rawItem?.name) || asOptionalString(rawItem?.title),
@@ -815,17 +989,63 @@ function normalizeIntegrationVariantCondition(
   return null;
 }
 
-function inferListingConditionFromVariants(
-  variants: Array<{ condition: "new" | "used" }>
-): "new" | "used_good" | "mixed" {
-  const hasNew = variants.some((variant) => variant.condition === "new");
-  const hasUsed = variants.some((variant) => variant.condition === "used");
+function normalizeIntegrationUsedItemCondition(value: unknown): UsedInventoryCondition {
+  if (value === null || value === undefined || value === "" || value === "used") {
+    return "used_good";
+  }
 
-  if (hasNew && hasUsed) {
+  const normalized = String(value).trim().toLowerCase();
+
+  if (normalized === "like_new" || normalized === "like new") {
+    return "like_new";
+  }
+
+  if (normalized === "used_excellent" || normalized === "used excellent") {
+    return "used_excellent";
+  }
+
+  if (normalized === "used_fair" || normalized === "used fair") {
+    return "used_fair";
+  }
+
+  return "used_good";
+}
+
+function inferUsedItemConditionFromListingCondition(
+  listingCondition: "new" | "used_good" | "mixed" | null
+): UsedInventoryCondition {
+  if (listingCondition === "new") {
+    return "used_good";
+  }
+
+  return "used_good";
+}
+
+function inferListingConditionFromInventory(input: {
+  hasNewVariants: boolean;
+  hasUsedItems: boolean;
+  requestedCondition: "new" | "used_good" | "mixed" | null;
+}): "new" | "used_good" | "mixed" {
+  if (input.requestedCondition === "mixed") {
     return "mixed";
   }
 
-  return hasUsed ? "used_good" : "new";
+  if (input.hasNewVariants && input.hasUsedItems) {
+    return "mixed";
+  }
+
+  if (input.hasUsedItems) {
+    return "used_good";
+  }
+
+  return "new";
+}
+
+function getIntegrationItemRowCount(
+  rawVariants: ExternalInventoryVariantInput[],
+  rawUsedItems: ExternalUsedInventoryItemInput[]
+) {
+  return rawVariants.length + rawUsedItems.length || 1;
 }
 
 function normalizeBoxCondition(
@@ -1091,7 +1311,7 @@ async function loadExistingSellerSkuListings(
 
   const { data, error } = await supabase
     .from("listings")
-    .select("id, sku_normalized, listing_variants(size, condition)")
+    .select("id, sku_normalized, listing_variants(size, condition), listing_used_items(condition_photo_url)")
     .eq("seller_id", sellerId)
     .in("sku_normalized", uniqueNormalizedSkus)
     .neq("status", "removed");
@@ -1118,6 +1338,11 @@ async function loadExistingSellerSkuListings(
               variant.condition === "used" ? "used" : "new"
             )
           )
+          .filter(Boolean))
+      ),
+      usedItemPhotoSet: new Set(
+        (((listing.listing_used_items as Array<{ condition_photo_url?: string }> | null) || [])
+          .map((usedItem) => String(usedItem.condition_photo_url || "").trim())
           .filter(Boolean))
       ),
     });

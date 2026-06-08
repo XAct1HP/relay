@@ -2,8 +2,9 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { BRANDS, BOX_CONDITIONS, APPROX_SIZINGS, SHOE_SIZES } from "@/lib/constants";
+import { BRANDS, BOX_CONDITIONS, APPROX_SIZINGS, CONDITIONS, SHOE_SIZES } from "@/lib/constants";
 import { buildLegacySizes, isManualListingBrand, mergeListingVariants } from "@/lib/listings";
+import type { UsedInventoryCondition } from "@/lib/inventory";
 import { calculateFees, formatCurrency } from "@/lib/utils";
 import { publishCatalogListingAction } from "@/app/sell/actions";
 import { Camera, Plus, X, ChevronLeft, ChevronRight as ChevronRightIcon, DollarSign, Package, Check, ChevronRight, ScanSearch, Sparkles } from "lucide-react";
@@ -11,12 +12,26 @@ import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import { normalizeSku } from "../../../lib/sneakers/normalizeSku";
 
-interface SizeRow {
+interface ManualSizeRow {
   id: string;
   size: string;
   price: number;
   quantity: number;
-  condition: "new" | "used";
+}
+
+interface CatalogDsRow {
+  id: string;
+  size: string;
+  price: number;
+  quantity: number;
+}
+
+interface CatalogUsedRow {
+  id: string;
+  size: string;
+  price: number;
+  condition: UsedInventoryCondition;
+  photo: UploadedPhoto | null;
 }
 
 interface UploadedPhoto {
@@ -59,20 +74,21 @@ type Step = 1 | 2 | 3 | 4;
 type ListingMode = "catalog" | "manual";
 
 const STEP_LABELS: Record<ListingMode, string[]> = {
-  catalog: ["Catalog Product", "Sizes & Pricing", "Media & Notes", "Review & Publish"],
+  catalog: ["Catalog Product", "Inventory", "Media & Notes", "Review & Publish"],
   manual: ["Shoe Details", "Sizes & Pricing", "Photos & Description", "Review & Publish"],
 };
-
-const CATALOG_CONDITION_OPTIONS = [
-  { value: "new", label: "New", description: "Relay uses the product gallery images only." },
-  { value: "used_good", label: "Used", description: "Add at least one seller photo so buyers can assess condition." },
-  { value: "mixed", label: "New + Used", description: "Set the condition for each size row in the next step." },
-] as const;
 
 const MANUAL_CONDITION_OPTIONS = [
   { value: "new", label: "New", description: "Never worn, original box and tags" },
   { value: "used_good", label: "Used", description: "Wear is visible, but the pair remains sellable." },
 ] as const;
+
+const USED_PAIR_CONDITION_OPTIONS: UsedInventoryCondition[] = [
+  "like_new",
+  "used_excellent",
+  "used_good",
+  "used_fair",
+];
 
 function getConditionDisplayLabel(value: string): string {
   if (value === "new") {
@@ -86,16 +102,87 @@ function getConditionDisplayLabel(value: string): string {
   return value ? "Used" : "";
 }
 
-function getVariantConditionLabel(value: "new" | "used"): string {
-  return value === "used" ? "Used" : "New";
+function getUsedConditionLabel(value: UsedInventoryCondition): string {
+  return CONDITIONS[value].label;
 }
 
 function getDefaultVariantCondition(listingCondition: string): "new" | "used" {
   return listingCondition === "used_good" ? "used" : "new";
 }
 
-function getConditionPhotoLimitMessage(): string {
-  return "Used and mixed catalog listings require exactly 1 seller condition photo.";
+function createRowId(): string {
+  return Math.random().toString(36).slice(2);
+}
+
+function createUploadedPhoto(file: File): UploadedPhoto {
+  return {
+    id: createRowId(),
+    url: URL.createObjectURL(file),
+    file,
+  };
+}
+
+function createManualSizeRow(): ManualSizeRow {
+  return {
+    id: createRowId(),
+    size: "",
+    price: 0,
+    quantity: 1,
+  };
+}
+
+function createCatalogDsRow(): CatalogDsRow {
+  return {
+    id: createRowId(),
+    size: "",
+    price: 0,
+    quantity: 1,
+  };
+}
+
+function createCatalogUsedRow(): CatalogUsedRow {
+  return {
+    id: createRowId(),
+    size: "",
+    price: 0,
+    condition: "used_good",
+    photo: null,
+  };
+}
+
+function getCatalogListingCondition(
+  dsRows: CatalogDsRow[],
+  usedRows: CatalogUsedRow[]
+): "new" | "used_good" | "mixed" | "" {
+  if (dsRows.length > 0 && usedRows.length > 0) {
+    return "mixed";
+  }
+
+  if (usedRows.length > 0) {
+    return "used_good";
+  }
+
+  if (dsRows.length > 0) {
+    return "new";
+  }
+
+  return "";
+}
+
+function getCatalogInventoryLabel(condition: "new" | "used_good" | "mixed" | ""): string {
+  if (condition === "mixed") {
+    return "DS + Used";
+  }
+
+  if (condition === "used_good") {
+    return "Used";
+  }
+
+  if (condition === "new") {
+    return "DS / New";
+  }
+
+  return "Not set";
 }
 
 async function uploadListingPhoto(file: File): Promise<{ url: string } | { error: string }> {
@@ -147,11 +234,12 @@ export default function SellPage() {
   const [approximateSizing, setApproximateSizing] = useState("");
 
   // Step 2: Sizes & Pricing
-  const [sizes, setSizes] = useState<SizeRow[]>([]);
+  const [sizes, setSizes] = useState<ManualSizeRow[]>([]);
+  const [catalogDsRows, setCatalogDsRows] = useState<CatalogDsRow[]>([]);
+  const [catalogUsedRows, setCatalogUsedRows] = useState<CatalogUsedRow[]>([]);
 
   // Step 3: Photos & Description
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
-  const [draggedPhotos, setDraggedPhotos] = useState<{ [key: string]: number }>({});
   const [description, setDescription] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
 
@@ -171,32 +259,30 @@ export default function SellPage() {
   const linkedSneakerId = lastLookedUpNormalizedSku === normalizedSku ? lookedUpSneakerId : null;
   const activeLookupGalleryImages = lastLookedUpNormalizedSku === normalizedSku ? lookupGalleryImages : [];
   const activeLookupImageUrl = lastLookedUpNormalizedSku === normalizedSku ? lookupImageUrl : "";
-  const isUsedCatalogListing = isCatalogListing && condition === "used_good";
-  const isMixedCatalogListing = isCatalogListing && condition === "mixed";
-  const shouldUseSellerPhotos = isManualListing || isUsedCatalogListing || isMixedCatalogListing;
-  const maxSellerPhotoCount = isCatalogListing && (isUsedCatalogListing || isMixedCatalogListing) ? 1 : 10;
-  const hasUnusedSellerPhotos = isCatalogListing && condition === "new" && photos.length > 0;
+  const catalogListingCondition = getCatalogListingCondition(catalogDsRows, catalogUsedRows);
+  const hasCatalogUsedInventory = catalogUsedRows.length > 0;
+  const shouldUseSellerPhotos = isManualListing;
+  const maxSellerPhotoCount = 10;
   const isStep1Valid =
-    condition &&
     boxCondition &&
     approximateSizing &&
     !!modelName &&
     !!brand &&
+    (isManualListing ? !!condition : true) &&
     (isCatalogListing ? !!normalizedSku : true);
 
   // Step 2 Validation
-  const isStep2Valid =
-    sizes.length > 0 &&
-    sizes.every((s) => s.size && s.price > 0 && s.quantity > 0 && (!isMixedCatalogListing || Boolean(s.condition)));
+  const isCatalogStep2Valid =
+    (catalogDsRows.length > 0 || catalogUsedRows.length > 0) &&
+    catalogDsRows.every((row) => row.size && row.price > 0 && row.quantity > 0) &&
+    catalogUsedRows.every((row) => row.size && row.price > 0 && !!row.photo);
+  const isManualStep2Valid = sizes.length > 0 && sizes.every((s) => s.size && s.price > 0 && s.quantity > 0);
+  const isStep2Valid = isCatalogListing ? isCatalogStep2Valid : isManualStep2Valid;
 
   // Step 3 Validation
   const isStep3Valid =
     description.trim().length >= 4 &&
-    (isManualListing
-      ? photos.length > 0
-      : isUsedCatalogListing || isMixedCatalogListing
-      ? photos.length === 1
-      : true);
+    (isManualListing ? photos.length > 0 : true);
 
   const handleNextStep = () => {
     if (currentStep === 1 && isStep1Valid) {
@@ -221,11 +307,16 @@ export default function SellPage() {
     setSkuLookupSource(null);
     setPublishSuccess(false);
     setPublishedWasMerged(false);
+    setCatalogDsRows([]);
+    setCatalogUsedRows([]);
+    setSizes([]);
+    setPhotos([]);
 
     if (nextMode === "catalog") {
       if (isManualListingBrand(brand)) {
         setBrand("");
       }
+      setCondition("");
     } else {
       setSku("");
       setCatalogModel("");
@@ -323,54 +414,83 @@ export default function SellPage() {
 
   // Size Management
   const addSize = () => {
-    setSizes([
-      ...sizes,
-      {
-        id: Math.random().toString(),
-        size: "",
-        price: 0,
-        quantity: 1,
-        condition: getDefaultVariantCondition(condition),
-      },
-    ]);
+    setSizes((prev) => [...prev, createManualSizeRow()]);
   };
 
-  const updateSize = (id: string, field: string, value: any) => {
-    setSizes(sizes.map(s => (s.id === id ? { ...s, [field]: value } : s)));
+  const updateSize = (id: string, field: keyof Omit<ManualSizeRow, "id">, value: string | number) => {
+    setSizes((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
   };
 
   const removeSize = (id: string) => {
-    setSizes(sizes.filter(s => s.id !== id));
+    setSizes((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const addCatalogDsRow = () => {
+    setCatalogDsRows((prev) => [...prev, createCatalogDsRow()]);
+  };
+
+  const updateCatalogDsRow = (
+    id: string,
+    field: keyof Omit<CatalogDsRow, "id">,
+    value: string | number
+  ) => {
+    setCatalogDsRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  };
+
+  const removeCatalogDsRow = (id: string) => {
+    setCatalogDsRows((prev) => prev.filter((row) => row.id !== id));
+  };
+
+  const addCatalogUsedRow = () => {
+    setCatalogUsedRows((prev) => [...prev, createCatalogUsedRow()]);
+  };
+
+  const updateCatalogUsedRow = (
+    id: string,
+    field: "size" | "price" | "condition",
+    value: string | number
+  ) => {
+    setCatalogUsedRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const updateCatalogUsedPhoto = (id: string, file: File | null) => {
+    setCatalogUsedRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              photo: file ? createUploadedPhoto(file) : null,
+            }
+          : row
+      )
+    );
+  };
+
+  const removeCatalogUsedRow = (id: string) => {
+    setCatalogUsedRows((prev) => prev.filter((row) => row.id !== id));
   };
 
   // Photo Management
   const handlePhotoUpload = (files: FileList | null) => {
     if (!files) return;
 
-    if (maxSellerPhotoCount === 1 && files.length > 1) {
-      alert(getConditionPhotoLimitMessage());
-    }
-
     const availableSlots = Math.max(maxSellerPhotoCount - photos.length, 0);
     if (availableSlots <= 0) {
-      alert(maxSellerPhotoCount === 1 ? getConditionPhotoLimitMessage() : "You have reached the photo limit for this listing.");
+      alert("You have reached the photo limit for this listing.");
       return;
     }
 
     const newPhotos: UploadedPhoto[] = [];
-    Array.from(files).forEach(file => {
+    Array.from(files).forEach((file) => {
       if (file.type.startsWith("image/") && newPhotos.length < availableSlots) {
-        const url = URL.createObjectURL(file);
-        newPhotos.push({
-          id: Math.random().toString(),
-          url,
-          file,
-        });
+        newPhotos.push(createUploadedPhoto(file));
       }
     });
 
     if (newPhotos.length > 0) {
-      setPhotos(prev => [...prev, ...newPhotos]);
+      setPhotos((prev) => [...prev, ...newPhotos]);
     }
   };
 
@@ -390,7 +510,7 @@ export default function SellPage() {
   };
 
   const removePhoto = (id: string) => {
-    setPhotos(photos.filter(p => p.id !== id));
+    setPhotos((prev) => prev.filter((p) => p.id !== id));
   };
 
   const handlePhotoReorder = (fromIndex: number, toIndex: number) => {
@@ -410,51 +530,47 @@ export default function SellPage() {
 
     try {
       const supabase = createClient();
-
-      // Upload photos to storage
-      const imageUrls: string[] = [];
-      const uploadErrors: string[] = [];
-      if (photos.length > 0) {
-        for (const photo of photos) {
-          const uploadResult = await uploadListingPhoto(photo.file);
-
-          if ("error" in uploadResult) {
-            console.error("Upload error:", uploadResult.error);
-            uploadErrors.push(uploadResult.error);
-            continue;
-          }
-
-          imageUrls.push(uploadResult.url);
-        }
-      }
-
-      if (uploadErrors.length > 0) {
-        alert(`Photo upload failed: ${uploadErrors[0]}`);
-        return;
-      }
-
-      if (shouldUseSellerPhotos && photos.length > 0 && imageUrls.length !== photos.length) {
-        alert("Not all seller photos finished uploading. Please try again before publishing.");
-        return;
-      }
-
-      if ((isUsedCatalogListing || isMixedCatalogListing) && imageUrls.length === 0) {
-        alert("At least one seller condition photo must upload successfully before publishing.");
-        return;
-      }
-
       const catalogImageUrls = activeLookupGalleryImages.length > 0
         ? activeLookupGalleryImages
         : activeLookupImageUrl
         ? [activeLookupImageUrl]
         : [];
-      const finalImageUrls = isCatalogListing
-        ? condition === "new"
-          ? catalogImageUrls
-          : [...catalogImageUrls, ...imageUrls.filter((url) => !catalogImageUrls.includes(url))]
-        : imageUrls;
 
       if (isCatalogListing) {
+        if (!isCatalogStep2Valid) {
+          alert("Complete every DS/new row and add a condition photo for every used pair before publishing.");
+          return;
+        }
+
+        const uploadedUsedItems: Array<{
+          size: string;
+          price: number;
+          condition: UsedInventoryCondition;
+          conditionPhotoUrl: string;
+        }> = [];
+
+        for (const usedRow of catalogUsedRows) {
+          if (!usedRow.photo) {
+            alert("Every used pair needs its own condition photo before publishing.");
+            return;
+          }
+
+          const uploadResult = await uploadListingPhoto(usedRow.photo.file);
+
+          if ("error" in uploadResult) {
+            console.error("Upload error:", uploadResult.error);
+            alert(`Photo upload failed: ${uploadResult.error}`);
+            return;
+          }
+
+          uploadedUsedItems.push({
+            size: usedRow.size,
+            price: usedRow.price,
+            condition: usedRow.condition,
+            conditionPhotoUrl: uploadResult.url,
+          });
+        }
+
         const result = await publishCatalogListingAction({
           sku: sku,
           sneakerId: linkedSneakerId,
@@ -469,16 +585,15 @@ export default function SellPage() {
           galleryImages: catalogImageUrls,
           imageUrl: activeLookupImageUrl || null,
           description,
-          images: finalImageUrls,
-          condition: condition as "new" | "used_good" | "mixed",
+          images: catalogImageUrls,
           boxCondition: boxCondition as "perfect" | "good" | "damaged" | "no_box",
           approximateSizing: approximateSizing as "lightweight" | "normal" | "heavy",
-          variants: sizes.map((s) => ({
+          variants: catalogDsRows.map((s) => ({
             size: s.size,
             price: s.price,
             quantity: s.quantity,
-            condition: isMixedCatalogListing ? s.condition : getDefaultVariantCondition(condition),
           })),
+          usedItems: uploadedUsedItems,
         });
 
         if (!result.success) {
@@ -488,12 +603,39 @@ export default function SellPage() {
 
         setPublishedWasMerged(result.merged);
       } else {
+        const imageUrls: string[] = [];
+        const uploadErrors: string[] = [];
+        if (photos.length > 0) {
+          for (const photo of photos) {
+            const uploadResult = await uploadListingPhoto(photo.file);
+
+            if ("error" in uploadResult) {
+              console.error("Upload error:", uploadResult.error);
+              uploadErrors.push(uploadResult.error);
+              continue;
+            }
+
+            imageUrls.push(uploadResult.url);
+          }
+        }
+
+        if (uploadErrors.length > 0) {
+          alert(`Photo upload failed: ${uploadErrors[0]}`);
+          return;
+        }
+
+        if (photos.length > 0 && imageUrls.length !== photos.length) {
+          alert("Not all seller photos finished uploading. Please try again before publishing.");
+          return;
+        }
+
+        const finalImageUrls = imageUrls;
         const legacySizes = buildLegacySizes(
           sizes.map((s) => ({
             size: s.size,
             price: s.price,
             quantity: s.quantity,
-            condition: isMixedCatalogListing ? s.condition : getDefaultVariantCondition(condition),
+            condition: getDefaultVariantCondition(condition),
           }))
         );
 
@@ -565,6 +707,8 @@ export default function SellPage() {
     setBoxCondition("");
     setApproximateSizing("");
     setSizes([]);
+    setCatalogDsRows([]);
+    setCatalogUsedRows([]);
     setPhotos([]);
     setDescription("");
     setAdditionalNotes("");
@@ -576,13 +720,24 @@ export default function SellPage() {
   };
 
   // Calculate total potential earnings
-  const totalEarnings = sizes.reduce((sum, size) => {
-    if (size.price && size.quantity) {
-      const fees = calculateFees(size.price);
-      return sum + fees.sellerEarnings * size.quantity;
-    }
-    return sum;
-  }, 0);
+  const totalEarnings = isCatalogListing
+    ? [
+        ...catalogDsRows.map((row) => ({ price: row.price, quantity: row.quantity })),
+        ...catalogUsedRows.map((row) => ({ price: row.price, quantity: 1 })),
+      ].reduce((sum, row) => {
+        if (row.price && row.quantity) {
+          const fees = calculateFees(row.price);
+          return sum + fees.sellerEarnings * row.quantity;
+        }
+        return sum;
+      }, 0)
+    : sizes.reduce((sum, size) => {
+        if (size.price && size.quantity) {
+          const fees = calculateFees(size.price);
+          return sum + fees.sellerEarnings * size.quantity;
+        }
+        return sum;
+      }, 0);
 
   if (publishSuccess) {
     return (
@@ -604,7 +759,7 @@ export default function SellPage() {
               {publishedNeedsReview
                 ? 'Your listing has been submitted and is pending admin approval. You\'ll be notified once it\'s reviewed and goes live on the marketplace.'
                 : publishedWasMerged
-                ? "We found an existing listing for this SKU and merged your new sizes, quantities, and prices into it."
+                ? "We found an existing listing for this SKU and merged your new inventory rows, quantities, and prices into it."
                 : 'Your shoe listing is now live on Relay. Buyers can start viewing and purchasing.'}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -657,7 +812,7 @@ export default function SellPage() {
               </div>
             </div>
             <p className="text-sm text-relay-muted leading-relaxed">
-              Enter a SKU, look up sneaker metadata, and list multiple sizes with separate prices and quantities. Photos are optional when a catalog image is available.
+              Enter a SKU, auto-fill the product, then add DS/new inventory rows and individual used pairs under the same listing.
             </p>
           </button>
 
@@ -958,7 +1113,7 @@ export default function SellPage() {
                 <div>
                   <label className="block text-sm font-medium text-relay-text mb-2">Catalog Description *</label>
                   <textarea
-                    placeholder="Add selling notes, condition notes, or any context for this SKU listing."
+                    placeholder="Add selling notes or any context for this SKU listing."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={4}
@@ -967,39 +1122,33 @@ export default function SellPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-relay-text mb-2">Shoe Condition *</label>
-                <div className="relative">
-                  <select
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    className="relay-select pr-10 appearance-none"
-                  >
-                    <option value="">Select condition...</option>
-                    {(isCatalogListing ? CATALOG_CONDITION_OPTIONS : MANUAL_CONDITION_OPTIONS).map(({ value, label, description }) => (
-                      <option key={value} value={value}>
-                        {label} - {description}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+              {isCatalogListing ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">Inventory condition is set from your rows</p>
+                  <p className="text-xs text-relay-subtle leading-relaxed">
+                    Add DS/new rows and used pair rows on the next step. Relay will mark the listing as DS, Used, or DS + Used automatically.
+                  </p>
                 </div>
-                {isCatalogListing && condition === "new" && (
-                  <p className="text-xs text-relay-subtle mt-2">
-                    New catalog listings use the product gallery images only.
-                  </p>
-                )}
-                {isCatalogListing && condition === "used_good" && (
-                  <p className="text-xs text-relay-subtle mt-2">
-                    Used catalog listings must include at least one seller photo so buyers can judge condition.
-                  </p>
-                )}
-                {isCatalogListing && condition === "mixed" && (
-                  <p className="text-xs text-relay-subtle mt-2">
-                    Mixed catalog listings let you split each size row between new and used pairs on the next step.
-                  </p>
-                )}
-              </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-relay-text mb-2">Shoe Condition *</label>
+                  <div className="relative">
+                    <select
+                      value={condition}
+                      onChange={(e) => setCondition(e.target.value)}
+                      className="relay-select pr-10 appearance-none"
+                    >
+                      <option value="">Select condition...</option>
+                      {MANUAL_CONDITION_OPTIONS.map(({ value, label, description }) => (
+                        <option key={value} value={value}>
+                          {label} - {description}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={18} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-relay-text mb-2">Box Condition *</label>
@@ -1044,132 +1193,390 @@ export default function SellPage() {
           {/* Step 2: Sizes & Pricing */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div>
-                <p className="text-relay-muted text-sm mb-4">
-                  {isMixedCatalogListing
-                    ? "Add each size/condition variant with its own price and quantity."
-                    : "Add each size you have available with its price and quantity."}
-                </p>
-              </div>
+              {isCatalogListing ? (
+                <div className="space-y-8">
+                  <div className="rounded-2xl border border-relay-accent/20 bg-relay-accent/5 p-5">
+                    <p className="text-sm font-semibold text-relay-text mb-2">List DS/new and used inventory separately</p>
+                    <div className="space-y-1 text-xs text-relay-subtle leading-relaxed">
+                      <p>DS/new rows are batchable and can use quantity greater than 1.</p>
+                      <p>Used rows always represent one physical pair and each row must include its own condition photo.</p>
+                      <p>To list multiple used pairs in the same size, add multiple used rows.</p>
+                    </div>
+                  </div>
 
-              {sizes.length > 0 && (
-                <div className="space-y-6">
-                  {sizes.map((sizeRow) => {
-                    const fees = sizeRow.price ? calculateFees(sizeRow.price) : null;
-                    return (
-                      <div key={sizeRow.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
-                        <div className={`grid grid-cols-1 ${isMixedCatalogListing ? "sm:grid-cols-4" : "sm:grid-cols-3"} gap-4 mb-4`}>
-                          {/* Size Dropdown */}
-                          <div>
-                            <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
-                            <div className="relative">
-                              <select
-                                value={sizeRow.size}
-                                onChange={(e) => updateSize(sizeRow.id, "size", e.target.value)}
-                                className="relay-select pr-8 appearance-none"
-                              >
-                                <option value="">Select...</option>
-                                {SHOE_SIZES.map(s => (
-                                  <option key={s} value={s}>{s}</option>
-                                ))}
-                              </select>
-                              <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-relay-text">DS / New Inventory</h3>
+                        <p className="text-xs text-relay-subtle mt-1">Grouped inventory by size, quantity, and price.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addCatalogDsRow}
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-relay-accent hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all"
+                      >
+                        <Plus size={16} />
+                        Add DS Row
+                      </button>
+                    </div>
+
+                    {catalogDsRows.length > 0 ? (
+                      <div className="space-y-4">
+                        {catalogDsRows.map((row) => {
+                          const fees = row.price ? calculateFees(row.price) : null;
+                          return (
+                            <div key={row.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
+                                  <div className="relative">
+                                    <select
+                                      value={row.size}
+                                      onChange={(e) => updateCatalogDsRow(row.id, "size", e.target.value)}
+                                      className="relay-select pr-8 appearance-none"
+                                    >
+                                      <option value="">Select...</option>
+                                      {SHOE_SIZES.map((size) => (
+                                        <option key={size} value={size}>{size}</option>
+                                      ))}
+                                    </select>
+                                    <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: "translateY(-50%) rotate(90deg)" }} />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Price</label>
+                                  <div className="relative">
+                                    <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-relay-subtle" />
+                                    <input
+                                      type="number"
+                                      placeholder="0.00"
+                                      value={row.price || ""}
+                                      onChange={(e) => updateCatalogDsRow(row.id, "price", parseFloat(e.target.value) || 0)}
+                                      className="relay-input"
+                                      style={{ paddingLeft: "2rem" }}
+                                      min="0"
+                                      step="0.01"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Quantity</label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="number"
+                                      placeholder="1"
+                                      value={row.quantity || ""}
+                                      onChange={(e) => updateCatalogDsRow(row.id, "quantity", parseInt(e.target.value, 10) || 1)}
+                                      className="relay-input"
+                                      min="1"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeCatalogDsRow(row.id)}
+                                      className="px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-relay-text"
+                                    >
+                                      <X size={18} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {fees && row.price > 0 && (
+                                <div className="text-xs space-y-1 pt-3 border-t border-white/5">
+                                  <div className="flex justify-between text-relay-muted">
+                                    <span>Relay fee (1%):</span>
+                                    <span>{formatCurrency(fees.platformFee)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-relay-muted">
+                                    <span>Stripe fee (3% + $0.30):</span>
+                                    <span>{formatCurrency(fees.stripeFee)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-emerald-400 font-medium">
+                                    <span>Your earnings per pair:</span>
+                                    <span>{formatCurrency(fees.sellerEarnings)}</span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-relay-subtle">
+                        No DS/new rows yet.
+                      </div>
+                    )}
+                  </div>
 
-                          {isMixedCatalogListing && (
-                            <div>
-                              <label className="block text-xs font-medium text-relay-subtle mb-2">Condition</label>
-                              <div className="relative">
-                                <select
-                                  value={sizeRow.condition}
-                                  onChange={(e) => updateSize(sizeRow.id, "condition", e.target.value as "new" | "used")}
-                                  className="relay-select pr-8 appearance-none"
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-relay-text">Used Pairs</h3>
+                        <p className="text-xs text-relay-subtle mt-1">One row per physical pair. Quantity is always 1.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addCatalogUsedRow}
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-relay-accent hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all"
+                      >
+                        <Plus size={16} />
+                        Add Used Pair
+                      </button>
+                    </div>
+
+                    {catalogUsedRows.length > 0 ? (
+                      <div className="space-y-4">
+                        {catalogUsedRows.map((row, index) => {
+                          const fees = row.price ? calculateFees(row.price) : null;
+                          return (
+                            <div key={row.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
+                              <div className="flex items-start justify-between gap-4 mb-4">
+                                <div>
+                                  <p className="text-sm font-medium text-relay-text">Used Pair #{index + 1}</p>
+                                  <p className="text-xs text-relay-subtle mt-1">This row is a single purchasable pair and needs its own photo.</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeCatalogUsedRow(row.id)}
+                                  className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-relay-text"
                                 >
-                                  <option value="new">New</option>
-                                  <option value="used">Used</option>
-                                </select>
-                                <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: 'translateY(-50%) rotate(90deg)' }} />
+                                  <X size={18} />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
+                                  <div className="relative">
+                                    <select
+                                      value={row.size}
+                                      onChange={(e) => updateCatalogUsedRow(row.id, "size", e.target.value)}
+                                      className="relay-select pr-8 appearance-none"
+                                    >
+                                      <option value="">Select...</option>
+                                      {SHOE_SIZES.map((size) => (
+                                        <option key={size} value={size}>{size}</option>
+                                      ))}
+                                    </select>
+                                    <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: "translateY(-50%) rotate(90deg)" }} />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Price</label>
+                                  <div className="relative">
+                                    <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-relay-subtle" />
+                                    <input
+                                      type="number"
+                                      placeholder="0.00"
+                                      value={row.price || ""}
+                                      onChange={(e) => updateCatalogUsedRow(row.id, "price", parseFloat(e.target.value) || 0)}
+                                      className="relay-input"
+                                      style={{ paddingLeft: "2rem" }}
+                                      min="0"
+                                      step="0.01"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-relay-subtle mb-2">Condition</label>
+                                  <div className="relative">
+                                    <select
+                                      value={row.condition}
+                                      onChange={(e) => updateCatalogUsedRow(row.id, "condition", e.target.value as UsedInventoryCondition)}
+                                      className="relay-select pr-8 appearance-none"
+                                    >
+                                      {USED_PAIR_CONDITION_OPTIONS.map((value) => (
+                                        <option key={value} value={value}>
+                                          {CONDITIONS[value].label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: "translateY(-50%) rotate(90deg)" }} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                                <label className="block text-xs font-medium text-relay-subtle mb-2">Condition Photo *</label>
+                                <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+                                  <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-relay-text hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all">
+                                    <Camera size={16} className="text-relay-accent" />
+                                    {row.photo ? "Replace Photo" : "Upload Photo"}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0] || null;
+                                        updateCatalogUsedPhoto(row.id, file);
+                                        e.currentTarget.value = "";
+                                      }}
+                                    />
+                                  </label>
+                                  <p className="text-xs text-relay-subtle leading-relaxed">
+                                    Every used pair needs its own real condition photo. This photo cannot be shared across multiple used rows.
+                                  </p>
+                                </div>
+
+                                {row.photo ? (
+                                  <div className="mt-4 max-w-[220px]">
+                                    <div className="relative rounded-xl overflow-hidden bg-white/[0.02] border border-white/10 aspect-square">
+                                      <img
+                                        src={row.photo.url}
+                                        alt={`Used pair ${index + 1} condition`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateCatalogUsedPhoto(row.id, null)}
+                                        className="absolute top-2 right-2 rounded-lg bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+                                      >
+                                        <X size={16} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="mt-3 text-xs text-amber-200">A condition photo is required before you can publish this used pair.</p>
+                                )}
+                              </div>
+
+                              {fees && row.price > 0 && (
+                                <div className="text-xs space-y-1 pt-4">
+                                  <div className="flex justify-between text-relay-muted">
+                                    <span>Relay fee (1%):</span>
+                                    <span>{formatCurrency(fees.platformFee)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-relay-muted">
+                                    <span>Stripe fee (3% + $0.30):</span>
+                                    <span>{formatCurrency(fees.stripeFee)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-emerald-400 font-medium">
+                                    <span>Your earnings:</span>
+                                    <span>{formatCurrency(fees.sellerEarnings)}</span>
+                                  </div>
+                                  <div className="pt-1 text-relay-subtle">
+                                    Condition: {getUsedConditionLabel(row.condition)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-white/10 p-5 text-sm text-relay-subtle">
+                        No used pairs yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-relay-muted text-sm mb-4">
+                      Add each size you have available with its price and quantity.
+                    </p>
+                  </div>
+
+                  {sizes.length > 0 && (
+                    <div className="space-y-6">
+                      {sizes.map((sizeRow) => {
+                        const fees = sizeRow.price ? calculateFees(sizeRow.price) : null;
+                        return (
+                          <div key={sizeRow.id} className="border border-white/5 rounded-xl p-4 bg-white/[0.02]">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                              <div>
+                                <label className="block text-xs font-medium text-relay-subtle mb-2">Size</label>
+                                <div className="relative">
+                                  <select
+                                    value={sizeRow.size}
+                                    onChange={(e) => updateSize(sizeRow.id, "size", e.target.value)}
+                                    className="relay-select pr-8 appearance-none"
+                                  >
+                                    <option value="">Select...</option>
+                                    {SHOE_SIZES.map((size) => (
+                                      <option key={size} value={size}>{size}</option>
+                                    ))}
+                                  </select>
+                                  <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 text-relay-subtle pointer-events-none" size={16} style={{ transform: "translateY(-50%) rotate(90deg)" }} />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-medium text-relay-subtle mb-2">Price</label>
+                                <div className="relative">
+                                  <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-relay-subtle" />
+                                  <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={sizeRow.price || ""}
+                                    onChange={(e) => updateSize(sizeRow.id, "price", parseFloat(e.target.value) || 0)}
+                                    className="relay-input"
+                                    style={{ paddingLeft: "2rem" }}
+                                    min="0"
+                                    step="0.01"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-medium text-relay-subtle mb-2">Qty</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    placeholder="1"
+                                    value={sizeRow.quantity || ""}
+                                    onChange={(e) => updateSize(sizeRow.id, "quantity", parseInt(e.target.value, 10) || 1)}
+                                    className="relay-input"
+                                    min="1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSize(sizeRow.id)}
+                                    className="px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-relay-text"
+                                  >
+                                    <X size={18} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          )}
 
-                          {/* Price Input */}
-                          <div>
-                            <label className="block text-xs font-medium text-relay-subtle mb-2">Price</label>
-                            <div className="relative">
-                              <DollarSign size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-relay-subtle" />
-                              <input
-                                type="number"
-                                placeholder="0.00"
-                                value={sizeRow.price || ""}
-                                onChange={(e) => updateSize(sizeRow.id, "price", parseFloat(e.target.value) || 0)}
-                                className="relay-input"
-                                style={{ paddingLeft: '2rem' }}
-                                min="0"
-                                step="0.01"
-                              />
-                            </div>
+                            {fees && sizeRow.price > 0 && (
+                              <div className="text-xs space-y-1 pt-3 border-t border-white/5">
+                                <div className="flex justify-between text-relay-muted">
+                                  <span>Relay fee (1%):</span>
+                                  <span>{formatCurrency(fees.platformFee)}</span>
+                                </div>
+                                <div className="flex justify-between text-relay-muted">
+                                  <span>Stripe fee (3% + $0.30):</span>
+                                  <span>{formatCurrency(fees.stripeFee)}</span>
+                                </div>
+                                <div className="flex justify-between text-emerald-400 font-medium">
+                                  <span>Your earnings:</span>
+                                  <span>{formatCurrency(fees.sellerEarnings)}</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                          {/* Quantity Input */}
-                          <div>
-                            <label className="block text-xs font-medium text-relay-subtle mb-2">Qty</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                placeholder="1"
-                                value={sizeRow.quantity || ""}
-                                onChange={(e) => updateSize(sizeRow.id, "quantity", parseInt(e.target.value) || 1)}
-                                className="relay-input"
-                                min="1"
-                              />
-                              <button
-                                onClick={() => removeSize(sizeRow.id)}
-                                className="px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-relay-text"
-                              >
-                                <X size={18} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {isMixedCatalogListing && (
-                          <div className="mb-3 inline-flex rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-relay-text">
-                            {getVariantConditionLabel(sizeRow.condition)} pair
-                          </div>
-                        )}
-
-                        {/* Fee Breakdown */}
-                        {fees && sizeRow.price > 0 && (
-                          <div className="text-xs space-y-1 pt-3 border-t border-white/5">
-                            <div className="flex justify-between text-relay-muted">
-                              <span>Relay fee (1%):</span>
-                              <span>{formatCurrency(fees.platformFee)}</span>
-                            </div>
-                            <div className="flex justify-between text-relay-muted">
-                              <span>Stripe fee (3% + $0.30):</span>
-                              <span>{formatCurrency(fees.stripeFee)}</span>
-                            </div>
-                            <div className="flex justify-between text-emerald-400 font-medium">
-                              <span>Your earnings:</span>
-                              <span>{formatCurrency(fees.sellerEarnings)}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                  <button
+                    type="button"
+                    onClick={addSize}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all text-relay-accent font-medium"
+                  >
+                    <Plus size={18} />
+                    Add Size
+                  </button>
+                </>
               )}
-
-              <button
-                onClick={addSize}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/10 hover:border-relay-accent/50 hover:bg-relay-accent/5 transition-all text-relay-accent font-medium"
-              >
-                <Plus size={18} />
-                {isMixedCatalogListing ? "Add Size Variant" : "Add Size"}
-              </button>
             </div>
           )}
 
@@ -1183,11 +1590,11 @@ export default function SellPage() {
                     <p className="text-sm text-relay-text font-medium mb-1">Catalog images for this SKU</p>
                     <p className="text-xs text-relay-subtle leading-relaxed">
                       Relay uses these standard product views and ignores the 360 image set.
-                      {condition === "new"
-                        ? " For new pairs, these will be the only listing photos."
-                        : condition === "mixed"
-                        ? " For mixed listings, these support your seller condition photos."
-                        : " For used pairs, these are included alongside your condition photos."}
+                      {catalogListingCondition === "new"
+                        ? " For DS/new-only inventory, these will be the listing photos."
+                        : catalogListingCondition === "mixed"
+                        ? " These stay as the listing gallery while each used pair keeps its own condition photo."
+                        : " Used pairs keep their own condition photos, separate from the catalog gallery."}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1212,19 +1619,27 @@ export default function SellPage() {
                 </div>
               )}
 
-              {(isManualListing || isUsedCatalogListing || isMixedCatalogListing) && (
+              {isCatalogListing && hasCatalogUsedInventory && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">Used pair photos are attached per row</p>
+                  <p className="text-xs text-relay-subtle leading-relaxed">
+                    Every used pair photo was added in the inventory step. There is no shared listing-level condition photo for used inventory anymore.
+                  </p>
+                </div>
+              )}
+
+              {isCatalogListing && !hasCatalogUsedInventory && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">No used pair photos needed</p>
+                  <p className="text-xs text-relay-subtle leading-relaxed">
+                    This catalog listing currently has DS/new inventory only.
+                  </p>
+                </div>
+              )}
+
+              {isManualListing && (
                 <div>
-                  <label className="block text-sm font-medium text-relay-text mb-3">
-                    {isUsedCatalogListing || isMixedCatalogListing ? "Seller Condition Photos *" : "Photos *"}
-                  </label>
-                  {(isUsedCatalogListing || isMixedCatalogListing) && (
-                    <div className="mb-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                      <p className="text-sm text-relay-text font-medium mb-1">Exactly one real seller photo is required</p>
-                      <p className="text-xs text-relay-subtle leading-relaxed">
-                        Buyers need to see the actual condition of any pre-owned pairs. This seller photo will appear before the gallery images in the listing.
-                      </p>
-                    </div>
-                  )}
+                  <label className="block text-sm font-medium text-relay-text mb-3">Photos *</label>
                   <div
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -1248,33 +1663,12 @@ export default function SellPage() {
                       className="w-full flex flex-col items-center justify-center gap-2 text-center"
                     >
                       <Camera size={32} className="text-relay-accent" />
-                      <span className="font-medium text-relay-text">
-                        Drag & drop photos or click to upload
-                      </span>
+                      <span className="font-medium text-relay-text">Drag & drop photos or click to upload</span>
                       <span className="text-sm text-relay-subtle">
-                        {maxSellerPhotoCount === 1
-                          ? "Upload exactly 1 condition photo."
-                          : "Up to 10 photos. First uploaded photo is shown first."}
+                        Up to 10 photos. First uploaded photo is shown first.
                       </span>
                     </button>
                   </div>
-                </div>
-              )}
-
-              {isCatalogListing && condition === "new" && (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                  <p className="text-sm font-medium text-relay-text mb-1">No seller photos needed for new pairs</p>
-                  <p className="text-xs text-relay-subtle leading-relaxed">
-                    Relay will publish this new catalog listing with the gallery images only.
-                  </p>
-                </div>
-              )}
-              {hasUnusedSellerPhotos && (
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-sm font-medium text-amber-200 mb-1">Uploaded seller photos will be ignored for a new listing</p>
-                  <p className="text-xs text-amber-100/80 leading-relaxed">
-                    Switch back to Used if you want these seller photos to appear in the final listing.
-                  </p>
                 </div>
               )}
 
@@ -1282,9 +1676,7 @@ export default function SellPage() {
               {photos.length > 0 && shouldUseSellerPhotos && (
                 <div>
                   <p className="text-sm text-relay-muted mb-3">
-                    {photos.length} of {maxSellerPhotoCount} uploaded photos {maxSellerPhotoCount === 1
-                      ? "(condition photo)"
-                      : photos.length === 1
+                    {photos.length} of {maxSellerPhotoCount} uploaded photos {photos.length === 1
                       ? "(first seller photo)"
                       : "(first photo appears first)"}
                   </p>
@@ -1301,7 +1693,7 @@ export default function SellPage() {
                         />
 
                         {/* Cover Badge */}
-                        {index === 0 && !isUsedCatalogListing && !isMixedCatalogListing && (
+                        {index === 0 && (
                           <div className="absolute top-2 left-2">
                             <span className="relay-badge-info text-xs">Cover</span>
                           </div>
@@ -1455,7 +1847,9 @@ export default function SellPage() {
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
                     <p className="text-relay-subtle mb-1">Shoe Condition</p>
                     <p className="text-relay-text font-medium">
-                      {getConditionDisplayLabel(condition) || condition}
+                      {isCatalogListing
+                        ? getCatalogInventoryLabel(catalogListingCondition)
+                        : getConditionDisplayLabel(condition) || condition}
                     </p>
                   </div>
                   <div className="border border-white/5 rounded-lg p-3 bg-white/[0.02]">
@@ -1471,41 +1865,117 @@ export default function SellPage() {
               <div>
                 <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                   <DollarSign size={16} className="text-relay-accent" />
-                  Sizes & Pricing
+                  {isCatalogListing ? "Inventory & Pricing" : "Sizes & Pricing"}
                 </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="text-left py-2 px-3 text-relay-subtle font-medium">Size</th>
-                        {isMixedCatalogListing && (
-                          <th className="text-left py-2 px-3 text-relay-subtle font-medium">Condition</th>
-                        )}
-                        <th className="text-left py-2 px-3 text-relay-subtle font-medium">Price</th>
-                        <th className="text-left py-2 px-3 text-relay-subtle font-medium">Qty</th>
-                        <th className="text-right py-2 px-3 text-relay-subtle font-medium">Your Earnings</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sizes.map(sizeRow => {
-                        const fees = calculateFees(sizeRow.price);
-                        return (
-                          <tr key={sizeRow.id} className="border-b border-white/5">
-                            <td className="py-3 px-3 text-relay-text font-medium">Size {sizeRow.size}</td>
-                            {isMixedCatalogListing && (
-                              <td className="py-3 px-3 text-relay-text">{getVariantConditionLabel(sizeRow.condition)}</td>
-                            )}
-                            <td className="py-3 px-3 text-relay-text">{formatCurrency(sizeRow.price)}</td>
-                            <td className="py-3 px-3 text-relay-text">{sizeRow.quantity}</td>
-                            <td className="py-3 px-3 text-emerald-400 font-medium text-right">
-                              {formatCurrency(fees.sellerEarnings * sizeRow.quantity)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                {isCatalogListing ? (
+                  <div className="space-y-6">
+                    {catalogDsRows.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-relay-subtle mb-3">DS / New Rows</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-white/10">
+                                <th className="text-left py-2 px-3 text-relay-subtle font-medium">Size</th>
+                                <th className="text-left py-2 px-3 text-relay-subtle font-medium">Price</th>
+                                <th className="text-left py-2 px-3 text-relay-subtle font-medium">Qty</th>
+                                <th className="text-right py-2 px-3 text-relay-subtle font-medium">Your Earnings</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {catalogDsRows.map((row) => {
+                                const fees = calculateFees(row.price);
+                                return (
+                                  <tr key={row.id} className="border-b border-white/5">
+                                    <td className="py-3 px-3 text-relay-text font-medium">Size {row.size}</td>
+                                    <td className="py-3 px-3 text-relay-text">{formatCurrency(row.price)}</td>
+                                    <td className="py-3 px-3 text-relay-text">{row.quantity}</td>
+                                    <td className="py-3 px-3 text-emerald-400 font-medium text-right">
+                                      {formatCurrency(fees.sellerEarnings * row.quantity)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {catalogUsedRows.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-relay-subtle mb-3">Used Pairs</p>
+                        <div className="space-y-3">
+                          {catalogUsedRows.map((row, index) => {
+                            const fees = calculateFees(row.price);
+                            return (
+                              <div key={row.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                                <div className="flex items-start gap-4">
+                                  {row.photo && (
+                                    <img
+                                      src={row.photo.url}
+                                      alt={`Used pair ${index + 1}`}
+                                      className="h-20 w-20 rounded-lg object-cover border border-white/10"
+                                    />
+                                  )}
+                                  <div className="grid flex-1 grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
+                                    <div>
+                                      <p className="text-relay-subtle mb-1">Pair</p>
+                                      <p className="text-relay-text font-medium">Used Pair #{index + 1}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-relay-subtle mb-1">Size</p>
+                                      <p className="text-relay-text font-medium">{row.size}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-relay-subtle mb-1">Condition</p>
+                                      <p className="text-relay-text font-medium">{getUsedConditionLabel(row.condition)}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-relay-subtle mb-1">Price</p>
+                                      <p className="text-relay-text font-medium">{formatCurrency(row.price)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-3 text-right text-emerald-400 text-sm font-medium">
+                                  Earnings: {formatCurrency(fees.sellerEarnings)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10">
+                          <th className="text-left py-2 px-3 text-relay-subtle font-medium">Size</th>
+                          <th className="text-left py-2 px-3 text-relay-subtle font-medium">Price</th>
+                          <th className="text-left py-2 px-3 text-relay-subtle font-medium">Qty</th>
+                          <th className="text-right py-2 px-3 text-relay-subtle font-medium">Your Earnings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sizes.map((sizeRow) => {
+                          const fees = calculateFees(sizeRow.price);
+                          return (
+                            <tr key={sizeRow.id} className="border-b border-white/5">
+                              <td className="py-3 px-3 text-relay-text font-medium">Size {sizeRow.size}</td>
+                              <td className="py-3 px-3 text-relay-text">{formatCurrency(sizeRow.price)}</td>
+                              <td className="py-3 px-3 text-relay-text">{sizeRow.quantity}</td>
+                              <td className="py-3 px-3 text-emerald-400 font-medium text-right">
+                                {formatCurrency(fees.sellerEarnings * sizeRow.quantity)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Photos Summary */}
@@ -1513,7 +1983,7 @@ export default function SellPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-relay-text mb-4 flex items-center gap-2">
                     <Camera size={16} className="text-relay-accent" />
-                    {isUsedCatalogListing || isMixedCatalogListing ? `Seller Condition Photos (${photos.length})` : `Photos (${photos.length})`}
+                    {`Photos (${photos.length})`}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {photos.map((photo, index) => (
@@ -1526,7 +1996,7 @@ export default function SellPage() {
                           alt={`Photo ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
-                        {index === 0 && !isUsedCatalogListing && !isMixedCatalogListing && (
+                        {index === 0 && (
                           <div className="absolute top-1 left-1">
                             <span className="relay-badge-info text-xs">Cover</span>
                           </div>
@@ -1536,15 +2006,7 @@ export default function SellPage() {
                   </div>
                 </div>
               )}
-              {hasUnusedSellerPhotos && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-sm font-medium text-amber-200 mb-1">Seller photos are currently excluded</p>
-                  <p className="text-xs text-amber-100/80">
-                    Because this listing is marked New, Relay will publish only the gallery images.
-                  </p>
-                </div>
-              )}
-              {isCatalogListing && condition === "new" && activeLookupGalleryImages.length > 0 && (
+              {isCatalogListing && catalogListingCondition === "new" && activeLookupGalleryImages.length > 0 && (
                 <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
                   <p className="text-sm font-medium text-relay-text mb-1">New catalog listing will use gallery photos only</p>
                   <p className="text-xs text-relay-subtle">
@@ -1552,15 +2014,11 @@ export default function SellPage() {
                   </p>
                 </div>
               )}
-              {isCatalogListing && (condition === "used_good" || condition === "mixed") && photos.length === 0 && (
-                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-sm font-medium text-amber-200 mb-1">
-                    {condition === "mixed"
-                      ? "Mixed catalog listings need exactly one seller photo"
-                      : "Used catalog listings need exactly one seller photo"}
-                  </p>
-                  <p className="text-xs text-amber-100/80">
-                    Add one real photo so buyers can evaluate the pair&apos;s condition.
+              {isCatalogListing && hasCatalogUsedInventory && (
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+                  <p className="text-sm font-medium text-relay-text mb-1">Used pairs keep item-level condition photos</p>
+                  <p className="text-xs text-relay-subtle">
+                    Each used row will publish with its own condition photo instead of sharing one listing-level image.
                   </p>
                 </div>
               )}
@@ -1609,7 +2067,7 @@ export default function SellPage() {
                     {formatCurrency(totalEarnings)}
                   </p>
                   <p className="text-xs text-relay-subtle mt-2">
-                    Based on all sizes and quantities listed
+                    Based on all inventory entered above
                   </p>
                 </div>
               </div>
