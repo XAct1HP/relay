@@ -191,6 +191,7 @@ export async function upsertSellerSkuInventory(
 
     await mergeListingVariants(supabase, existingListing.id, normalized.variants);
     await upsertListingUsedItems(supabase, existingListing.id, normalized.usedItems);
+    await reconcileListingInventoryStatus(supabase, existingListing.id);
 
     return {
       listingId: existingListing.id,
@@ -236,6 +237,7 @@ export async function upsertSellerSkuInventory(
       if (conflictedListing) {
         await mergeListingVariants(supabase, conflictedListing.id, normalized.variants);
         await upsertListingUsedItems(supabase, conflictedListing.id, normalized.usedItems);
+        await reconcileListingInventoryStatus(supabase, conflictedListing.id);
 
         return {
           listingId: conflictedListing.id,
@@ -256,6 +258,7 @@ export async function upsertSellerSkuInventory(
 
   await mergeListingVariants(supabase, createdListing.id, normalized.variants);
   await upsertListingUsedItems(supabase, createdListing.id, normalized.usedItems);
+  await reconcileListingInventoryStatus(supabase, createdListing.id);
 
   return {
     listingId: createdListing.id,
@@ -349,6 +352,7 @@ export async function replaceSellerSkuListingInventory(
 
   await replaceListingVariants(supabase, listingId, normalized.variants);
   await replaceListingUsedItems(supabase, listingId, normalized.usedItems);
+  await reconcileListingInventoryStatus(supabase, listingId);
 
   return {
     listingId,
@@ -830,6 +834,74 @@ async function replaceListingUsedItems(
         error.message || "Failed to deactivate removed used inventory."
       );
     }
+  }
+}
+
+async function reconcileListingInventoryStatus(
+  supabase: SupabaseClient,
+  listingId: string
+): Promise<void> {
+  const { data: listing, error: listingError } = await supabase
+    .from("listings")
+    .select("id, status")
+    .eq("id", listingId)
+    .maybeSingle();
+
+  if (listingError) {
+    throw new InventoryUpsertError("listing_status_lookup_failed", listingError.message);
+  }
+
+  if (!listing) {
+    return;
+  }
+
+  if (
+    listing.status !== "active" &&
+    listing.status !== "sold_out"
+  ) {
+    return;
+  }
+
+  const { data: variantRows, error: variantError } = await supabase
+    .from("listing_variants")
+    .select("quantity, is_active")
+    .eq("listing_id", listingId);
+
+  if (variantError) {
+    throw new InventoryUpsertError("listing_variant_status_lookup_failed", variantError.message);
+  }
+
+  const { data: usedItemRows, error: usedItemError } = await supabase
+    .from("listing_used_items")
+    .select("quantity, is_active")
+    .eq("listing_id", listingId);
+
+  if (usedItemError) {
+    throw new InventoryUpsertError("listing_used_item_status_lookup_failed", usedItemError.message);
+  }
+
+  const hasAvailableVariant = ((variantRows || []) as Array<{
+    quantity: number | string | null;
+    is_active: boolean | null;
+  }>).some((variant) => Number(variant.quantity) > 0 && variant.is_active !== false);
+  const hasAvailableUsedItem = ((usedItemRows || []) as Array<{
+    quantity: number | string | null;
+    is_active: boolean | null;
+  }>).some((item) => Number(item.quantity) > 0 && item.is_active !== false);
+
+  const nextStatus: ListingStatus = hasAvailableVariant || hasAvailableUsedItem ? "active" : "sold_out";
+
+  if (nextStatus === listing.status) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("listings")
+    .update({ status: nextStatus })
+    .eq("id", listingId);
+
+  if (updateError) {
+    throw new InventoryUpsertError("listing_status_update_failed", updateError.message);
   }
 }
 

@@ -16,6 +16,16 @@ interface VariantRow {
   is_active: boolean
 }
 
+interface UsedItemRow {
+  id: string
+  size: string
+  price: number
+  quantity: number
+  is_active: boolean
+  condition: 'like_new' | 'used_excellent' | 'used_good' | 'used_fair'
+  condition_photo_url: string
+}
+
 function getLegacySizeEntry(
   sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
   size: string
@@ -57,10 +67,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { listingId, size, listingVariantId, shippingCost, buyerAddress, customOfferId } =
+    const { listingId, size, listingVariantId, listingUsedItemId, shippingCost, buyerAddress, customOfferId } =
       await request.json()
 
-    if (!listingId || (!size && !listingVariantId) || shippingCost === undefined) {
+    if (!listingId || (!size && !listingVariantId && !listingUsedItemId) || shippingCost === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -90,6 +100,7 @@ export async function POST(request: NextRequest) {
 
     let resolvedSize = String(size || '')
     let resolvedVariantId = String(listingVariantId || '') || null
+    let resolvedUsedItemId = String(listingUsedItemId || '') || null
     let price = 0
 
     if (customOfferId) {
@@ -112,22 +123,59 @@ export async function POST(request: NextRequest) {
     }
 
     let variantRow: VariantRow | null = null
-    const resolvedVariant = await resolveListingVariant(supabase, listingId, {
-      variantId: resolvedVariantId,
-      size: resolvedSize,
-    })
+    let usedItemRow: UsedItemRow | null = null
 
-    if (resolvedVariant) {
-      variantRow = {
-        id: resolvedVariant.id,
-        size: resolvedVariant.size,
-        price: Number(resolvedVariant.price),
-        quantity: resolvedVariant.quantity || 0,
-        is_active: resolvedVariant.is_active,
+    if (resolvedUsedItemId) {
+      const { data: usedItem, error: usedItemError } = await supabase
+        .from('listing_used_items')
+        .select('id, size, price, quantity, is_active, condition, condition_photo_url')
+        .eq('id', resolvedUsedItemId)
+        .eq('listing_id', listingId)
+        .maybeSingle()
+
+      if (usedItemError || !usedItem) {
+        return NextResponse.json({ error: 'This used pair is no longer available' }, { status: 404 })
+      }
+
+      usedItemRow = {
+        id: usedItem.id,
+        size: String(usedItem.size),
+        price: Number(usedItem.price),
+        quantity: Number(usedItem.quantity) || 0,
+        is_active: usedItem.is_active !== false,
+        condition: usedItem.condition,
+        condition_photo_url: usedItem.condition_photo_url,
+      }
+    } else {
+      const resolvedVariant = await resolveListingVariant(supabase, listingId, {
+        variantId: resolvedVariantId,
+        size: resolvedSize,
+      })
+
+      if (resolvedVariant) {
+        variantRow = {
+          id: resolvedVariant.id,
+          size: resolvedVariant.size,
+          price: Number(resolvedVariant.price),
+          quantity: resolvedVariant.quantity || 0,
+          is_active: resolvedVariant.is_active,
+        }
       }
     }
 
-    if (variantRow) {
+    if (usedItemRow) {
+      resolvedUsedItemId = usedItemRow.id
+      resolvedSize = usedItemRow.size
+
+      if (usedItemRow.is_active === false || usedItemRow.quantity <= 0) {
+        return NextResponse.json(
+          { error: 'This used pair is no longer available' },
+          { status: 400 }
+        )
+      }
+
+      price = usedItemRow.price
+    } else if (variantRow) {
       resolvedVariantId = variantRow.id
       resolvedSize = variantRow.size
 
@@ -168,7 +216,11 @@ export async function POST(request: NextRequest) {
           product_data: {
             name: `${listing.brand} ${listing.model}`,
             description: `Size: ${resolvedSize}`,
-            images: listing.images?.length ? [listing.images[0]] : [],
+            images: usedItemRow?.condition_photo_url
+              ? [usedItemRow.condition_photo_url]
+              : listing.images?.length
+              ? [listing.images[0]]
+              : [],
           },
           unit_amount: Math.round(price * 100),
         },
@@ -198,6 +250,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         listingId,
         listingVariantId: resolvedVariantId || '',
+        listingUsedItemId: resolvedUsedItemId || '',
         size: resolvedSize,
         buyerId: user.id,
         sellerId: listing.seller_id,

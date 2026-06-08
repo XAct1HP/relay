@@ -17,6 +17,79 @@ function generateChallengeCode(): string {
   return code
 }
 
+async function reconcileListingInventoryStatus(
+  supabase: any,
+  listingId: string
+) {
+  const { data: listing, error: listingError } = await supabase
+    .from('listings')
+    .select('id, status')
+    .eq('id', listingId)
+    .maybeSingle()
+
+  if (listingError || !listing) {
+    console.error('Failed to fetch listing status for inventory reconcile:', listingError)
+    return
+  }
+
+  const listingRow = listing as { id: string; status: string } | null
+
+  if (!listingRow) {
+    return
+  }
+
+  if (listingRow.status !== 'active' && listingRow.status !== 'sold_out') {
+    return
+  }
+
+  const { data: variantRows, error: variantError } = await supabase
+    .from('listing_variants')
+    .select('quantity, is_active')
+    .eq('listing_id', listingId)
+
+  if (variantError) {
+    console.error('Failed to fetch listing variants for inventory reconcile:', variantError)
+    return
+  }
+
+  const { data: usedItemRows, error: usedItemError } = await supabase
+    .from('listing_used_items')
+    .select('quantity, is_active')
+    .eq('listing_id', listingId)
+
+  if (usedItemError) {
+    console.error('Failed to fetch used items for inventory reconcile:', usedItemError)
+    return
+  }
+
+  const hasAvailableVariant = ((variantRows || []) as Array<{
+    quantity: number | string | null
+    is_active: boolean | null
+  }>).some(
+    (variant) => Number(variant.quantity) > 0 && variant.is_active !== false
+  )
+  const hasAvailableUsedItem = ((usedItemRows || []) as Array<{
+    quantity: number | string | null
+    is_active: boolean | null
+  }>).some(
+    (item) => Number(item.quantity) > 0 && item.is_active !== false
+  )
+  const nextStatus = hasAvailableVariant || hasAvailableUsedItem ? 'active' : 'sold_out'
+
+  if (nextStatus === listingRow.status) {
+    return
+  }
+
+  const { error: updateError } = await supabase
+    .from('listings')
+    .update({ status: nextStatus })
+    .eq('id', listingId)
+
+  if (updateError) {
+    console.error('Failed to update listing status after inventory change:', updateError)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
@@ -46,6 +119,7 @@ export async function POST(request: NextRequest) {
 
       const listingId = metadata.listingId
       const listingVariantId = metadata.listingVariantId || null
+      const listingUsedItemId = metadata.listingUsedItemId || null
       const size = metadata.size
       const buyerId = metadata.buyerId
       const sellerId = metadata.sellerId
@@ -81,6 +155,7 @@ export async function POST(request: NextRequest) {
         .insert({
           listing_id: listingId,
           listing_variant_id: listingVariantId,
+          listing_used_item_id: listingUsedItemId,
           buyer_id: buyerId,
           seller_id: sellerId,
           custom_offer_id: customOfferId || null,
@@ -103,8 +178,29 @@ export async function POST(request: NextRequest) {
       }
 
       let variantUpdated = false
+      let usedItemUpdated = false
 
-      if (listingVariantId) {
+      if (listingUsedItemId) {
+        const { data: updatedUsedItems, error: usedItemUpdateError } = await supabase
+          .from('listing_used_items')
+          .update({
+            quantity: 0,
+            is_active: false,
+          })
+          .eq('id', listingUsedItemId)
+          .eq('listing_id', listingId)
+          .eq('is_active', true)
+          .gt('quantity', 0)
+          .select('id')
+
+        if (usedItemUpdateError) {
+          console.error('Used item quantity update error:', usedItemUpdateError)
+        } else if ((updatedUsedItems || []).length > 0) {
+          usedItemUpdated = true
+        }
+      }
+
+      if (!listingUsedItemId && listingVariantId) {
         const { data: decrementedRows, error: decrementError } = await supabase.rpc(
           'decrement_listing_variant_inventory',
           { target_listing_variant_id: listingVariantId }
@@ -117,7 +213,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!variantUpdated) {
+      if (!listingUsedItemId && !variantUpdated) {
         const { data: variant } = await supabase
           .from('listing_variants')
           .select('id')
@@ -139,7 +235,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!variantUpdated) {
+      if (!listingUsedItemId && !variantUpdated) {
         const { data: listing, error: listingFetchError } = await supabase
           .from('listings')
           .select('sizes, status')
@@ -179,6 +275,12 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+
+      if (listingUsedItemId && !usedItemUpdated) {
+        console.error('Used item was not marked unavailable after checkout:', listingUsedItemId)
+      }
+
+      await reconcileListingInventoryStatus(supabase, listingId)
 
       if (customOfferId) {
         const { error: offerError } = await supabase

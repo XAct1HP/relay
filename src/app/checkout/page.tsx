@@ -35,6 +35,29 @@ interface ResolvedVariant {
   quantity: number;
 }
 
+interface ResolvedUsedItem {
+  id: string;
+  size: string;
+  price: number;
+  condition: 'like_new' | 'used_excellent' | 'used_good' | 'used_fair';
+  condition_photo_url: string;
+  quantity: number;
+}
+
+function getUsedConditionLabel(value: ResolvedUsedItem['condition']) {
+  switch (value) {
+    case 'like_new':
+      return 'Like New';
+    case 'used_excellent':
+      return 'Used - Excellent';
+    case 'used_fair':
+      return 'Used - Fair';
+    case 'used_good':
+    default:
+      return 'Used - Good';
+  }
+}
+
 function getLegacySizeEntry(listing: Listing, size: string | null) {
   const sizes = Array.isArray(listing.sizes) ? listing.sizes : [];
   return sizes.find((entry) => String(entry.size) === String(size ?? '')) || null;
@@ -47,6 +70,7 @@ export default function CheckoutPage() {
   const listingId = searchParams.get('listing');
   const size = searchParams.get('size');
   const variantId = searchParams.get('variant');
+  const usedItemId = searchParams.get('usedItem');
   const customOfferId = searchParams.get('customOffer');
 
   const [listing, setListing] = useState<Listing | null>(null);
@@ -69,15 +93,17 @@ export default function CheckoutPage() {
   const [shippingRate, setShippingRate] = useState<ShippingRate | null>(null);
   const [resolvedPrice, setResolvedPrice] = useState<number | null>(null);
   const [resolvedVariant, setResolvedVariant] = useState<ResolvedVariant | null>(null);
+  const [resolvedUsedItem, setResolvedUsedItem] = useState<ResolvedUsedItem | null>(null);
 
   // Fetch listing details and resolve price from database
   useEffect(() => {
     async function fetchListing() {
-      if (!listingId || (!size && !variantId)) return;
+      if (!listingId || (!size && !variantId && !usedItemId)) return;
       const supabase = createClient();
       setLoading(true);
       setError(null);
       setResolvedVariant(null);
+      setResolvedUsedItem(null);
       setResolvedPrice(null);
 
       try {
@@ -99,6 +125,7 @@ export default function CheckoutPage() {
           }
 
           let resolvedVariantRow: ResolvedVariant | null = null;
+          let resolvedUsedItemRow: ResolvedUsedItem | null = null;
 
           // Resolve price from custom offer or listing variants
           if (customOfferId && customOfferId !== 'true') {
@@ -148,6 +175,35 @@ export default function CheckoutPage() {
 
             setResolvedVariant(resolvedVariantRow);
             setResolvedPrice(parseFloat(offer.offer_price));
+          } else if (usedItemId) {
+            const { data: usedItem, error: usedItemError } = await supabase
+              .from('listing_used_items')
+              .select('id, size, price, quantity, condition, condition_photo_url, is_active')
+              .eq('id', usedItemId)
+              .eq('listing_id', listingId)
+              .maybeSingle();
+
+            if (usedItemError || !usedItem) {
+              setError('This used pair is no longer available.');
+              return;
+            }
+
+            if (usedItem.is_active === false || Number(usedItem.quantity) <= 0) {
+              setError('This used pair is no longer available.');
+              return;
+            }
+
+            resolvedUsedItemRow = {
+              id: usedItem.id,
+              size: String(usedItem.size),
+              price: Number(usedItem.price) || 0,
+              quantity: Number(usedItem.quantity) || 0,
+              condition: usedItem.condition,
+              condition_photo_url: usedItem.condition_photo_url,
+            };
+
+            setResolvedUsedItem(resolvedUsedItemRow);
+            setResolvedPrice(resolvedUsedItemRow.price);
           } else {
             const resolvedListingVariant = await resolveListingVariant(supabase, listingId, {
               variantId,
@@ -193,7 +249,7 @@ export default function CheckoutPage() {
     }
 
     fetchListing();
-  }, [listingId, size, variantId, customOfferId]);
+  }, [customOfferId, listingId, size, usedItemId, variantId]);
 
   // Pre-fill buyer name from profile
   useEffect(() => {
@@ -287,8 +343,9 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listingId,
-          size: resolvedVariant?.size || size,
+          size: resolvedUsedItem?.size || resolvedVariant?.size || size,
           listingVariantId: resolvedVariant?.id?.includes(':') ? undefined : resolvedVariant?.id,
+          listingUsedItemId: resolvedUsedItem?.id,
           price: resolvedPrice,
           shippingCost: parseFloat(shippingRate.amount),
           buyerAddress: {
@@ -329,7 +386,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!listing || resolvedPrice === null || (!size && !resolvedVariant)) {
+  if (!listing || resolvedPrice === null || (!size && !resolvedVariant && !resolvedUsedItem)) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center">
         <p className="text-relay-muted mb-4">Missing checkout information.</p>
@@ -343,7 +400,7 @@ export default function CheckoutPage() {
   const shoePrice = resolvedPrice;
   const shippingCost = shippingRate ? parseFloat(shippingRate.amount) : 0;
   const total = shoePrice + shippingCost;
-  const displaySize = resolvedVariant?.size || size;
+  const displaySize = resolvedUsedItem?.size || resolvedVariant?.size || size;
   const sellerOnVacation = !!listing.seller?.vacation_mode_enabled;
 
   return (
@@ -373,9 +430,9 @@ export default function CheckoutPage() {
           <h2 className="text-lg font-semibold text-relay-text">Order Summary</h2>
         </div>
         <div className="flex gap-4">
-          {listing.images?.[0] && (
+          {(resolvedUsedItem?.condition_photo_url || listing.images?.[0]) && (
             <img
-              src={listing.images[0]}
+              src={resolvedUsedItem?.condition_photo_url || listing.images[0]}
               alt={listing.model}
               className="w-20 h-20 rounded-xl object-cover border border-white/10"
             />
@@ -387,6 +444,11 @@ export default function CheckoutPage() {
               <p className="text-sm text-relay-subtle">{listing.nickname}</p>
             )}
             <p className="text-sm text-relay-muted mt-1">Size: {displaySize}</p>
+            {resolvedUsedItem && (
+              <p className="text-sm text-relay-muted mt-1">
+                Condition: {getUsedConditionLabel(resolvedUsedItem.condition)}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className="text-xl font-bold text-relay-text">${shoePrice.toFixed(2)}</p>
