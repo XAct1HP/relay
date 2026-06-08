@@ -422,6 +422,12 @@ Expected result:
 
 Use this when you want to test the file-upload path instead of a public `condition_photo_url`.
 
+Accepted single-item file field names:
+
+- `condition_photo`
+- `condition_photo_file`
+- `file`
+
 PowerShell 7 example:
 
 ```powershell
@@ -443,6 +449,40 @@ Expected result:
 - the listing is created or merged like a normal used listing
 - the used condition photo becomes part of the listing image set
 - if the file is omitted, the item should fail with a validation error about requiring a condition photo
+
+JavaScript / tool-builder example:
+
+```javascript
+const form = new FormData();
+
+form.append(
+  "items",
+  JSON.stringify([
+    {
+      sku: "DZ5485-612",
+      condition: "Used",
+      box_condition: "good",
+      approximate_sizing: "normal",
+      variants: [
+        { size: "10", condition: "used", quantity: 1, price: 315 },
+      ],
+    },
+  ])
+);
+
+form.append("condition_photo", photoFile);
+
+const response = await fetch(`${BASE_URL}/api/integrations/inventory/upsert`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${API_KEY}`,
+  },
+  body: form,
+});
+
+const data = await response.json();
+console.log(data);
+```
 
 ## 5. Existing Variant Update Test
 

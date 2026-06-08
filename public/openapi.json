@@ -24,7 +24,7 @@
     "/api/integrations/inventory/upsert": {
       "post": {
         "summary": "Inventory Upsert",
-        "description": "Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches sneaker metadata automatically, supports New, Used, and New + Used inventory flows, and can accept a condition photo either as a URL in JSON or as a file upload in multipart form data.",
+        "description": "Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches sneaker metadata automatically, supports New, Used, and New + Used inventory flows, and can accept a condition photo either as a URL in JSON or as a raw file upload in multipart form data.",
         "operationId": "inventoryUpsert",
         "tags": ["Inventory"],
         "requestBody": {
@@ -52,6 +52,10 @@
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/UpsertMultipartRequest"
+              },
+              "example": {
+                "items": "[{\"sku\":\"DZ5485-612\",\"condition\":\"Used\",\"box_condition\":\"good\",\"approximate_sizing\":\"normal\",\"variants\":[{\"size\":\"10\",\"condition\":\"used\",\"quantity\":1,\"price\":315}]}]",
+                "condition_photo": "(binary file)"
               },
               "encoding": {
                 "items": {
@@ -683,15 +687,30 @@
             "format": "binary",
             "description": "Condition photo file for the first item."
           },
+          "condition_photo_file": {
+            "type": "string",
+            "format": "binary",
+            "description": "Alias for condition_photo for single-item tool uploads."
+          },
           "condition_photo_0": {
             "type": "string",
             "format": "binary",
             "description": "Condition photo file for item index 0."
           },
+          "condition_photo_file_0": {
+            "type": "string",
+            "format": "binary",
+            "description": "Alias for condition_photo_0 for item index 0."
+          },
           "condition_photo_1": {
             "type": "string",
             "format": "binary",
             "description": "Condition photo file for item index 1."
+          },
+          "condition_photo_file_1": {
+            "type": "string",
+            "format": "binary",
+            "description": "Alias for condition_photo_1 for item index 1."
           }
         }
       },

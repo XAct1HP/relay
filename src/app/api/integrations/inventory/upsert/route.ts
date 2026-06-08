@@ -42,9 +42,7 @@ export async function POST(request: Request) {
             return item;
           }
 
-          const fileField =
-            extractFile(formData.get(`condition_photo_${index}`)) ||
-            (index === 0 ? extractFile(formData.get("condition_photo")) : null);
+          const fileField = resolveConditionPhotoFile(formData, index);
 
           if (!fileField) {
             return item;
@@ -69,6 +67,34 @@ export async function POST(request: Request) {
 
 function extractFile(value: FormDataEntryValue | null): File | null {
   return value instanceof File && value.size > 0 ? value : null;
+}
+
+function resolveConditionPhotoFile(formData: FormData, index: number): File | null {
+  const fieldNames = [
+    `condition_photo_${index}`,
+    `condition_photo_file_${index}`,
+    `conditionPhoto_${index}`,
+    `conditionPhotoFile_${index}`,
+  ];
+
+  if (index === 0) {
+    fieldNames.push(
+      "condition_photo",
+      "condition_photo_file",
+      "conditionPhoto",
+      "conditionPhotoFile",
+      "file"
+    );
+  }
+
+  for (const fieldName of fieldNames) {
+    const file = extractFile(formData.get(fieldName));
+    if (file) {
+      return file;
+    }
+  }
+
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

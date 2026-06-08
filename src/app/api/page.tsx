@@ -268,9 +268,10 @@ export default function ApiPage() {
                 </div>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">Inventory Upsert</h2>
                 <p className="mt-3 text-[15px] leading-relaxed text-white/60">
-                  Create new SKU listings or merge inventory into existing ones. If the seller
-                  already has a listing for a given SKU, existing sizes update and new sizes are
-                  added. If the SKU is new, a listing is created with all provided variants.
+                  Create new SKU listings or merge inventory into existing ones. Relay enriches the
+                  sneaker from the SKU automatically, supports new, used, and mixed inventory, and
+                  lets your tool upload the required used-condition photo directly as a file instead
+                  of forcing you to host it at a public URL first.
                 </p>
               </div>
 
@@ -307,6 +308,10 @@ export default function ApiPage() {
                     ["items[].variants[].quantity", "integer", "Yes", "Stock count. Integer >= 0."],
                     ["items[].variants[].price", "number", "Yes", "Price in USD. Must be > 0."],
                     ["items[].variants[].condition", "string", "Mixed recommended", "new or used. Required per row for New + Used listings."],
+                    ["condition_photo", "file", "Multipart only", "Raw image file for the first used or mixed item in the request."],
+                    ["condition_photo_file", "file", "Multipart only", "Alias for condition_photo for single-item tool uploads."],
+                    ["condition_photo_0", "file", "Multipart only", "Raw image file for item index 0 in batch multipart uploads."],
+                    ["condition_photo_file_0", "file", "Multipart only", "Alias for condition_photo_0 in batch multipart uploads."],
                   ]}
                 />
               </div>
@@ -350,7 +355,7 @@ export default function ApiPage() {
               </div>
 
               <Tabs tabs={[
-                { label: "cURL", code: `curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
+                { label: "cURL JSON", code: `curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \\
   -d '{
@@ -367,7 +372,7 @@ export default function ApiPage() {
       }
     ]
   }'` },
-                { label: "TypeScript", code: `const res = await fetch(
+                { label: "TS JSON", code: `const res = await fetch(
   "https://relayco.app/api/integrations/inventory/upsert",
   {
     method: "POST",
@@ -391,6 +396,34 @@ export default function ApiPage() {
     }),
   }
 );
+const data = await res.json();` },
+                { label: "TS Multipart", code: `const form = new FormData();
+
+form.append(
+  "items",
+  JSON.stringify([
+    {
+      sku: "DZ5485-612",
+      condition: "Used",
+      box_condition: "good",
+      approximate_sizing: "normal",
+      variants: [
+        { size: "10", condition: "used", quantity: 1, price: 315 },
+      ],
+    },
+  ])
+);
+
+form.append("condition_photo", fileInput.files[0]);
+
+const res = await fetch("https://relayco.app/api/integrations/inventory/upsert", {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer relay_sk_test_xxxxxxxxxxxx",
+  },
+  body: form,
+});
+
 const data = await res.json();` },
                 { label: "Python", code: `import requests
 
@@ -420,22 +453,18 @@ print(res.json())` },
 
               <Callout>
                 <strong className="text-white/80">Notes.</strong>{" "}
-                SKU is trimmed and uppercased before lookup. Relay keeps one listing per seller per
-                SKU, so upserting an existing SKU merges variants. Relay now runs the same sneaker
-                lookup flow as the listing form, enriches title/description/images when possible,
-                saves the linked sneaker record, and preserves per-variant new vs used condition.
-                Used and New + Used listings must include exactly one condition photo, either as
-                <Param>condition_photo_url</Param> in JSON or as an uploaded file in multipart form
-                data. For multipart requests, send <Param>items</Param> as a JSON string plus
-                <Param>condition_photo</Param> for the first item, or <Param>condition_photo_0</Param>,
-                <Param>condition_photo_1</Param>, and so on for batch uploads. Duplicate size +
-                condition rows are rejected. Invalid rows are returned as item-level errors while
-                valid rows in the same batch still process.
+                You do not need to host the condition photo yourself. For used and mixed listings,
+                send the raw file directly with multipart form data using <Param>condition_photo</Param>,
+                <Param>condition_photo_file</Param>, or indexed fields like <Param>condition_photo_0</Param>.
+                Relay uploads that file server-side, saves it into the listing image set, and then
+                processes the listing normally. JSON <Param>condition_photo_url</Param> still works
+                when you already have a public URL. Duplicate size + condition rows are rejected,
+                and valid items in the same batch still process even if another item fails.
               </Callout>
 
               <Code label="Multipart Example" code={`curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
   -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \\
-  -F 'items=[{"sku":"DZ5485-612","condition":"Used","variants":[{"size":"10","quantity":1,"price":315,"condition":"used"}]}]' \\
+  -F 'items=[{"sku":"DZ5485-612","condition":"Used","box_condition":"good","approximate_sizing":"normal","variants":[{"size":"10","quantity":1,"price":315,"condition":"used"}]}]' \\
   -F "condition_photo=@./condition-photo.jpg"`} />
             </section>
 

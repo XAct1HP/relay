@@ -40,7 +40,7 @@ The upsert endpoint accepts either:
 - `application/json`
 - `multipart/form-data`
 
-Use multipart when you want to upload the required used-condition photo as a file instead of passing a public URL.
+Use multipart when you want to upload the required used-condition photo as a raw file from your own tool instead of passing a public URL.
 
 #### Request body
 
@@ -82,6 +82,10 @@ Use multipart when you want to upload the required used-condition photo as a fil
 | items[].variants[].condition | string | Mixed recommended | `new` or `used`. Required per row for `New + Used` listings. |
 | items[].variants[].quantity | integer | Yes | Stock count. Must be >= 0. |
 | items[].variants[].price | number | Yes | Price in USD. Must be > 0. |
+| condition_photo | file | Multipart only | Raw image file for the first used or mixed item in the request. |
+| condition_photo_file | file | Multipart only | Alias for `condition_photo` for single-item tool uploads. |
+| condition_photo_0 | file | Multipart only | Raw image file for item index 0 in batch multipart uploads. |
+| condition_photo_file_0 | file | Multipart only | Alias for `condition_photo_0` in batch multipart uploads. |
 
 #### Response body (200)
 
@@ -123,7 +127,9 @@ For file-based condition photos, send:
 
 - `items` as a JSON string
 - `condition_photo` for the first item
+- `condition_photo_file` as an alias for the first item
 - `condition_photo_0`, `condition_photo_1`, and so on for batch uploads
+- `condition_photo_file_0`, `condition_photo_file_1`, and so on as alias field names for batch uploads
 
 Example:
 
@@ -132,6 +138,39 @@ curl -X POST https://relayco.app/api/integrations/inventory/upsert \
   -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \
   -F 'items=[{"sku":"DZ5485-612","condition":"Used","box_condition":"good","approximate_sizing":"normal","variants":[{"size":"10","condition":"used","quantity":1,"price":315}]}]' \
   -F "condition_photo=@./condition-photo.jpg"
+```
+
+TypeScript multipart example:
+
+```typescript
+const form = new FormData();
+
+form.append(
+  "items",
+  JSON.stringify([
+    {
+      sku: "DZ5485-612",
+      condition: "Used",
+      box_condition: "good",
+      approximate_sizing: "normal",
+      variants: [
+        { size: "10", condition: "used", quantity: 1, price: 315 },
+      ],
+    },
+  ])
+);
+
+form.append("condition_photo", fileInput.files[0]);
+
+const response = await fetch("https://relayco.app/api/integrations/inventory/upsert", {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer relay_sk_test_xxxxxxxxxxxx",
+  },
+  body: form,
+});
+
+const data = await response.json();
 ```
 
 #### Error responses
