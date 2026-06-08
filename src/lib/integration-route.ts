@@ -15,6 +15,12 @@ import { createAdminClient } from "@/lib/supabase-admin";
 
 interface HandleIntegrationRouteOptions<TBody = unknown> {
   request: Request;
+  parseBody?: (args: {
+    request: Request;
+    admin: ReturnType<typeof createAdminClient>;
+    auth: AuthenticatedIntegrationSeller;
+    requestId: string;
+  }) => Promise<TBody>;
   handler: (args: {
     admin: ReturnType<typeof createAdminClient>;
     auth: AuthenticatedIntegrationSeller;
@@ -26,7 +32,7 @@ interface HandleIntegrationRouteOptions<TBody = unknown> {
 export async function handleIntegrationRoute<TBody = unknown>(
   options: HandleIntegrationRouteOptions<TBody>
 ) {
-  const { request, handler } = options;
+  const { request, handler, parseBody } = options;
   const requestId = randomUUID();
   const admin = createAdminClient();
   const endpoint = new URL(request.url).pathname;
@@ -42,7 +48,14 @@ export async function handleIntegrationRoute<TBody = unknown>(
     auth = await authenticateIntegrationRequest(request);
     enforceIntegrationRateLimit(auth);
     await touchIntegrationApiKeyLastUsed(auth.apiKeyId);
-    const body = (await request.json()) as TBody;
+    const body = parseBody
+      ? await parseBody({
+          request,
+          admin,
+          auth,
+          requestId,
+        })
+      : ((await request.json()) as TBody);
     const result = await handler({
       admin,
       auth,

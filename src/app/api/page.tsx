@@ -280,7 +280,7 @@ export default function ApiPage() {
                   head={["Header", "Type", "Required", "Description"]}
                   rows={[
                     ["Authorization", "string", "Yes", "Bearer <API key>"],
-                    ["Content-Type", "string", "Yes", "application/json"],
+                    ["Content-Type", "string", "Yes", "application/json or multipart/form-data"],
                   ]}
                 />
               </div>
@@ -292,10 +292,21 @@ export default function ApiPage() {
                   rows={[
                     ["items", "array", "Yes", "Array of inventory items to upsert."],
                     ["items[].sku", "string", "Yes", "Product SKU (e.g. DZ5485-612). Normalized to uppercase."],
+                    ["items[].condition", "string", "No", "New, Used, or New + Used. If omitted, Relay infers it from variant conditions."],
+                    ["items[].condition_photo_url", "string", "Used/Mixed only", "Exactly one public photo URL required for Used and New + Used listings."],
+                    ["items[].box_condition", "string", "No", "perfect, good, damaged, or no_box. Defaults to perfect."],
+                    ["items[].approximate_sizing", "string", "No", "lightweight, normal, or heavy. Defaults to normal."],
+                    ["items[].brand", "string", "No", "Override brand if you want to provide your own product data."],
+                    ["items[].name", "string", "No", "Primary listing title. Falls back to Relay SKU lookup data when omitted."],
+                    ["items[].model", "string", "No", "Catalog model / silhouette label."],
+                    ["items[].nickname", "string", "No", "Optional nickname."],
+                    ["items[].description", "string", "No", "Optional description override. Relay also enriches from SKU lookup."],
+                    ["items[].gallery_images", "array", "No", "Optional gallery image URL overrides for New listings."],
                     ["items[].variants", "array", "Yes", "Size variants. At least one required."],
-                    ["items[].variants[].size", "string", "Yes", "Size label (e.g. 10, 11.5). Unique within item."],
+                    ["items[].variants[].size", "string", "Yes", "Size label (e.g. 10, 11.5). Unique per size + condition pair."],
                     ["items[].variants[].quantity", "integer", "Yes", "Stock count. Integer >= 0."],
                     ["items[].variants[].price", "number", "Yes", "Price in USD. Must be > 0."],
+                    ["items[].variants[].condition", "string", "Mixed recommended", "new or used. Required per row for New + Used listings."],
                   ]}
                 />
               </div>
@@ -318,9 +329,14 @@ export default function ApiPage() {
   "items": [
     {
       "sku": "DZ5485-612",
+      "condition": "New + Used",
+      "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
+      "box_condition": "good",
+      "approximate_sizing": "normal",
       "variants": [
-        { "size": "10", "quantity": 1, "price": 350 },
-        { "size": "11", "quantity": 2, "price": 360 }
+        { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+        { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+        { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
       ]
     }
   ]
@@ -341,9 +357,12 @@ export default function ApiPage() {
     "items": [
       {
         "sku": "DZ5485-612",
+        "condition": "New + Used",
+        "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
         "variants": [
-          { "size": "10", "quantity": 1, "price": 350 },
-          { "size": "11", "quantity": 2, "price": 360 }
+          { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+          { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+          { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
         ]
       }
     ]
@@ -360,9 +379,12 @@ export default function ApiPage() {
       items: [
         {
           sku: "DZ5485-612",
+          condition: "New + Used",
+          condition_photo_url: "https://cdn.example.com/condition/dz5485-612.jpg",
           variants: [
-            { size: "10", quantity: 1, price: 350 },
-            { size: "11", quantity: 2, price: 360 },
+            { size: "10", condition: "new", quantity: 1, price: 350 },
+            { size: "10", condition: "used", quantity: 1, price: 315 },
+            { size: "11", condition: "new", quantity: 2, price: 360 },
           ],
         },
       ],
@@ -382,9 +404,12 @@ res = requests.post(
         "items": [
             {
                 "sku": "DZ5485-612",
+                "condition": "New + Used",
+                "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
                 "variants": [
-                    {"size": "10", "quantity": 1, "price": 350},
-                    {"size": "11", "quantity": 2, "price": 360},
+                    {"size": "10", "condition": "new", "quantity": 1, "price": 350},
+                    {"size": "10", "condition": "used", "quantity": 1, "price": 315},
+                    {"size": "11", "condition": "new", "quantity": 2, "price": 360},
                 ],
             }
         ]
@@ -396,11 +421,22 @@ print(res.json())` },
               <Callout>
                 <strong className="text-white/80">Notes.</strong>{" "}
                 SKU is trimmed and uppercased before lookup. Relay keeps one listing per seller per
-                SKU, so upserting an existing SKU merges variants. Matching catalog products are
-                attached automatically; unresolved SKUs are skipped and returned in item_errors.
-                Duplicate sizes within an item are rejected. Invalid rows are returned as item-level
-                errors while valid rows in the same batch still process.
+                SKU, so upserting an existing SKU merges variants. Relay now runs the same sneaker
+                lookup flow as the listing form, enriches title/description/images when possible,
+                saves the linked sneaker record, and preserves per-variant new vs used condition.
+                Used and New + Used listings must include exactly one condition photo, either as
+                <Param>condition_photo_url</Param> in JSON or as an uploaded file in multipart form
+                data. For multipart requests, send <Param>items</Param> as a JSON string plus
+                <Param>condition_photo</Param> for the first item, or <Param>condition_photo_0</Param>,
+                <Param>condition_photo_1</Param>, and so on for batch uploads. Duplicate size +
+                condition rows are rejected. Invalid rows are returned as item-level errors while
+                valid rows in the same batch still process.
               </Callout>
+
+              <Code label="Multipart Example" code={`curl -X POST https://relayco.app/api/integrations/inventory/upsert \\
+  -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \\
+  -F 'items=[{"sku":"DZ5485-612","condition":"Used","variants":[{"size":"10","quantity":1,"price":315,"condition":"used"}]}]' \\
+  -F "condition_photo=@./condition-photo.jpg"`} />
             </section>
 
             {/* ─── Variant Update ─── */}
