@@ -712,7 +712,7 @@ function validateIntegrationItems(items: unknown) {
         item_index: itemIndex,
         sku: rawSku,
         field: "item",
-        message: "Used and New + Used listings require a condition_photo_url.",
+        message: "Used and New + Used listings require a condition photo.",
       });
       continue;
     }

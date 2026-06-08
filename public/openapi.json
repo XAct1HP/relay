@@ -24,7 +24,7 @@
     "/api/integrations/inventory/upsert": {
       "post": {
         "summary": "Inventory Upsert",
-        "description": "Create new SKU listings or merge inventory into existing ones. If the seller already has a listing for a given SKU, existing sizes are updated and new sizes are added. If the SKU does not exist, a new listing is created with all provided variants.",
+        "description": "Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches sneaker metadata automatically, supports New, Used, and New + Used inventory flows, and can accept a condition photo either as a URL in JSON or as a file upload in multipart form data.",
         "operationId": "inventoryUpsert",
         "tags": ["Inventory"],
         "requestBody": {
@@ -38,12 +38,25 @@
                 "items": [
                   {
                     "sku": "DZ5485-612",
+                    "condition": "New + Used",
+                    "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
                     "variants": [
-                      { "size": "10", "quantity": 1, "price": 350 },
-                      { "size": "11", "quantity": 2, "price": 360 }
+                      { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+                      { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+                      { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
                     ]
                   }
                 ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMultipartRequest"
+              },
+              "encoding": {
+                "items": {
+                  "contentType": "application/json"
+                }
               }
             }
           }
@@ -554,8 +567,14 @@
         "properties": {
           "size": {
             "type": "string",
-            "description": "Size label (e.g. '10', '11.5'). Must be unique within the item.",
+            "description": "Size label (e.g. '10', '11.5'). Must be unique per size + condition pair within the item.",
             "example": "10"
+          },
+          "condition": {
+            "type": "string",
+            "enum": ["new", "used"],
+            "description": "Variant condition. Required per row for New + Used listings.",
+            "example": "new"
           },
           "quantity": {
             "type": "integer",
@@ -580,6 +599,54 @@
             "description": "Product SKU (e.g. 'DZ5485-612'). Normalized to uppercase before lookup.",
             "example": "DZ5485-612"
           },
+          "condition": {
+            "type": "string",
+            "enum": ["New", "Used", "New + Used"],
+            "description": "Listing condition. If omitted, Relay infers it from the variants."
+          },
+          "condition_photo_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Exactly one public seller condition photo URL for Used or New + Used listings. Optional if sent as multipart file upload instead."
+          },
+          "box_condition": {
+            "type": "string",
+            "enum": ["perfect", "good", "damaged", "no_box"],
+            "description": "Box condition. Defaults to perfect."
+          },
+          "approximate_sizing": {
+            "type": "string",
+            "enum": ["lightweight", "normal", "heavy"],
+            "description": "Approximate sizing. Defaults to normal."
+          },
+          "brand": {
+            "type": "string",
+            "description": "Optional brand override."
+          },
+          "name": {
+            "type": "string",
+            "description": "Optional primary listing title override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model or silhouette override."
+          },
+          "nickname": {
+            "type": "string",
+            "description": "Optional nickname override."
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional listing description override."
+          },
+          "gallery_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Optional gallery image overrides for new listings."
+          },
           "variants": {
             "type": "array",
             "minItems": 1,
@@ -600,6 +667,31 @@
               "$ref": "#/components/schemas/InventoryItem"
             },
             "description": "Array of inventory items to upsert."
+          }
+        }
+      },
+      "UpsertMultipartRequest": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": "string",
+            "description": "JSON string containing the same payload shape as application/json."
+          },
+          "condition_photo": {
+            "type": "string",
+            "format": "binary",
+            "description": "Condition photo file for the first item."
+          },
+          "condition_photo_0": {
+            "type": "string",
+            "format": "binary",
+            "description": "Condition photo file for item index 0."
+          },
+          "condition_photo_1": {
+            "type": "string",
+            "format": "binary",
+            "description": "Condition photo file for item index 1."
           }
         }
       },

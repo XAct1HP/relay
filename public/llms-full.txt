@@ -33,7 +33,14 @@ Every response includes:
 
 ### POST /api/integrations/inventory/upsert
 
-Create new SKU listings or merge inventory into existing ones. If the seller already has a listing for a given SKU, existing sizes are updated and new sizes are added. If the SKU does not exist, a new listing is created.
+Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches product data from Relay's sneaker lookup flow, saves the linked sneaker record when available, and applies the same new / used / new + used rules as the listing form.
+
+The upsert endpoint accepts either:
+
+- `application/json`
+- `multipart/form-data`
+
+Use multipart when you want to upload the required used-condition photo as a file instead of passing a public URL.
 
 #### Request body
 
@@ -42,9 +49,14 @@ Create new SKU listings or merge inventory into existing ones. If the seller alr
   "items": [
     {
       "sku": "DZ5485-612",
+      "condition": "New + Used",
+      "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
+      "box_condition": "good",
+      "approximate_sizing": "normal",
       "variants": [
-        { "size": "10", "quantity": 1, "price": 350 },
-        { "size": "11", "quantity": 2, "price": 360 }
+        { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+        { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+        { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
       ]
     }
   ]
@@ -55,8 +67,19 @@ Create new SKU listings or merge inventory into existing ones. If the seller alr
 |-------|------|----------|-------------|
 | items | array | Yes | Array of inventory items to upsert |
 | items[].sku | string | Yes | Product SKU (e.g. "DZ5485-612"). Normalized to uppercase before lookup. |
+| items[].condition | string | No | `New`, `Used`, or `New + Used`. If omitted, Relay infers condition from the variant rows. |
+| items[].condition_photo_url | string | Used/Mixed only | Exactly one public photo URL for the seller condition photo. Optional if you upload the file through multipart form data instead. |
+| items[].box_condition | string | No | `perfect`, `good`, `damaged`, or `no_box`. Defaults to `perfect`. |
+| items[].approximate_sizing | string | No | `lightweight`, `normal`, or `heavy`. Defaults to `normal`. |
+| items[].brand | string | No | Optional brand override. |
+| items[].name | string | No | Optional primary listing title override. |
+| items[].model | string | No | Optional model / silhouette override. |
+| items[].nickname | string | No | Optional nickname override. |
+| items[].description | string | No | Optional description override. Relay also enriches descriptions from sneaker lookup when available. |
+| items[].gallery_images | array | No | Optional gallery image URL overrides for new listings. |
 | items[].variants | array | Yes | Array of size variants. At least one required. |
-| items[].variants[].size | string | Yes | Size label (e.g. "10", "11.5"). Must be unique within the item. |
+| items[].variants[].size | string | Yes | Size label (e.g. "10", "11.5"). Must be unique per size + condition pair within the item. |
+| items[].variants[].condition | string | Mixed recommended | `new` or `used`. Required per row for `New + Used` listings. |
 | items[].variants[].quantity | integer | Yes | Stock count. Must be >= 0. |
 | items[].variants[].price | number | Yes | Price in USD. Must be > 0. |
 
@@ -86,10 +109,30 @@ Create new SKU listings or merge inventory into existing ones. If the seller alr
 
 - SKU is trimmed and uppercased before lookup. "dz5485-612" and "DZ5485-612" resolve to the same listing.
 - Relay keeps one SKU listing per seller. Upserting an existing SKU merges variants.
-- When a matching catalog product is found, the listing attaches to that catalog reference.
-- If a SKU cannot be resolved to a catalog product, the item is skipped and returned in item_errors.
-- Duplicate sizes within a single item are rejected.
+- Relay checks the local `sneakers` table first and falls back to the external sneaker lookup source when needed.
+- Used listings can only contain used variants. New listings can only contain new variants.
+- `New + Used` listings must contain at least one new variant and one used variant.
+- Used and `New + Used` listings require exactly one seller condition photo, passed either as `condition_photo_url` in JSON or as a multipart file upload.
+- New listings publish gallery images only. Used and `New + Used` listings publish gallery images first, followed by the seller condition photo.
+- Duplicate size + condition rows within a single item are rejected.
 - Invalid rows are returned as item-level errors; valid rows in the same batch still process.
+
+#### Multipart form-data upload
+
+For file-based condition photos, send:
+
+- `items` as a JSON string
+- `condition_photo` for the first item
+- `condition_photo_0`, `condition_photo_1`, and so on for batch uploads
+
+Example:
+
+```bash
+curl -X POST https://relayco.app/api/integrations/inventory/upsert \
+  -H "Authorization: Bearer relay_sk_test_xxxxxxxxxxxx" \
+  -F 'items=[{"sku":"DZ5485-612","condition":"Used","box_condition":"good","approximate_sizing":"normal","variants":[{"size":"10","condition":"used","quantity":1,"price":315}]}]' \
+  -F "condition_photo=@./condition-photo.jpg"
+```
 
 #### Error responses
 
@@ -99,7 +142,11 @@ Create new SKU listings or merge inventory into existing ones. If the seller alr
 - `400` invalid_request: "Variant size is required." (per variant)
 - `400` invalid_request: "Variant size {size} must have an integer quantity greater than or equal to 0."
 - `400` invalid_request: "Variant size {size} must have a price greater than 0."
-- `400` invalid_request: "Duplicate size {size} found for SKU {sku}."
+- `400` invalid_request: "Variant size {size} must declare condition new or used when the listing condition is New + Used."
+- `400` invalid_request: "New listings can only include new variants."
+- `400` invalid_request: "Used listings can only include used variants."
+- `400` invalid_request: "Used and New + Used listings require a condition photo."
+- `400` invalid_request: "Duplicate size {size} with condition {condition} found for SKU {sku}."
 
 
 ### PATCH /api/integrations/inventory/variant
@@ -367,8 +414,8 @@ All errors return a JSON body with an `error` string field.
 ## Example Integration Flow
 
 1. **Generate an API key**: Approved sellers create a key from Relay seller settings. The full key is shown only once.
-2. **Authenticate**: Send `Authorization: Bearer <key>` on every request with `Content-Type: application/json`.
-3. **Create inventory**: POST to `/api/integrations/inventory/upsert` with SKUs and size variants. Relay matches against the catalog automatically.
+2. **Authenticate**: Send `Authorization: Bearer <key>` on every request with `Content-Type: application/json` or multipart form data for file uploads.
+3. **Create inventory**: POST to `/api/integrations/inventory/upsert` with SKUs, variant rows, and optional rich metadata. Relay enriches the product automatically and supports condition-photo file uploads for used inventory.
 4. **Update prices/quantities**: Use PATCH `/api/integrations/inventory/variant` for single changes or PATCH `/api/integrations/inventory/prices` for bulk repricing.
 5. **Deactivate**: POST to `/api/integrations/inventory/deactivate` for full SKU deactivation or `/api/integrations/inventory/deactivate-variant` for a single size.
 
@@ -382,9 +429,12 @@ curl -X POST https://relayco.app/api/integrations/inventory/upsert \
     "items": [
       {
         "sku": "DZ5485-612",
+        "condition": "New + Used",
+        "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
         "variants": [
-          { "size": "10", "quantity": 1, "price": 350 },
-          { "size": "11", "quantity": 2, "price": 360 }
+          { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+          { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+          { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
         ]
       }
     ]
@@ -404,9 +454,12 @@ const response = await fetch("https://relayco.app/api/integrations/inventory/ups
     items: [
       {
         sku: "DZ5485-612",
+        condition: "New + Used",
+        condition_photo_url: "https://cdn.example.com/condition/dz5485-612.jpg",
         variants: [
-          { size: "10", quantity: 1, price: 350 },
-          { size: "11", quantity: 2, price: 360 },
+          { size: "10", condition: "new", quantity: 1, price: 350 },
+          { size: "10", condition: "used", quantity: 1, price: 315 },
+          { size: "11", condition: "new", quantity: 2, price: 360 },
         ],
       },
     ],
@@ -431,9 +484,12 @@ response = requests.post(
         "items": [
             {
                 "sku": "DZ5485-612",
+                "condition": "New + Used",
+                "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
                 "variants": [
-                    {"size": "10", "quantity": 1, "price": 350},
-                    {"size": "11", "quantity": 2, "price": 360},
+                    {"size": "10", "condition": "new", "quantity": 1, "price": 350},
+                    {"size": "10", "condition": "used", "quantity": 1, "price": 315},
+                    {"size": "11", "condition": "new", "quantity": 2, "price": 360},
                 ],
             }
         ]

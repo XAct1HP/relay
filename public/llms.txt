@@ -9,7 +9,7 @@ Bearer token using a Relay API key. Keys have prefix `relay_sk_test_` (staging) 
 
 ## Endpoints
 
-- [Inventory Upsert](https://relayco.app/api#upsert): POST /api/integrations/inventory/upsert — Create or merge SKU listings with size variants.
+- [Inventory Upsert](https://relayco.app/api#upsert): POST /api/integrations/inventory/upsert — Create or merge SKU listings with SKU enrichment, new/used condition support, and optional multipart condition-photo upload.
 - [Variant Update](https://relayco.app/api#variant): PATCH /api/integrations/inventory/variant — Update quantity, price, or active status for one variant.
 - [Bulk Price Update](https://relayco.app/api#prices): PATCH /api/integrations/inventory/prices — Reprice multiple SKU-size pairs in one request.
 - [Deactivate Listing](https://relayco.app/api#deactivate): POST /api/integrations/inventory/deactivate — Soft-deactivate all sizes under a SKU.

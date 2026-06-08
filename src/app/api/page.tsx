@@ -853,11 +853,11 @@ print(res.json())` },
                 </li>
                 <li>
                   <strong className="text-white/80">2. Authenticate requests</strong>
-                  <br />Send the key as <Param>Authorization: Bearer &lt;key&gt;</Param> on every request with <Param>Content-Type: application/json</Param>.
+                  <br />Send the key as <Param>Authorization: Bearer &lt;key&gt;</Param> on every request. Use <Param>application/json</Param> for standard upserts or multipart form data when uploading a condition photo file.
                 </li>
                 <li>
                   <strong className="text-white/80">3. Create inventory</strong>
-                  <br />POST to <Param>/api/integrations/inventory/upsert</Param> with SKUs and size variants. Relay matches against the catalog automatically.
+                  <br />POST to <Param>/api/integrations/inventory/upsert</Param> with SKUs, variant rows, and optional condition-photo uploads. Relay enriches the product automatically and enforces the same new, used, and mixed rules as the listing form.
                 </li>
                 <li>
                   <strong className="text-white/80">4. Update prices and quantities</strong>

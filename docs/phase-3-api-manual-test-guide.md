@@ -57,6 +57,8 @@ $AUTH_HEADERS = @{
 }
 ```
 
+For multipart condition-photo uploads, do not reuse `$AUTH_HEADERS` because the client needs to set the multipart boundary automatically.
+
 Optional helper for inspecting failed responses cleanly:
 
 ```powershell
@@ -336,9 +338,14 @@ Test body:
   "items": [
     {
       "sku": "DZ5485-612",
+      "condition": "New + Used",
+      "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
+      "box_condition": "good",
+      "approximate_sizing": "normal",
       "variants": [
-        { "size": "10", "quantity": 1, "price": 350 },
-        { "size": "11", "quantity": 2, "price": 360 }
+        { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
+        { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
+        { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
       ]
     }
   ]
@@ -398,17 +405,44 @@ Expected result:
 
 - If the seller does **not** already have this SKU listing:
   - listing is created
-  - size `10` variant is created
+  - size `10 / new` variant is created
+  - size `10 / used` variant is created
   - size `11` variant is created
 - If the seller **already has** this SKU listing:
   - listing is updated/merged
-  - existing size variants update
-  - new sizes are created
+  - existing size + condition variants update
+  - new size + condition variants are created
 - Response includes:
   - `created_count`
   - `updated_count`
   - `skipped_count`
   - `item_errors`
+
+### Used listing with multipart condition photo
+
+Use this when you want to test the file-upload path instead of a public `condition_photo_url`.
+
+PowerShell 7 example:
+
+```powershell
+$form = @{
+  items = '[{"sku":"DZ5485-612","condition":"Used","box_condition":"good","approximate_sizing":"normal","variants":[{"size":"10","condition":"used","quantity":1,"price":315}]}]'
+  condition_photo = Get-Item ".\condition-photo.jpg"
+}
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+  -Headers @{ Authorization = "Bearer $API_KEY" } `
+  -Form $form
+```
+
+Expected result:
+
+- Relay uploads the file to storage automatically
+- the listing is created or merged like a normal used listing
+- the used condition photo becomes part of the listing image set
+- if the file is omitted, the item should fail with a validation error about requiring a condition photo
 
 ## 5. Existing Variant Update Test
 
@@ -773,6 +807,35 @@ Expected result:
 - `400`
 - Error like `Request body must be valid JSON.`
 
+### Used or mixed listing without condition photo
+
+```powershell
+$body = @'
+{
+  "items": [
+    {
+      "sku": "DZ5485-612",
+      "condition": "Used",
+      "variants": [
+        { "size": "10", "condition": "used", "quantity": 1, "price": 315 }
+      ]
+    }
+  ]
+}
+'@
+
+Invoke-RestMethod `
+  -Method POST `
+  -Uri "$BASE_URL/api/integrations/inventory/upsert" `
+  -Headers $AUTH_HEADERS `
+  -Body $body
+```
+
+Expected safe result:
+
+- the item is rejected
+- response includes an item-level error saying used or mixed listings require a condition photo
+
 ## 10. Security Tests
 
 ### One seller cannot modify another seller's inventory
@@ -900,14 +963,25 @@ Check:
 - one seller SKU listing exists for `DZ5485-612`
 - no duplicate seller listings for the same SKU
 - listing status changes appropriately after deactivate tests
+- `condition`, `box_condition`, and `approx_sizing` match the upsert payload
+- `sneaker_id` is populated when Relay resolves the SKU successfully
+- `images` uses gallery images first and includes the seller condition photo for used or mixed listings
 
 ### `listing_variants`
 
 Check:
 
-- size `10` and `11` rows exist under the correct listing
+- size `10 / new`, `10 / used`, and `11 / new` rows exist under the correct listing when testing mixed inventory
 - quantities and prices reflect your update tests
+- `condition` reflects `new` or `used` correctly
 - `is_active` changes correctly for deactivate tests
+
+### `sneakers`
+
+Check:
+
+- the SKU exists in `sneakers` after a successful enriched upsert
+- `normalized_sku`, `name`, `description`, and gallery image fields are populated when lookup succeeds
 
 ### `catalog_products`
 
@@ -952,6 +1026,7 @@ In the Preview UI, confirm:
 ### Listing detail page
 
 - correct sizes are selectable
+- mixed listings should show separate selectable variants by condition
 - deactivated or unavailable sizes cannot be purchased
 
 ### Checkout availability
