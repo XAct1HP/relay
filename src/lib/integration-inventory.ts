@@ -138,6 +138,10 @@ interface SellerVariantLookupRow {
   is_active: boolean;
 }
 
+interface SellerListingLookupRow {
+  id: string;
+}
+
 export interface IntegrationInventoryItemError {
   item_index: number;
   row_index?: number;
@@ -171,6 +175,7 @@ export interface IntegrationInventoryVariantResult {
   success: boolean;
   listing_id?: string;
   variant_id?: string;
+  used_item_id?: string;
   message?: string;
   error?: string;
 }
@@ -207,6 +212,10 @@ interface ExternalVariantUpdateInput {
   quantity: unknown;
   price: unknown;
   active: unknown;
+  condition?: unknown;
+  condition_photo_url?: unknown;
+  condition_rating?: unknown;
+  condition_notes?: unknown;
 }
 
 interface ExternalPriceUpdateInput {
@@ -223,6 +232,29 @@ interface ExternalVariantDeactivateInput {
   sku: unknown;
   size: unknown;
 }
+
+type ValidatedDsVariantMutation = {
+  sku: string;
+  normalizedSku: string;
+  size: string;
+  price: number;
+  quantity: number;
+  active: boolean;
+  condition: "new";
+};
+
+type ValidatedUsedUnitMutation = {
+  sku: string;
+  normalizedSku: string;
+  size: string;
+  price: number;
+  quantity: 1;
+  active: boolean;
+  condition: "used";
+  conditionPhotoUrl: string;
+};
+
+type ValidatedVariantMutationInput = ValidatedDsVariantMutation | ValidatedUsedUnitMutation;
 
 export class IntegrationInventoryError extends Error {
   code: string;
@@ -325,7 +357,7 @@ export async function processIntegrationInventoryUpsert(
         }
       }
 
-      await upsertSellerSkuInventory(supabase, {
+      const upsertResult = await upsertSellerSkuInventory(supabase, {
         seller_id: sellerId,
         sku: sneaker?.sku || catalogProduct?.sku || item.originalSku,
         product: {
@@ -350,6 +382,8 @@ export async function processIntegrationInventoryUpsert(
           condition_photo_url: usedItem.conditionPhotoUrl,
         })),
       });
+
+      await syncListingInventoryState(supabase, upsertResult.listingId);
 
       if (!existingListing) {
         createdCount += item.variants.length + item.usedItems.length;
@@ -404,7 +438,10 @@ export async function processIntegrationVariantUpdate(
   item: unknown
 ): Promise<IntegrationInventoryVariantUpdateReport> {
   const normalized = validateSingleVariantUpdate(item);
-  const result = await updateVariantBySkuAndSize(supabase, sellerId, normalized, 0);
+  const result =
+    normalized.condition === "used"
+      ? await createUsedInventoryUnitBySkuAndSize(supabase, sellerId, normalized, 0)
+      : await upsertDsVariantBySkuAndSize(supabase, sellerId, normalized, 0);
 
   return {
     updated_count: result.success ? 1 : 0,
@@ -1658,33 +1695,73 @@ async function loadExistingSellerSkuListings(
   return snapshot;
 }
 
-function validateSingleVariantUpdate(item: unknown) {
+function validateSingleVariantUpdate(item: unknown): ValidatedVariantMutationInput {
   const rawItem = item as ExternalVariantUpdateInput | null;
   const sku = String(rawItem?.sku || "").trim().toUpperCase();
   const normalizedSku = normalizeSku(sku);
   const size = String(rawItem?.size || "").trim();
-  const quantity = Number(rawItem?.quantity);
-  const price = Number(rawItem?.price);
+  const condition = normalizeFlatInventoryCondition(rawItem?.condition ?? "new");
+  const price = normalizeFlatInventoryPrice(rawItem?.price);
   const active = rawItem?.active;
 
   if (!normalizedSku) {
-    throw new IntegrationInventoryError("SKU is required.");
+    throw new IntegrationInventoryError("SKU is required.", "SKU_REQUIRED");
   }
 
   if (!size) {
-    throw new IntegrationInventoryError("Size is required.");
+    throw new IntegrationInventoryError("Size is required.", "INVENTORY_SIZE_REQUIRED");
   }
 
-  if (!Number.isInteger(quantity) || quantity < 0) {
-    throw new IntegrationInventoryError("Quantity must be an integer greater than or equal to 0.");
+  if (!condition) {
+    throw new IntegrationInventoryError(
+      "Condition must be new or used.",
+      "INVALID_INVENTORY_CONDITION"
+    );
   }
 
   if (!Number.isFinite(price) || price <= 0) {
-    throw new IntegrationInventoryError("Price must be greater than 0.");
+    throw new IntegrationInventoryError("Price must be greater than 0.", "INVENTORY_PRICE_REQUIRED");
   }
 
-  if (typeof active !== "boolean") {
+  if (active !== undefined && typeof active !== "boolean") {
     throw new IntegrationInventoryError("Active must be a boolean value.");
+  }
+
+  if (condition === "used") {
+    const quantity = rawItem?.quantity === undefined || rawItem?.quantity === ""
+      ? 1
+      : Number(rawItem?.quantity);
+    const conditionPhotoUrl = normalizeOptionalUrl(rawItem?.condition_photo_url);
+
+    if (quantity !== 1) {
+      throw new IntegrationInventoryError(
+        "Used inventory quantity must be omitted or exactly 1.",
+        "USED_PAIR_QUANTITY_MUST_BE_ONE"
+      );
+    }
+
+    if (!conditionPhotoUrl) {
+      throw new IntegrationInventoryError(
+        "Used inventory requires a valid condition_photo_url.",
+        "USED_PAIR_PHOTO_REQUIRED"
+      );
+    }
+
+    return {
+      sku,
+      normalizedSku,
+      size,
+      quantity: 1,
+      price,
+      active: active === false ? false : true,
+      condition,
+      conditionPhotoUrl,
+    };
+  }
+
+  const quantity = Number(rawItem?.quantity);
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    throw new IntegrationInventoryError("Quantity must be an integer greater than or equal to 0.");
   }
 
   return {
@@ -1693,7 +1770,8 @@ function validateSingleVariantUpdate(item: unknown) {
     size,
     quantity,
     price,
-    active,
+    active: typeof active === "boolean" ? active : true,
+    condition,
   };
 }
 
@@ -1764,7 +1842,7 @@ async function updateVariantBySkuAndSize(
   supabase: SupabaseClient,
   sellerId: string,
   input:
-    | ReturnType<typeof validateSingleVariantUpdate>
+    | ValidatedDsVariantMutation
     | ReturnType<typeof validatePriceUpdate>,
   itemIndex: number,
   options?: {
@@ -1794,8 +1872,8 @@ async function updateVariantBySkuAndSize(
       listing_id: variant.listing_id,
       variant_id: variant.variant_id,
       price: input.price,
-      quantity: options?.updatePriceOnly ? variant.quantity : (input as ReturnType<typeof validateSingleVariantUpdate>).quantity,
-      is_active: options?.updatePriceOnly ? variant.is_active : (input as ReturnType<typeof validateSingleVariantUpdate>).active,
+      quantity: options?.updatePriceOnly ? variant.quantity : (input as ValidatedDsVariantMutation).quantity,
+      is_active: options?.updatePriceOnly ? variant.is_active : (input as ValidatedDsVariantMutation).active,
     });
 
     return {
@@ -1821,19 +1899,253 @@ async function updateVariantBySkuAndSize(
   }
 }
 
+async function syncListingInventoryState(
+  supabase: SupabaseClient,
+  listingId: string
+): Promise<void> {
+  const { data: listing, error: listingError } = await supabase
+    .from("listings")
+    .select("id, status, condition, listing_variants(quantity, is_active, condition), listing_used_items(quantity, is_active)")
+    .eq("id", listingId)
+    .maybeSingle();
+
+  if (listingError) {
+    throw listingError;
+  }
+
+  if (!listing) {
+    return;
+  }
+
+  const variantRows = Array.isArray(listing.listing_variants) ? listing.listing_variants : [];
+  const usedItemRows = Array.isArray(listing.listing_used_items) ? listing.listing_used_items : [];
+
+  const hasAvailableNewVariant = variantRows.some(
+    (variant: any) =>
+      variant?.condition !== "used" &&
+      Number(variant?.quantity) > 0 &&
+      variant?.is_active !== false
+  );
+  const hasAvailableLegacyUsedVariant = variantRows.some(
+    (variant: any) =>
+      variant?.condition === "used" &&
+      Number(variant?.quantity) > 0 &&
+      variant?.is_active !== false
+  );
+  const hasAvailableUsedItem = usedItemRows.some(
+    (item: any) => Number(item?.quantity) > 0 && item?.is_active !== false
+  );
+  const hasAvailableUsedInventory = hasAvailableLegacyUsedVariant || hasAvailableUsedItem;
+
+  const nextCondition = hasAvailableNewVariant && hasAvailableUsedInventory
+    ? "mixed"
+    : hasAvailableUsedInventory
+    ? "used_good"
+    : "new";
+
+  const updatePayload: Record<string, unknown> = {};
+
+  if (listing.condition !== nextCondition) {
+    updatePayload.condition = nextCondition;
+  }
+
+  if (listing.status === "active" || listing.status === "sold_out") {
+    const nextStatus = hasAvailableNewVariant || hasAvailableUsedInventory ? "active" : "sold_out";
+    if (listing.status !== nextStatus) {
+      updatePayload.status = nextStatus;
+    }
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("listings")
+    .update(updatePayload)
+    .eq("id", listingId);
+
+  if (updateError) {
+    throw updateError;
+  }
+}
+
+async function upsertDsVariantBySkuAndSize(
+  supabase: SupabaseClient,
+  sellerId: string,
+  input: ValidatedDsVariantMutation,
+  itemIndex: number
+): Promise<IntegrationInventoryVariantResult> {
+  try {
+    const existingVariant = await resolveSellerVariantBySkuAndSize(
+      supabase,
+      sellerId,
+      input.normalizedSku,
+      input.size
+    );
+
+    if (existingVariant) {
+      return await updateVariantBySkuAndSize(supabase, sellerId, input, itemIndex);
+    }
+
+    const listing = await resolveSellerListingBySku(supabase, sellerId, input.normalizedSku);
+    if (!listing) {
+      return {
+        item_index: itemIndex,
+        sku: input.sku,
+        size: input.size,
+        success: false,
+        error: `Listing for SKU ${input.sku} was not found. Use the upsert endpoint to create it first.`,
+      };
+    }
+
+    const { data: createdVariant, error: createError } = await supabase
+      .from("listing_variants")
+      .insert({
+        listing_id: listing.id,
+        size: input.size,
+        price: input.price,
+        quantity: input.quantity,
+        condition: "new",
+        is_active: input.quantity > 0 && input.active,
+      })
+      .select("id, size")
+      .single();
+
+    if (createError || !createdVariant) {
+      return {
+        item_index: itemIndex,
+        sku: input.sku,
+        size: input.size,
+        success: false,
+        error: createError?.message || `Failed to create variant ${input.size} for SKU ${input.sku}.`,
+      };
+    }
+
+    await syncListingInventoryState(supabase, listing.id);
+
+    return {
+      item_index: itemIndex,
+      sku: input.sku,
+      size: String(createdVariant.size),
+      success: true,
+      listing_id: listing.id,
+      variant_id: createdVariant.id,
+      message: "Variant created successfully.",
+    };
+  } catch (error) {
+    return {
+      item_index: itemIndex,
+      sku: input.sku,
+      size: input.size,
+      success: false,
+      error:
+        error instanceof InventoryUpsertError
+          ? error.message
+          : `Failed to upsert variant ${input.size} for SKU ${input.sku}.`,
+    };
+  }
+}
+
+async function createUsedInventoryUnitBySkuAndSize(
+  supabase: SupabaseClient,
+  sellerId: string,
+  input: ValidatedUsedUnitMutation,
+  itemIndex: number
+): Promise<IntegrationInventoryVariantResult> {
+  try {
+    const listing = await resolveSellerListingBySku(supabase, sellerId, input.normalizedSku);
+    if (!listing) {
+      return {
+        item_index: itemIndex,
+        sku: input.sku,
+        size: input.size,
+        success: false,
+        error: `Listing for SKU ${input.sku} was not found. Use the upsert endpoint to create it first.`,
+      };
+    }
+
+    const existingUsedItem = await resolveSellerUsedItemBySkuAndPhoto(
+      supabase,
+      sellerId,
+      input.normalizedSku,
+      input.conditionPhotoUrl
+    );
+    if (existingUsedItem) {
+      return {
+        item_index: itemIndex,
+        sku: input.sku,
+        size: input.size,
+        success: false,
+        error: "A used inventory unit with this condition_photo_url already exists for this SKU.",
+      };
+    }
+
+    const { data: createdUsedItem, error: createError } = await supabase
+      .from("listing_used_items")
+      .insert({
+        listing_id: listing.id,
+        size: input.size,
+        price: input.price,
+        quantity: 1,
+        condition: "used_good",
+        condition_photo_url: input.conditionPhotoUrl,
+        is_active: input.active,
+      })
+      .select("id, size")
+      .single();
+
+    if (createError || !createdUsedItem) {
+      return {
+        item_index: itemIndex,
+        sku: input.sku,
+        size: input.size,
+        success: false,
+        error:
+          createError?.message || `Failed to create used inventory unit ${input.size} for SKU ${input.sku}.`,
+      };
+    }
+
+    await syncListingInventoryState(supabase, listing.id);
+
+    return {
+      item_index: itemIndex,
+      sku: input.sku,
+      size: String(createdUsedItem.size),
+      success: true,
+      listing_id: listing.id,
+      used_item_id: createdUsedItem.id,
+      message: "Used inventory unit created successfully.",
+    };
+  } catch (error) {
+    return {
+      item_index: itemIndex,
+      sku: input.sku,
+      size: input.size,
+      success: false,
+      error:
+        error instanceof InventoryUpsertError
+          ? error.message
+          : `Failed to create used inventory unit ${input.size} for SKU ${input.sku}.`,
+    };
+  }
+}
+
 async function resolveSellerVariantBySkuAndSize(
   supabase: SupabaseClient,
   sellerId: string,
   normalizedSku: string,
-  size: string
+  size: string,
+  condition: "new" | "used" = "new"
 ): Promise<SellerVariantLookupRow | null> {
   const { data, error } = await supabase
     .from("listings")
-    .select("id, listing_variants!inner(id, size, quantity, price, is_active)")
+    .select("id, listing_variants!inner(id, size, quantity, price, is_active, condition)")
     .eq("seller_id", sellerId)
     .eq("sku_normalized", normalizedSku)
     .neq("status", "removed")
     .eq("listing_variants.size", size)
+    .eq("listing_variants.condition", condition)
     .maybeSingle();
 
   if (error) {
@@ -1855,11 +2167,41 @@ async function resolveSellerVariantBySkuAndSize(
   };
 }
 
+async function resolveSellerUsedItemBySkuAndPhoto(
+  supabase: SupabaseClient,
+  sellerId: string,
+  normalizedSku: string,
+  conditionPhotoUrl: string
+): Promise<{ listing_id: string; used_item_id: string } | null> {
+  const { data, error } = await supabase
+    .from("listings")
+    .select("id, listing_used_items!inner(id)")
+    .eq("seller_id", sellerId)
+    .eq("sku_normalized", normalizedSku)
+    .neq("status", "removed")
+    .eq("listing_used_items.condition_photo_url", conditionPhotoUrl)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const usedItem = Array.isArray(data?.listing_used_items) ? data.listing_used_items[0] : null;
+  if (!data || !usedItem) {
+    return null;
+  }
+
+  return {
+    listing_id: data.id,
+    used_item_id: usedItem.id,
+  };
+}
+
 async function resolveSellerListingBySku(
   supabase: SupabaseClient,
   sellerId: string,
   normalizedSku: string
-): Promise<{ id: string } | null> {
+): Promise<SellerListingLookupRow | null> {
   const { data, error } = await supabase
     .from("listings")
     .select("id")

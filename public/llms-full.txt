@@ -176,27 +176,41 @@ const data = await response.json();
 
 ### PATCH /api/integrations/inventory/variant
 
-Update a single variant by SKU and size. Use this for live quantity changes, price adjustments, and toggling active status. The variant must already exist.
+Update or add one inventory row under an existing SKU listing. DS/new requests can update an existing size row or create a new DS size row. Used requests create one itemized used unit per call and always require their own condition photo.
 
 #### Request body
 
 ```json
 {
-  "sku": "DZ5485-612",
+  "sku": "DM7866-162",
   "size": "10",
   "quantity": 3,
-  "price": 345,
+  "price": 42000,
   "active": true
+}
+```
+
+Used inventory unit example:
+
+```json
+{
+  "sku": "DM7866-162",
+  "condition": "used",
+  "size": "10.5",
+  "price": 30000,
+  "condition_photo_url": "https://example.com/photo2.jpg"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | sku | string | Yes | Product SKU. Normalized to uppercase. |
-| size | string | Yes | Size label of the variant to update. |
-| quantity | integer | Yes | New stock count. Must be >= 0. |
-| price | number | Yes | New price in USD. Must be > 0. |
-| active | boolean | Yes | Whether the variant is available for purchase. |
+| size | string | Yes | Size label of the inventory row to update or create. |
+| condition | string | No | `new` or `used`. Defaults to `new`. |
+| quantity | integer | DS/new required | DS/new rows may use quantity >= 0. Used rows must omit quantity or set it to `1`. |
+| price | number | Yes | Price for this row. Must be > 0. |
+| active | boolean | No | Whether the row is available for purchase. Defaults to `true`. |
+| condition_photo_url | string | Used only | Required for used rows. Every used unit needs its own condition photo. |
 
 #### Response body (200)
 
@@ -207,12 +221,32 @@ Update a single variant by SKU and size. Use this for live quantity changes, pri
   "item_results": [
     {
       "item_index": 0,
-      "sku": "DZ5485-612",
+      "sku": "DM7866-162",
       "size": "10",
       "success": true,
       "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
       "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
       "message": "Variant updated successfully."
+    }
+  ]
+}
+```
+
+Used inventory unit success example:
+
+```json
+{
+  "updated_count": 1,
+  "skipped_count": 0,
+  "item_results": [
+    {
+      "item_index": 0,
+      "sku": "DM7866-162",
+      "size": "10.5",
+      "success": true,
+      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+      "used_item_id": "2a7d4ca7-30c0-42f8-b2fe-7d76310f29a8",
+      "message": "Used inventory unit created successfully."
     }
   ]
 }
@@ -229,22 +263,27 @@ Update a single variant by SKU and size. Use this for live quantity changes, pri
 | item_results[].success | boolean | Whether the update succeeded |
 | item_results[].listing_id | string | UUID of the parent listing (on success) |
 | item_results[].variant_id | string | UUID of the updated variant (on success) |
+| item_results[].used_item_id | string | UUID of the created used inventory unit (for used requests) |
 | item_results[].message | string | Human-readable result message (on success) |
 | item_results[].error | string | Error message (on failure) |
 
 #### Behavior
 
-- The variant must already exist. If not found, returns success: false with an error directing to the upsert endpoint.
-- All five fields are required on every request.
-- Setting active to false soft-deactivates the variant.
+- Use this endpoint only for existing SKU listings.
+- DS/new requests can update an existing size row or create a new DS size row under that listing.
+- Used requests always create one itemized used unit.
+- Used requests must include a unique `condition_photo_url`.
+- Used requests must omit quantity or set it to exactly `1`.
+- Setting active to false soft-deactivates the affected row.
 
 #### Error responses
 
-- `400` invalid_request: "SKU is required."
-- `400` invalid_request: "Size is required."
-- `400` invalid_request: "Quantity must be an integer greater than or equal to 0."
-- `400` invalid_request: "Price must be greater than 0."
-- `400` invalid_request: "Active must be a boolean value."
+- `400` SKU_REQUIRED: "SKU is required."
+- `400` INVENTORY_SIZE_REQUIRED: "Size is required."
+- `400` INVENTORY_PRICE_REQUIRED: "Price must be greater than 0."
+- `400` INVALID_INVENTORY_CONDITION: condition is not `new` or `used`
+- `400` USED_PAIR_PHOTO_REQUIRED: used request is missing `condition_photo_url`
+- `400` USED_PAIR_QUANTITY_MUST_BE_ONE: used request sets quantity greater than `1`
 
 
 ### PATCH /api/integrations/inventory/prices

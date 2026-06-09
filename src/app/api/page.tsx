@@ -482,9 +482,9 @@ print(res.json())` },
                 </div>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">Variant Update</h2>
                 <p className="mt-3 text-[15px] leading-relaxed text-white/60">
-                  Update a single variant by SKU and size. Use this for live quantity changes, price
-                  adjustments, and toggling a variant&apos;s active status. The variant must already
-                  exist -- create it first via the upsert endpoint.
+                  Update or add one inventory row under an existing SKU listing. DS/new requests can
+                  update an existing size row or create a new DS size row. Used requests create one
+                  itemized used unit per call and always require their own condition photo.
                 </p>
               </div>
 
@@ -494,10 +494,12 @@ print(res.json())` },
                   head={["Field", "Type", "Required", "Description"]}
                   rows={[
                     ["sku", "string", "Yes", "Product SKU. Normalized to uppercase."],
-                    ["size", "string", "Yes", "Size label of the variant to update."],
-                    ["quantity", "integer", "Yes", "New stock count. Integer >= 0."],
-                    ["price", "number", "Yes", "New price in USD. Must be > 0."],
-                    ["active", "boolean", "Yes", "Whether the variant is purchasable."],
+                    ["size", "string", "Yes", "Size label of the inventory row to update or create."],
+                    ["condition", "string", "No", "new or used. Defaults to new."],
+                    ["quantity", "integer", "DS/new required", "DS/new rows may use quantity >= 0. Used rows must omit quantity or set it to 1."],
+                    ["price", "number", "Yes", "Price for this row. Must be > 0."],
+                    ["active", "boolean", "No", "Whether the row is purchasable. Defaults to true when omitted."],
+                    ["condition_photo_url", "string", "Used only", "Required for used rows. Every used unit needs its own photo."],
                   ]}
                 />
               </div>
@@ -509,26 +511,36 @@ print(res.json())` },
                   rows={[
                     ["updated_count", "integer", "1 if updated, 0 otherwise."],
                     ["skipped_count", "integer", "1 if skipped."],
-                    ["item_results", "array", "Single result object with item_index, sku, size, success, listing_id, variant_id, message/error."],
+                    ["item_results", "array", "Single result object with item_index, sku, size, success, listing_id, variant_id or used_item_id, and message/error."],
                   ]}
                 />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
-                <Code label="Request" code={`{
-  "sku": "DZ5485-612",
+                <Code label="DS Request" code={`{
+  "sku": "DM7866-162",
   "size": "10",
   "quantity": 3,
-  "price": 345,
+  "price": 42000,
   "active": true
 }`} />
-                <Code label="Response" code={`{
+                <Code label="Used Request" code={`{
+  "sku": "DM7866-162",
+  "condition": "used",
+  "size": "10.5",
+  "price": 30000,
+  "condition_photo_url": "https://example.com/photo2.jpg"
+}`} />
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Code label="DS Response" code={`{
   "updated_count": 1,
   "skipped_count": 0,
   "item_results": [
     {
       "item_index": 0,
-      "sku": "DZ5485-612",
+      "sku": "DM7866-162",
       "size": "10",
       "success": true,
       "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
@@ -537,13 +549,29 @@ print(res.json())` },
     }
   ]
 }`} />
+                <Code label="Used Response" code={`{
+  "updated_count": 1,
+  "skipped_count": 0,
+  "item_results": [
+    {
+      "item_index": 0,
+      "sku": "DM7866-162",
+      "size": "10.5",
+      "success": true,
+      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+      "used_item_id": "2a7d4ca7-30c0-42f8-b2fe-7d76310f29a8",
+      "message": "Used inventory unit created successfully."
+    }
+  ]
+}`} />
               </div>
 
               <Callout>
                 <strong className="text-white/80">Notes.</strong>{" "}
-                All five fields are required on every request. If the variant is not found, the
-                response returns success: false with an error directing you to the upsert endpoint.
-                Setting active to false soft-deactivates the variant.
+                Use this endpoint only for existing SKU listings. DS/new requests can update an
+                existing size row or create a new DS size row under that listing. Used requests
+                always create one itemized used unit, must include a unique
+                <Param>condition_photo_url</Param>, and reject quantity values greater than 1.
               </Callout>
             </section>
 
@@ -899,7 +927,7 @@ print(res.json())` },
                 </li>
                 <li>
                   <strong className="text-white/80">4. Update prices and quantities</strong>
-                  <br />Use the variant endpoint for single changes or the prices endpoint for bulk repricing.
+                  <br />Use the variant endpoint for one existing-SKU inventory row at a time: update/create a DS size row or add one used pair. Use the prices endpoint for bulk repricing.
                 </li>
                 <li>
                   <strong className="text-white/80">5. Deactivate inventory</strong>

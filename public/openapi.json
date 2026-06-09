@@ -142,7 +142,7 @@
     "/api/integrations/inventory/variant": {
       "patch": {
         "summary": "Variant Update",
-        "description": "Update a single variant by SKU and size. Use for live quantity changes, price adjustments, and toggling active status. The variant must already exist (create it via the upsert endpoint first).",
+        "description": "Update or add one inventory row under an existing SKU listing. DS/new requests can update an existing size row or create a new DS size row. Used requests create one itemized used unit per call and always require their own condition photo.",
         "operationId": "variantUpdate",
         "tags": ["Inventory"],
         "requestBody": {
@@ -152,12 +152,27 @@
               "schema": {
                 "$ref": "#/components/schemas/VariantUpdateRequest"
               },
-              "example": {
-                "sku": "DZ5485-612",
-                "size": "10",
-                "quantity": 3,
-                "price": 345,
-                "active": true
+              "examples": {
+                "dsRow": {
+                  "summary": "Add or update a DS row",
+                  "value": {
+                    "sku": "DM7866-162",
+                    "size": "10",
+                    "quantity": 3,
+                    "price": 42000,
+                    "active": true
+                  }
+                },
+                "usedUnit": {
+                  "summary": "Add one used inventory unit",
+                  "value": {
+                    "sku": "DM7866-162",
+                    "condition": "used",
+                    "size": "10.5",
+                    "price": 30000,
+                    "condition_photo_url": "https://example.com/photo2.jpg"
+                  }
+                }
               }
             }
           }
@@ -176,20 +191,43 @@
                 "schema": {
                   "$ref": "#/components/schemas/VariantUpdateResponse"
                 },
-                "example": {
-                  "updated_count": 1,
-                  "skipped_count": 0,
-                  "item_results": [
-                    {
-                      "item_index": 0,
-                      "sku": "DZ5485-612",
-                      "size": "10",
-                      "success": true,
-                      "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-                      "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
-                      "message": "Variant updated successfully."
+                "examples": {
+                  "dsRow": {
+                    "summary": "DS row updated",
+                    "value": {
+                      "updated_count": 1,
+                      "skipped_count": 0,
+                      "item_results": [
+                        {
+                          "item_index": 0,
+                          "sku": "DM7866-162",
+                          "size": "10",
+                          "success": true,
+                          "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                          "variant_id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+                          "message": "Variant updated successfully."
+                        }
+                      ]
                     }
-                  ]
+                  },
+                  "usedUnit": {
+                    "summary": "Used unit created",
+                    "value": {
+                      "updated_count": 1,
+                      "skipped_count": 0,
+                      "item_results": [
+                        {
+                          "item_index": 0,
+                          "sku": "DM7866-162",
+                          "size": "10.5",
+                          "success": true,
+                          "listing_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                          "used_item_id": "2a7d4ca7-30c0-42f8-b2fe-7d76310f29a8",
+                          "message": "Used inventory unit created successfully."
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
@@ -199,7 +237,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "SKU is required." }
+                "example": { "error": "SKU is required.", "code": "SKU_REQUIRED" }
               }
             }
           },
@@ -208,7 +246,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Invalid API key." }
+                "example": { "error": "Invalid API key.", "code": "invalid_api_key" }
               }
             }
           },
@@ -217,7 +255,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Seller not approved." }
+                "example": { "error": "Seller not approved.", "code": "seller_not_approved" }
               }
             }
           },
@@ -827,34 +865,45 @@
       },
       "VariantUpdateRequest": {
         "type": "object",
-        "required": ["sku", "size", "quantity", "price", "active"],
+        "required": ["sku", "size", "price"],
         "properties": {
           "sku": {
             "type": "string",
             "description": "Product SKU. Normalized to uppercase.",
-            "example": "DZ5485-612"
+            "example": "DM7866-162"
           },
           "size": {
             "type": "string",
-            "description": "Size label of the variant to update.",
+            "description": "Size label of the inventory row to update or create.",
             "example": "10"
+          },
+          "condition": {
+            "type": "string",
+            "enum": ["new", "used"],
+            "description": "Inventory row condition. Defaults to new.",
+            "example": "new"
           },
           "quantity": {
             "type": "integer",
             "minimum": 0,
-            "description": "New stock count. Must be an integer >= 0.",
+            "description": "DS/new rows may use quantity >= 0. Used rows must omit quantity or set it to 1.",
             "example": 3
           },
           "price": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "description": "New price in USD. Must be greater than 0.",
-            "example": 345
+            "description": "Price for this row. Must be greater than 0.",
+            "example": 42000
           },
           "active": {
             "type": "boolean",
-            "description": "Whether the variant is available for purchase.",
+            "description": "Whether the row is available for purchase. Defaults to true.",
             "example": true
+          },
+          "condition_photo_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Required for used rows. Every used unit needs its own condition photo."
           }
         }
       },
@@ -890,8 +939,14 @@
           "variant_id": {
             "type": "string",
             "format": "uuid",
-            "description": "UUID of the variant (on success).",
+            "description": "UUID of the DS/new variant (on success).",
             "example": "f0e1d2c3-b4a5-6789-0abc-def123456789"
+          },
+          "used_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the created used inventory unit (for used requests).",
+            "example": "2a7d4ca7-30c0-42f8-b2fe-7d76310f29a8"
           },
           "message": {
             "type": "string",
