@@ -180,6 +180,8 @@ export async function upsertSellerSkuInventory(
         box_condition: normalized.product.boxCondition,
         approx_sizing: normalized.product.approxSizing,
         sku: normalized.displaySku,
+        inventory_review_status: null,
+        inventory_review_notes: null,
         status: existingListing.status === "removed" ? normalized.product.status : existingListing.status,
       })
       .eq("id", existingListing.id)
@@ -215,6 +217,8 @@ export async function upsertSellerSkuInventory(
     approx_sizing: normalized.product.approxSizing,
     description: normalized.product.description,
     images: normalized.product.images,
+    inventory_review_status: null,
+    inventory_review_notes: null,
     sizes: buildLegacySizes(normalized.variants),
     sku: normalized.displaySku,
     status: normalized.product.status,
@@ -341,6 +345,8 @@ export async function replaceSellerSkuListingInventory(
       box_condition: normalized.product.boxCondition,
       approx_sizing: normalized.product.approxSizing,
       sku: normalized.displaySku,
+      inventory_review_status: null,
+      inventory_review_notes: null,
       status: existingListing.status === "removed" ? normalized.product.status : existingListing.status,
     })
     .eq("id", listingId)

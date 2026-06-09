@@ -29,6 +29,13 @@ type ListingDisplayInput = {
     condition?: string;
     is_active?: boolean;
   }>;
+  listing_used_items?: Array<{
+    id?: string;
+    size?: string;
+    price?: number;
+    quantity?: number;
+    is_active?: boolean;
+  }>;
   created_at?: string;
   updated_at?: string;
 };
@@ -41,8 +48,15 @@ export interface ListingDisplayMetrics {
   lowestPrice: number;
 }
 
-export function getListingDisplayMetrics(listing: ListingDisplayInput): ListingDisplayMetrics {
-  const variants = getNormalizedVariants(listing);
+interface ListingDisplayMetricOptions {
+  includeUsedItems?: boolean;
+}
+
+export function getListingDisplayMetrics(
+  listing: ListingDisplayInput,
+  options?: ListingDisplayMetricOptions
+): ListingDisplayMetrics {
+  const variants = getNormalizedVariants(listing, options);
   const availableVariants = variants.filter((variant) => variant.isActive && variant.quantity > 0 && variant.price > 0);
   const source = availableVariants.length > 0 ? availableVariants : variants.filter((variant) => variant.isActive && variant.price > 0);
 
@@ -79,7 +93,10 @@ export function formatSizeDisplay(sizes: number[], sizeLabels: string[] = []): s
   return `Sizes ${Math.min(...sizes)}-${Math.max(...sizes)}`;
 }
 
-export function dedupeSkuListings<T extends ListingDisplayInput>(listings: T[]): T[] {
+export function dedupeSkuListings<T extends ListingDisplayInput>(
+  listings: T[],
+  options?: ListingDisplayMetricOptions
+): T[] {
   const deduped = new Map<string, T>();
 
   for (const listing of listings) {
@@ -94,15 +111,19 @@ export function dedupeSkuListings<T extends ListingDisplayInput>(listings: T[]):
       continue;
     }
 
-    deduped.set(key, choosePreferredListing(existing, listing));
+    deduped.set(key, choosePreferredListing(existing, listing, options));
   }
 
   return Array.from(deduped.values());
 }
 
-function choosePreferredListing<T extends ListingDisplayInput>(current: T, candidate: T): T {
-  const currentMetrics = getListingDisplayMetrics(current);
-  const candidateMetrics = getListingDisplayMetrics(candidate);
+function choosePreferredListing<T extends ListingDisplayInput>(
+  current: T,
+  candidate: T,
+  options?: ListingDisplayMetricOptions
+): T {
+  const currentMetrics = getListingDisplayMetrics(current, options);
+  const candidateMetrics = getListingDisplayMetrics(candidate, options);
 
   if (candidateMetrics.availableVariants.length !== currentMetrics.availableVariants.length) {
     return candidateMetrics.availableVariants.length > currentMetrics.availableVariants.length ? candidate : current;
@@ -117,12 +138,19 @@ function choosePreferredListing<T extends ListingDisplayInput>(current: T, candi
   return candidateUpdatedAt >= currentUpdatedAt ? candidate : current;
 }
 
-function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
+function getNormalizedVariants(
+  listing: ListingDisplayInput,
+  options?: ListingDisplayMetricOptions
+): DisplayVariant[] {
   const listingVariants = Array.isArray(listing.listing_variants) ? listing.listing_variants : [];
+  const listingUsedItems =
+    options?.includeUsedItems && Array.isArray(listing.listing_used_items)
+      ? listing.listing_used_items
+      : [];
 
   if (listingVariants.length > 0) {
-    return listingVariants
-      .map((variant) => ({
+    return [
+      ...listingVariants.map((variant) => ({
         id: variant.id,
         size: String(variant.size || "").trim(),
         price: Number(variant.price) || 0,
@@ -130,7 +158,17 @@ function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
         condition: toVariantCondition(variant.condition),
         isActive: variant.is_active !== false,
       }))
-      .filter((variant) => variant.size)
+      .filter((variant) => variant.size),
+      ...listingUsedItems.map((item) => ({
+        id: item.id,
+        size: String(item.size || "").trim(),
+        price: Number(item.price) || 0,
+        quantity: Number(item.quantity) || 0,
+        condition: "used" as const,
+        isActive: item.is_active !== false,
+      }))
+      .filter((item) => item.size),
+    ]
       .sort(compareVariantSize);
   }
 
@@ -151,8 +189,11 @@ function getNormalizedVariants(listing: ListingDisplayInput): DisplayVariant[] {
     .sort(compareVariantSize);
 }
 
-export function getListingNormalizedVariants(listing: ListingDisplayInput): NormalizedDisplayVariant[] {
-  return getNormalizedVariants(listing);
+export function getListingNormalizedVariants(
+  listing: ListingDisplayInput,
+  options?: ListingDisplayMetricOptions
+): NormalizedDisplayVariant[] {
+  return getNormalizedVariants(listing, options);
 }
 
 function compareVariantSize(a: DisplayVariant, b: DisplayVariant): number {

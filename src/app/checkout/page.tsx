@@ -62,6 +62,20 @@ function normalizePhotoUrl(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function getLegacySizeEntryCondition(
+  listingCondition: unknown,
+  sizeEntry: { condition?: unknown } | null
+) {
+  if (sizeEntry?.condition === 'used') {
+    return 'used';
+  }
+
+  const normalizedListingCondition = typeof listingCondition === 'string' ? listingCondition : '';
+  return normalizedListingCondition === 'mixed' || normalizedListingCondition.startsWith('used')
+    ? 'used'
+    : 'new';
+}
+
 function getLegacySizeEntry(listing: Listing, size: string | null) {
   const sizes = Array.isArray(listing.sizes) ? listing.sizes : [];
   return sizes.find((entry) => String(entry.size) === String(size ?? '')) || null;
@@ -163,6 +177,12 @@ export default function CheckoutPage() {
             } else {
               const legacySizeEntry = getLegacySizeEntry(data as Listing, offer.size);
               if (legacySizeEntry) {
+                const legacyCondition = getLegacySizeEntryCondition(data.condition, legacySizeEntry as any);
+                if (legacyCondition === 'used') {
+                  setError('Legacy used inventory must be purchased as an individual used pair.');
+                  return;
+                }
+
                 resolvedVariantRow = {
                   id: `${listingId}:${legacySizeEntry.size}`,
                   size: String(legacySizeEntry.size),
@@ -239,6 +259,18 @@ export default function CheckoutPage() {
                 setError('Selected size is no longer available.');
                 return;
               }
+
+              const legacyCondition = getLegacySizeEntryCondition(data.condition, sizeEntry as any);
+              if (legacyCondition === 'used') {
+                setError('Legacy used inventory must be purchased as an individual used pair.');
+                return;
+              }
+
+              if (data.inventory_review_status === 'legacy_used_photo_review_required') {
+                setError('This listing has used inventory that needs seller review before purchase.');
+                return;
+              }
+
               resolvedVariantRow = {
                 id: variantId || `${listingId}:${size}`,
                 size: String(sizeEntry.size),

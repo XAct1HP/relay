@@ -30,6 +30,20 @@ function normalizePhotoUrl(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function getLegacySizeEntryCondition(
+  listingCondition: unknown,
+  sizeEntry: { condition?: unknown } | null
+) {
+  if (sizeEntry?.condition === 'used') {
+    return 'used'
+  }
+
+  const normalizedListingCondition = typeof listingCondition === 'string' ? listingCondition : ''
+  return normalizedListingCondition === 'mixed' || normalizedListingCondition.startsWith('used')
+    ? 'used'
+    : 'new'
+}
+
 function getLegacySizeEntry(
   sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
   size: string
@@ -80,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id, seller_id, brand, model, images, sizes, status, seller:profiles(vacation_mode_enabled)')
+      .select('id, seller_id, brand, model, images, sizes, condition, inventory_review_status, status, seller:profiles(vacation_mode_enabled)')
       .eq('id', listingId)
       .single()
 
@@ -206,6 +220,21 @@ export async function POST(request: NextRequest) {
       if (!sizeEntry || (sizeEntry.quantity || 0) <= 0) {
         return NextResponse.json(
           { error: 'This size is no longer available' },
+          { status: 400 }
+        )
+      }
+
+      const sizeEntryCondition = getLegacySizeEntryCondition(listing.condition, sizeEntry as any)
+      if (sizeEntryCondition === 'used') {
+        return NextResponse.json(
+          { error: 'Legacy used inventory must be purchased as an itemized used pair.' },
+          { status: 400 }
+        )
+      }
+
+      if (listing.inventory_review_status === 'legacy_used_photo_review_required') {
+        return NextResponse.json(
+          { error: 'This listing has used inventory that needs seller review before purchase.' },
           { status: 400 }
         )
       }

@@ -750,12 +750,23 @@ export default function SellerInventoryDashboard() {
                             <span className={`${badge.color} border px-3 py-1 rounded-full text-xs font-semibold`}>
                               {badge.label}
                             </span>
+                            {listing.inventory_review_status === "legacy_used_photo_review_required" && (
+                              <span className="border border-amber-500/25 bg-amber-500/15 px-3 py-1 rounded-full text-xs font-semibold text-amber-300">
+                                Seller Review Required
+                              </span>
+                            )}
                             {listing.activeQuantity > 0 && listing.activeQuantity <= LOW_STOCK_THRESHOLD && (
                               <span className="border border-amber-500/25 bg-amber-500/15 px-3 py-1 rounded-full text-xs font-semibold text-amber-300">
                                 Low Stock
                               </span>
                             )}
                           </div>
+                          {listing.inventory_review_status === "legacy_used_photo_review_required" && (
+                            <p className="mb-2 text-sm text-amber-200/85">
+                              {listing.inventory_review_notes ||
+                                "Legacy used inventory was removed from checkout until each used pair has its own condition photo."}
+                            </p>
+                          )}
 
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
                             <span>SKU: {listing.displaySku || "Custom / Manual"}</span>

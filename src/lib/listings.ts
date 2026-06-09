@@ -23,6 +23,7 @@ export interface ListingVariantRow extends VariantInput {
 interface ResolveListingVariantOptions {
   variantId?: string | null;
   size?: string | null;
+  allowedCondition?: "new" | "used" | "any";
 }
 
 export function normalizeSku(rawSku: string | null | undefined): string | null {
@@ -128,6 +129,7 @@ export async function resolveListingVariant(
 ): Promise<ListingVariantRow | null> {
   const variantId = options.variantId ? String(options.variantId).trim() : "";
   const size = options.size ? String(options.size).trim() : "";
+  const allowedCondition = options.allowedCondition || "new";
 
   if (variantId) {
     const { data, error } = await supabase
@@ -141,7 +143,11 @@ export async function resolveListingVariant(
       throw error;
     }
 
-    if (data && data.is_active !== false) {
+    if (
+      data &&
+      data.is_active !== false &&
+      (allowedCondition === "any" || data.condition === allowedCondition)
+    ) {
       return data as ListingVariantRow;
     }
   }
@@ -155,6 +161,7 @@ export async function resolveListingVariant(
     .select("id, listing_id, size, price, quantity, condition, is_active, created_at, updated_at")
     .eq("listing_id", listingId)
     .eq("size", size)
+    .in("condition", allowedCondition === "any" ? ["new", "used"] : [allowedCondition])
     .order("condition", { ascending: true });
 
   if (error) {

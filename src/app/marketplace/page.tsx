@@ -65,7 +65,7 @@ export default function MarketplacePage() {
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, listing_variants(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url, vacation_mode_enabled)")
+          .select("*, listing_variants(id, size, price, quantity, condition, is_active), listing_used_items(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url, vacation_mode_enabled)")
           .eq("status", "active");
 
         if (data) {
@@ -78,7 +78,7 @@ export default function MarketplacePage() {
             mixed: "New + Used",
           };
 
-          const dedupedListings = dedupeSkuListings(data as Listing[]);
+          const dedupedListings = dedupeSkuListings(data as Listing[], { includeUsedItems: true });
           const formatted: ListingDisplay[] = dedupedListings.map((listing: Listing) => {
             const gradients: { [key: string]: string } = {
               Nike: "from-red-500/20 to-orange-500/20",
@@ -87,7 +87,7 @@ export default function MarketplacePage() {
               Jordan: "from-gray-700/20 to-slate-700/20",
               Puma: "from-purple-500/20 to-pink-500/20",
             };
-            const metrics = getListingDisplayMetrics(listing);
+            const metrics = getListingDisplayMetrics(listing, { includeUsedItems: true });
 
             return {
               id: listing.id,

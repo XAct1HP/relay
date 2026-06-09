@@ -153,12 +153,12 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
       const { data: listingsData } = await supabase
         .from('listings')
-        .select('*, listing_variants(id, size, price, quantity, is_active)')
+        .select('*, listing_variants(id, size, price, quantity, condition, is_active), listing_used_items(id, size, price, quantity, is_active)')
         .eq('seller_id', profileData.id)
         .eq('status', 'active');
 
-      const formattedListings = dedupeSkuListings((listingsData || []) as Listing[]).map((listing) => {
-        const metrics = getListingDisplayMetrics(listing);
+      const formattedListings = dedupeSkuListings((listingsData || []) as Listing[], { includeUsedItems: true }).map((listing) => {
+        const metrics = getListingDisplayMetrics(listing, { includeUsedItems: true });
         return {
           ...listing,
           availableSizes: metrics.sizes,

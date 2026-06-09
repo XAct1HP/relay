@@ -14,6 +14,20 @@ function getLegacySizeEntry(
     : null
 }
 
+function getLegacySizeEntryCondition(
+  listingCondition: unknown,
+  sizeEntry: { condition?: unknown } | null
+) {
+  if (sizeEntry?.condition === 'used') {
+    return 'used'
+  }
+
+  const normalizedListingCondition = typeof listingCondition === 'string' ? listingCondition : ''
+  return normalizedListingCondition === 'mixed' || normalizedListingCondition.startsWith('used')
+    ? 'used'
+    : 'new'
+}
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -133,7 +147,7 @@ export async function POST(request: NextRequest) {
     if (action === 'accept') {
       const { data: listing } = await supabase
         .from('listings')
-        .select('id, status, sizes')
+        .select('id, status, sizes, condition, inventory_review_status')
         .eq('id', offerRow.listing_id)
         .maybeSingle()
 
@@ -157,6 +171,18 @@ export async function POST(request: NextRequest) {
         if (!legacySize || (legacySize.quantity || 0) <= 0) {
           return NextResponse.json({ error: SOLD_OUT_OFFER_ERROR }, { status: 409 })
         }
+
+        const legacyCondition = getLegacySizeEntryCondition(listing.condition, legacySize as any)
+        if (
+          legacyCondition === 'used' ||
+          listing.inventory_review_status === 'legacy_used_photo_review_required'
+        ) {
+          return NextResponse.json(
+            { error: 'This offer references legacy used inventory that must be itemized before purchase.' },
+            { status: 409 }
+          )
+        }
+
         size = String(legacySize.size)
       }
     }

@@ -115,6 +115,9 @@ CREATE TABLE listings (
   approx_sizing TEXT NOT NULL CHECK (approx_sizing IN ('lightweight', 'normal', 'heavy')),
   description TEXT,
   images TEXT[],
+  inventory_review_status TEXT DEFAULT NULL
+    CHECK (inventory_review_status IN ('legacy_used_photo_review_required')),
+  inventory_review_notes TEXT DEFAULT NULL,
   sizes JSONB NOT NULL, -- Array of {size, price, quantity}
   admin_review_status TEXT DEFAULT NULL
     CHECK (admin_review_status IN ('pending_review', 'approved', 'rejected')),
@@ -132,6 +135,9 @@ CREATE INDEX idx_listings_created_at ON listings(created_at);
 CREATE INDEX idx_listings_seller_updated_at ON listings(seller_id, updated_at DESC);
 CREATE INDEX idx_listings_brand ON listings(brand);
 CREATE INDEX idx_listings_catalog_product_id ON listings(catalog_product_id);
+CREATE INDEX idx_listings_inventory_review_status
+  ON listings(inventory_review_status)
+  WHERE inventory_review_status IS NOT NULL;
 CREATE UNIQUE INDEX idx_listings_unique_seller_sku
   ON listings(seller_id, sku_normalized)
   WHERE sku_normalized IS NOT NULL

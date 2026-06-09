@@ -98,6 +98,8 @@ export interface Listing {
   approx_sizing: 'lightweight' | 'normal' | 'heavy';
   description: string;
   images: string[];
+  inventory_review_status?: 'legacy_used_photo_review_required' | null;
+  inventory_review_notes?: string | null;
   sizes: SizeOption[];
   status: 'active' | 'sold_out' | 'inactive' | 'removed' | 'pending_review' | 'rejected';
   admin_review_status: 'pending_review' | 'approved' | 'rejected' | null;

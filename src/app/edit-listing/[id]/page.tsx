@@ -150,6 +150,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [legacyUsedRowsDetected, setLegacyUsedRowsDetected] = useState(false);
+  const [inventoryReviewNote, setInventoryReviewNote] = useState("");
 
   const [brand, setBrand] = useState("");
   const [sku, setSku] = useState("");
@@ -196,6 +197,7 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
       setApproximateSizing(listing.approx_sizing || "");
       setDescription(listing.description || "");
       setExistingImages(listing.images || []);
+      setInventoryReviewNote(listing.inventory_review_notes || "");
 
       const variantRows = await fetchListingVariants(supabase, params.id);
       const typedVariantRows = variantRows as ListingVariant[];
@@ -221,7 +223,11 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
         }));
 
       const legacyUsedRows = typedVariantRows
-        .filter((row) => row.condition === "used" && row.is_active !== false)
+        .filter(
+          (row) =>
+            row.condition === "used" &&
+            (listing.inventory_review_status === "legacy_used_photo_review_required" || row.is_active !== false)
+        )
         .flatMap((row) =>
           Array.from({ length: Math.max(1, Number(row.quantity) || 1) }, () => ({
             id: createRowId(),
@@ -591,7 +597,8 @@ export default function EditListingPage({ params }: { params: { id: string } }) 
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
               <p className="text-sm font-medium text-amber-200 mb-1">Legacy used inventory needs itemized photos</p>
               <p className="text-xs text-amber-100/80 leading-relaxed">
-                Relay split your old used quantity rows into individual used pair drafts below. Add a separate condition photo for each pair before saving.
+                {inventoryReviewNote ||
+                  "Relay split your old used quantity rows into individual used pair drafts below. Add a separate condition photo for each pair before saving."}
               </p>
             </div>
           )}

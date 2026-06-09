@@ -14,6 +14,20 @@ function getLegacySizeEntry(
     : null
 }
 
+function getLegacySizeEntryCondition(
+  listingCondition: unknown,
+  sizeEntry: { condition?: unknown } | null
+) {
+  if (sizeEntry?.condition === 'used') {
+    return 'used'
+  }
+
+  const normalizedListingCondition = typeof listingCondition === 'string' ? listingCondition : ''
+  return normalizedListingCondition === 'mixed' || normalizedListingCondition.startsWith('used')
+    ? 'used'
+    : 'new'
+}
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -91,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id, seller_id, brand, model, nickname, sku, sizes, status')
+      .select('id, seller_id, brand, model, nickname, sku, sizes, condition, inventory_review_status, status')
       .eq('id', listingId)
       .single()
 
@@ -127,6 +141,22 @@ export async function POST(request: NextRequest) {
       if (!legacySizeEntry) {
         return NextResponse.json({ error: 'Select a valid size before sending an offer.' }, { status: 400 })
       }
+
+      const legacyCondition = getLegacySizeEntryCondition(listing.condition, legacySizeEntry as any)
+      if (legacyCondition === 'used') {
+        return NextResponse.json(
+          { error: 'Legacy used inventory must be offered and purchased as an individual used pair.' },
+          { status: 400 }
+        )
+      }
+
+      if (listing.inventory_review_status === 'legacy_used_photo_review_required') {
+        return NextResponse.json(
+          { error: 'This listing has used inventory that needs seller review before offers can be completed.' },
+          { status: 400 }
+        )
+      }
+
       resolvedSize = String(legacySizeEntry.size)
       originalPrice = Number(legacySizeEntry.price) || 0
       availableQuantity = legacySizeEntry.quantity || 0
