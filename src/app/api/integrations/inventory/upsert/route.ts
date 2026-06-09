@@ -7,61 +7,28 @@ import { createAdminClient } from "@/lib/supabase-admin";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-interface IntegrationInventoryUpsertBody {
-  items?: unknown;
-}
-
 export async function POST(request: Request) {
-  return handleIntegrationRoute<IntegrationInventoryUpsertBody>({
+  return handleIntegrationRoute<unknown>({
     request,
     parseBody: async ({ request, admin, auth }) => {
       const contentType = request.headers.get("content-type") || "";
 
       if (!contentType.toLowerCase().includes("multipart/form-data")) {
-        return (await request.json()) as IntegrationInventoryUpsertBody;
+        return (await request.json()) as unknown;
       }
 
       const formData = await request.formData();
-      const rawItems = formData.get("items");
+      const rawItems = formData.get("items") ?? formData.get("item");
 
       if (typeof rawItems !== "string" || !rawItems.trim()) {
-        return { items: undefined };
+        return {};
       }
 
-      const parsedItems = JSON.parse(rawItems) as unknown;
-      if (!Array.isArray(parsedItems)) {
-        return {
-          items: parsedItems,
-        };
-      }
-
-      const itemsWithFiles = await Promise.all(
-        parsedItems.map(async (rawItem, index) => {
-          const item = isRecord(rawItem) ? { ...rawItem } : rawItem;
-          if (!isRecord(item)) {
-            return item;
-          }
-
-          const fileField = resolveConditionPhotoFile(formData, index);
-
-          if (!fileField) {
-            return item;
-          }
-
-          const uploadedPhotoUrl = await uploadConditionPhotoFile(admin, auth.sellerId, fileField);
-          return {
-            ...item,
-            condition_photo_url: uploadedPhotoUrl,
-          };
-        })
-      );
-
-      return {
-        items: itemsWithFiles,
-      };
+      const parsedPayload = JSON.parse(rawItems) as unknown;
+      return await injectUploadedConditionPhotos(parsedPayload, formData, admin, auth.sellerId);
     },
     handler: async ({ admin, auth, body }) =>
-      processIntegrationInventoryUpsert(admin, auth.sellerId, body?.items),
+      processIntegrationInventoryUpsert(admin, auth.sellerId, body),
   });
 }
 
@@ -95,6 +62,172 @@ function resolveConditionPhotoFile(formData: FormData, index: number): File | nu
   }
 
   return null;
+}
+
+function resolveInventoryConditionPhotoFile(
+  formData: FormData,
+  itemIndex: number,
+  rowIndex: number,
+  allowSingleItemAliases: boolean
+): File | null {
+  const fieldNames = [
+    `condition_photo_${itemIndex}_${rowIndex}`,
+    `condition_photo_file_${itemIndex}_${rowIndex}`,
+    `conditionPhoto_${itemIndex}_${rowIndex}`,
+    `conditionPhotoFile_${itemIndex}_${rowIndex}`,
+  ];
+
+  if (allowSingleItemAliases) {
+    fieldNames.push(
+      `condition_photo_${rowIndex}`,
+      `condition_photo_file_${rowIndex}`,
+      `conditionPhoto_${rowIndex}`,
+      `conditionPhotoFile_${rowIndex}`
+    );
+
+    if (rowIndex === 0) {
+      fieldNames.push(
+        "condition_photo",
+        "condition_photo_file",
+        "conditionPhoto",
+        "conditionPhotoFile",
+        "file"
+      );
+    }
+  }
+
+  for (const fieldName of fieldNames) {
+    const file = extractFile(formData.get(fieldName));
+    if (file) {
+      return file;
+    }
+  }
+
+  return null;
+}
+
+async function injectUploadedConditionPhotos(
+  payload: unknown,
+  formData: FormData,
+  admin: ReturnType<typeof createAdminClient>,
+  sellerId: string
+) {
+  const singleItemPayload = isRecord(payload) &&
+    (payload.sku !== undefined || payload.inventory !== undefined || payload.variants !== undefined || payload.used_items !== undefined)
+      ? payload
+      : null;
+  const parsedItems = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.items)
+    ? payload.items
+    : singleItemPayload
+    ? [singleItemPayload]
+    : null;
+
+  if (!parsedItems) {
+    return payload;
+  }
+
+  const isSingleItemPayload = parsedItems.length === 1;
+
+  const itemsWithFiles = await Promise.all(
+    parsedItems.map(async (rawItem, itemIndex) => {
+      const item = isRecord(rawItem) ? { ...rawItem } : rawItem;
+      if (!isRecord(item)) {
+        return item;
+      }
+
+      const inventoryRows = Array.isArray(item.inventory) ? [...item.inventory] : null;
+      if (inventoryRows) {
+        item.inventory = await Promise.all(
+          inventoryRows.map(async (rawRow, rowIndex) => {
+            const row = isRecord(rawRow) ? { ...rawRow } : rawRow;
+            if (!isRecord(row)) {
+              return row;
+            }
+
+            const fileField = resolveInventoryConditionPhotoFile(
+              formData,
+              itemIndex,
+              rowIndex,
+              isSingleItemPayload
+            );
+
+            if (!fileField) {
+              return row;
+            }
+
+            const uploadedPhotoUrl = await uploadConditionPhotoFile(admin, sellerId, fileField);
+            return {
+              ...row,
+              condition_photo_url: uploadedPhotoUrl,
+            };
+          })
+        );
+
+        return item;
+      }
+
+      const usedItems = Array.isArray(item.used_items) ? [...item.used_items] : null;
+      if (usedItems) {
+        item.used_items = await Promise.all(
+          usedItems.map(async (rawRow, rowIndex) => {
+            const row = isRecord(rawRow) ? { ...rawRow } : rawRow;
+            if (!isRecord(row)) {
+              return row;
+            }
+
+            const fileField = resolveInventoryConditionPhotoFile(
+              formData,
+              itemIndex,
+              rowIndex,
+              isSingleItemPayload
+            );
+
+            if (!fileField) {
+              return row;
+            }
+
+            const uploadedPhotoUrl = await uploadConditionPhotoFile(admin, sellerId, fileField);
+            return {
+              ...row,
+              condition_photo_url: uploadedPhotoUrl,
+            };
+          })
+        );
+
+        return item;
+      }
+
+      const fileField = resolveConditionPhotoFile(formData, itemIndex);
+      if (!fileField) {
+        return item;
+      }
+
+      const uploadedPhotoUrl = await uploadConditionPhotoFile(admin, sellerId, fileField);
+      return {
+        ...item,
+        condition_photo_url: uploadedPhotoUrl,
+      };
+    })
+  );
+
+  if (Array.isArray(payload)) {
+    return itemsWithFiles;
+  }
+
+  if (singleItemPayload) {
+    return itemsWithFiles[0] ?? payload;
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.items)) {
+    return {
+      ...payload,
+      items: itemsWithFiles,
+    };
+  }
+
+  return payload;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

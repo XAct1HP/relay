@@ -24,7 +24,7 @@
     "/api/integrations/inventory/upsert": {
       "post": {
         "summary": "Inventory Upsert",
-        "description": "Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches sneaker metadata automatically, supports New, Used, and New + Used inventory flows, and can accept a condition photo either as a URL in JSON or as a raw file upload in multipart form data.",
+        "description": "Create new SKU listings or merge inventory into existing ones. Relay normalizes the SKU, enriches sneaker metadata automatically, supports mixed DS/new and used inventory in the same SKU payload, and can accept used-pair condition photos either as URLs in JSON or as raw file uploads in multipart form data.",
         "operationId": "inventoryUpsert",
         "tags": ["Inventory"],
         "requestBody": {
@@ -35,17 +35,14 @@
                 "$ref": "#/components/schemas/UpsertRequest"
               },
               "example": {
-                "items": [
-                  {
-                    "sku": "DZ5485-612",
-                    "condition": "New + Used",
-                    "condition_photo_url": "https://cdn.example.com/condition/dz5485-612.jpg",
-                    "variants": [
-                      { "size": "10", "condition": "new", "quantity": 1, "price": 350 },
-                      { "size": "10", "condition": "used", "quantity": 1, "price": 315 },
-                      { "size": "11", "condition": "new", "quantity": 2, "price": 360 }
-                    ]
-                  }
+                "sku": "DM7866-162",
+                "condition": "New + Used",
+                "box_condition": "good",
+                "approximate_sizing": "normal",
+                "inventory": [
+                  { "condition": "new", "size": "10", "quantity": 3, "price": 42000 },
+                  { "condition": "used", "size": "10", "price": 32500, "condition_photo_url": "https://example.com/photo1.jpg", "condition_rating": "8/10", "condition_notes": "Light heel drag" },
+                  { "condition": "used", "size": "10.5", "price": 30000, "condition_photo_url": "https://example.com/photo2.jpg", "condition_rating": "7/10" }
                 ]
               }
             },
@@ -54,8 +51,8 @@
                 "$ref": "#/components/schemas/UpsertMultipartRequest"
               },
               "example": {
-                "items": "[{\"sku\":\"DZ5485-612\",\"condition\":\"Used\",\"box_condition\":\"good\",\"approximate_sizing\":\"normal\",\"variants\":[{\"size\":\"10\",\"condition\":\"used\",\"quantity\":1,\"price\":315}]}]",
-                "condition_photo": "(binary file)"
+                "items": "[{\"sku\":\"DM7866-162\",\"condition\":\"New + Used\",\"inventory\":[{\"condition\":\"new\",\"size\":\"10\",\"quantity\":3,\"price\":42000},{\"condition\":\"used\",\"size\":\"10\",\"price\":32500}]}]",
+                "condition_photo_0_1": "(binary file)"
               },
               "encoding": {
                 "items": {
@@ -93,7 +90,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Request body must include an items array." }
+                "example": { "error": "Request body must include an items array or a single sku inventory payload.", "code": "ITEMS_ARRAY_REQUIRED" }
               }
             }
           },
@@ -102,7 +99,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Invalid API key." }
+                "example": { "error": "Invalid API key.", "code": "invalid_api_key" }
               }
             }
           },
@@ -111,7 +108,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Seller not approved." }
+                "example": { "error": "Seller not approved.", "code": "seller_not_approved" }
               }
             }
           },
@@ -126,7 +123,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/RateLimitErrorResponse" },
-                "example": { "error": "Rate limit exceeded. Max 60 requests per minute per API key. Try again in 23 seconds." }
+                "example": { "error": "Rate limit exceeded. Max 60 requests per minute per API key. Try again in 23 seconds.", "code": "rate_limited" }
               }
             }
           },
@@ -135,7 +132,7 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": "Failed to process integration request." }
+                "example": { "error": "Failed to process integration request.", "code": "internal_error" }
               }
             }
           }
@@ -594,9 +591,50 @@
           }
         }
       },
+      "InventoryRow": {
+        "type": "object",
+        "required": ["condition", "size", "price"],
+        "properties": {
+          "condition": {
+            "type": "string",
+            "enum": ["new", "used"],
+            "description": "Inventory row condition.",
+            "example": "used"
+          },
+          "size": {
+            "type": "string",
+            "description": "Size label for this DS/new or used row.",
+            "example": "10"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Required for DS/new rows. Used rows must omit quantity or set it to 1.",
+            "example": 3
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Price for that row. Integer cents are preferred for inventory rows; decimal USD is also accepted.",
+            "example": 32500
+          },
+          "condition_photo_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Required for each used row unless that row's photo is uploaded in multipart form data."
+          },
+          "condition_rating": {
+            "type": "string",
+            "description": "Optional seller-provided rating such as 8/10."
+          },
+          "condition_notes": {
+            "type": "string",
+            "description": "Optional seller-provided condition notes."
+          }
+        }
+      },
       "InventoryItem": {
         "type": "object",
-        "required": ["sku", "variants"],
+        "required": ["sku"],
         "properties": {
           "sku": {
             "type": "string",
@@ -606,12 +644,7 @@
           "condition": {
             "type": "string",
             "enum": ["New", "Used", "New + Used"],
-            "description": "Listing condition. If omitted, Relay infers it from the variants."
-          },
-          "condition_photo_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "Exactly one public seller condition photo URL for Used or New + Used listings. Optional if sent as multipart file upload instead."
+            "description": "Listing condition. If omitted, Relay infers it from the inventory rows."
           },
           "box_condition": {
             "type": "string",
@@ -651,28 +684,48 @@
             },
             "description": "Optional gallery image overrides for new listings."
           },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryRow"
+            },
+            "description": "Preferred mixed DS/new + used row payload for a single SKU."
+          },
           "variants": {
             "type": "array",
-            "minItems": 1,
             "items": {
               "$ref": "#/components/schemas/InventoryVariant"
             },
-            "description": "Array of size variants. At least one required."
+            "description": "Legacy DS/new variant format. Still supported for backward compatibility."
+          },
+          "used_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryRow"
+            },
+            "description": "Legacy itemized used-pair format. Still supported for backward compatibility."
           }
         }
       },
       "UpsertRequest": {
-        "type": "object",
-        "required": ["items"],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InventoryItem"
-            },
-            "description": "Array of inventory items to upsert."
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/InventoryItem"
+          },
+          {
+            "type": "object",
+            "required": ["items"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InventoryItem"
+                },
+                "description": "Array of inventory items to upsert."
+              }
+            }
           }
-        }
+        ]
       },
       "UpsertMultipartRequest": {
         "type": "object",
@@ -682,35 +735,30 @@
             "type": "string",
             "description": "JSON string containing the same payload shape as application/json."
           },
-          "condition_photo": {
-            "type": "string",
-            "format": "binary",
-            "description": "Condition photo file for the first item."
-          },
-          "condition_photo_file": {
-            "type": "string",
-            "format": "binary",
-            "description": "Alias for condition_photo for single-item tool uploads."
-          },
           "condition_photo_0": {
             "type": "string",
             "format": "binary",
-            "description": "Condition photo file for item index 0."
-          },
-          "condition_photo_file_0": {
-            "type": "string",
-            "format": "binary",
-            "description": "Alias for condition_photo_0 for item index 0."
+            "description": "Used-pair photo for row index 0 on a single top-level payload."
           },
           "condition_photo_1": {
             "type": "string",
             "format": "binary",
-            "description": "Condition photo file for item index 1."
+            "description": "Used-pair photo for row index 1 on a single top-level payload."
           },
-          "condition_photo_file_1": {
+          "condition_photo_0_0": {
             "type": "string",
             "format": "binary",
-            "description": "Alias for condition_photo_1 for item index 1."
+            "description": "Used-pair photo for item index 0, row index 0."
+          },
+          "condition_photo_0_1": {
+            "type": "string",
+            "format": "binary",
+            "description": "Used-pair photo for item index 0, row index 1."
+          },
+          "condition_photo_file_0_1": {
+            "type": "string",
+            "format": "binary",
+            "description": "Alias for condition_photo_0_1."
           }
         }
       },
@@ -722,6 +770,11 @@
             "description": "Index of the item in the request array.",
             "example": 0
           },
+          "row_index": {
+            "type": "integer",
+            "description": "Inventory / used row index when the error applies to a specific row.",
+            "example": 1
+          },
           "sku": {
             "type": "string",
             "description": "SKU of the failed item (if available).",
@@ -729,9 +782,14 @@
           },
           "field": {
             "type": "string",
-            "enum": ["sku", "variants", "size", "quantity", "price", "item"],
+            "enum": ["sku", "inventory", "used_items", "size", "quantity", "price", "condition", "condition_photo_url", "item"],
             "description": "Which field caused the error.",
-            "example": "sku"
+            "example": "condition_photo_url"
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable validation code.",
+            "example": "USED_PAIR_PHOTO_REQUIRED"
           },
           "message": {
             "type": "string",
@@ -1028,23 +1086,33 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": ["error", "code"],
         "properties": {
           "error": {
             "type": "string",
             "description": "Human-readable error message.",
             "example": "Invalid API key."
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code.",
+            "example": "invalid_api_key"
           }
         }
       },
       "RateLimitErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": ["error", "code"],
         "properties": {
           "error": {
             "type": "string",
             "description": "Rate limit error message including retry delay.",
             "example": "Rate limit exceeded. Max 60 requests per minute per API key. Try again in 23 seconds."
+          },
+          "code": {
+            "type": "string",
+            "description": "Machine-readable error code.",
+            "example": "rate_limited"
           }
         }
       }

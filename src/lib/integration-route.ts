@@ -71,18 +71,18 @@ export async function handleIntegrationRoute<TBody = unknown>(
       statusCode = error.status;
       errorCode = error.code;
       retryAfterSeconds = error.retryAfterSeconds ?? null;
-      responseBody = { error: error.message };
+      responseBody = { error: error.message, code: error.code };
     } else if (error instanceof IntegrationInventoryError) {
       statusCode = 400;
       errorCode = error.code;
-      responseBody = { error: error.message };
+      responseBody = { error: error.message, code: error.code };
     } else if (error instanceof SyntaxError) {
       statusCode = 400;
       errorCode = "invalid_json";
-      responseBody = { error: "Request body must be valid JSON." };
+      responseBody = { error: "Request body must be valid JSON.", code: "invalid_json" };
     } else {
       console.error("Integration route error:", error);
-      responseBody = { error: "Failed to process integration request." };
+      responseBody = { error: "Failed to process integration request.", code: "internal_error" };
     }
   }
 

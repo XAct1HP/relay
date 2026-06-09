@@ -21,18 +21,31 @@ interface ExternalInventoryVariantInput {
   condition?: unknown;
 }
 
+interface ExternalFlatInventoryRowInput {
+  condition: unknown;
+  size: unknown;
+  quantity?: unknown;
+  price: unknown;
+  condition_photo_url?: unknown;
+  condition_rating?: unknown;
+  condition_notes?: unknown;
+}
+
 interface ExternalUsedInventoryItemInput {
   size: unknown;
   price: unknown;
   quantity?: unknown;
   condition?: unknown;
   condition_photo_url?: unknown;
+  condition_rating?: unknown;
+  condition_notes?: unknown;
 }
 
 interface ExternalInventoryItemInput {
   sku: unknown;
   variants: unknown;
   used_items?: unknown;
+  inventory?: unknown;
   condition?: unknown;
   box_condition?: unknown;
   approximate_sizing?: unknown;
@@ -127,8 +140,20 @@ interface SellerVariantLookupRow {
 
 export interface IntegrationInventoryItemError {
   item_index: number;
+  row_index?: number;
   sku?: string;
-  field?: "sku" | "variants" | "size" | "quantity" | "price" | "item";
+  field?:
+    | "sku"
+    | "variants"
+    | "used_items"
+    | "inventory"
+    | "size"
+    | "quantity"
+    | "price"
+    | "condition"
+    | "condition_photo_url"
+    | "item";
+  code?: string;
   message: string;
 }
 
@@ -166,6 +191,16 @@ export interface IntegrationInventoryDeactivateResult {
   error?: string;
 }
 
+type IntegrationInventoryErrorCode =
+  | "INVALID_REQUEST"
+  | "ITEMS_ARRAY_REQUIRED"
+  | "SKU_REQUIRED"
+  | "INVENTORY_SIZE_REQUIRED"
+  | "INVENTORY_PRICE_REQUIRED"
+  | "INVALID_INVENTORY_CONDITION"
+  | "USED_PAIR_PHOTO_REQUIRED"
+  | "USED_PAIR_QUANTITY_MUST_BE_ONE";
+
 interface ExternalVariantUpdateInput {
   sku: unknown;
   size: unknown;
@@ -190,12 +225,12 @@ interface ExternalVariantDeactivateInput {
 }
 
 export class IntegrationInventoryError extends Error {
-  code: "invalid_request";
+  code: string;
 
-  constructor(message: string) {
+  constructor(message: string, code: string = "INVALID_REQUEST") {
     super(message);
     this.name = "IntegrationInventoryError";
-    this.code = "invalid_request";
+    this.code = code;
   }
 }
 
@@ -340,15 +375,18 @@ export async function processIntegrationInventoryUpsert(
       }
     } catch (error) {
       skippedCount += item.variants.length + item.usedItems.length;
-      itemErrors.push({
-        item_index: item.itemIndex,
-        sku: item.originalSku,
-        field: "item",
-        message:
-          error instanceof InventoryUpsertError
-            ? error.message
-            : `Failed to upsert inventory for SKU ${item.originalSku}.`,
-      });
+      itemErrors.push(
+        buildIntegrationItemError({
+          itemIndex: item.itemIndex,
+          sku: item.originalSku,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message:
+            error instanceof InventoryUpsertError
+              ? error.message
+              : `Failed to upsert inventory for SKU ${item.originalSku}.`,
+        })
+      );
     }
   }
 
@@ -533,93 +571,112 @@ export async function processIntegrationVariantDeactivate(
 }
 
 function validateIntegrationItems(items: unknown) {
-  if (!Array.isArray(items)) {
-    throw new IntegrationInventoryError("Request body must include an items array.");
-  }
+  const normalizedInputItems = normalizeIntegrationUpsertItemsInput(items);
 
   const validItems: NormalizedIntegrationItem[] = [];
   const errors: IntegrationInventoryItemError[] = [];
   let skippedCount = 0;
 
-  for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
-    const rawItem = items[itemIndex] as ExternalInventoryItemInput | null;
+  for (let itemIndex = 0; itemIndex < normalizedInputItems.length; itemIndex += 1) {
+    const rawItem = normalizedInputItems[itemIndex] as ExternalInventoryItemInput | null;
     const rawSku = String(rawItem?.sku || "").trim();
     const normalizedSku = normalizeSku(rawSku);
     const requestedCondition = normalizeIntegrationListingCondition(rawItem?.condition);
     const boxCondition = normalizeBoxCondition(rawItem?.box_condition);
     const approximateSizing = normalizeApproximateSizing(rawItem?.approximate_sizing);
     const conditionPhotoUrl = normalizeOptionalUrl(rawItem?.condition_photo_url);
+    const rawInventoryRows = Array.isArray(rawItem?.inventory)
+      ? (rawItem?.inventory as ExternalFlatInventoryRowInput[])
+      : [];
     const rawVariants = Array.isArray(rawItem?.variants)
-      ? (rawItem?.variants as ExternalInventoryVariantInput[])
+      ? [...(rawItem?.variants as ExternalInventoryVariantInput[])]
       : [];
     const rawUsedItems = Array.isArray(rawItem?.used_items)
-      ? (rawItem?.used_items as ExternalUsedInventoryItemInput[])
+      ? [...(rawItem?.used_items as ExternalUsedInventoryItemInput[])]
       : [];
-    const rowCount = getIntegrationItemRowCount(rawVariants, rawUsedItems);
+    const rowCount = getIntegrationItemRowCount(rawVariants, rawUsedItems, rawInventoryRows);
 
     if (!normalizedSku) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku || undefined,
-        field: "sku",
-        message: "SKU is required.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku || undefined,
+          field: "sku",
+          code: "SKU_REQUIRED",
+          message: "SKU is required.",
+        })
+      );
       continue;
     }
 
-    if (rawVariants.length === 0 && rawUsedItems.length === 0) {
+    if (rawVariants.length === 0 && rawUsedItems.length === 0 && rawInventoryRows.length === 0) {
       skippedCount += 1;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "At least one DS variant or one used inventory unit is required.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "At least one DS variant or one used inventory unit is required.",
+        })
+      );
       continue;
     }
 
     if (!boxCondition) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku || undefined,
-        field: "item",
-        message: "box_condition must be one of perfect, good, damaged, or no_box.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku || undefined,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "box_condition must be one of perfect, good, damaged, or no_box.",
+        })
+      );
       continue;
     }
 
     if (!approximateSizing) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku || undefined,
-        field: "item",
-        message: "approximate_sizing must be one of lightweight, normal, or heavy.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku || undefined,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "approximate_sizing must be one of lightweight, normal, or heavy.",
+        })
+      );
       continue;
     }
 
     if (rawItem?.condition !== undefined && !requestedCondition) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku || undefined,
-        field: "item",
-        message: "condition must be New, Used, or New + Used.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku || undefined,
+          field: "condition",
+          code: "INVALID_INVENTORY_CONDITION",
+          message: "condition must be New, Used, or New + Used.",
+        })
+      );
       continue;
     }
 
     if (rawItem?.condition_photo_url !== undefined && !conditionPhotoUrl) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku || undefined,
-        field: "item",
-        message: "condition_photo_url must be a valid http or https URL.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku || undefined,
+          field: "condition_photo_url",
+          code: "USED_PAIR_PHOTO_REQUIRED",
+          message: "condition_photo_url must be a valid http or https URL.",
+        })
+      );
       continue;
     }
 
@@ -628,9 +685,120 @@ function validateIntegrationItems(items: unknown) {
     const seenVariants = new Set<string>();
     const seenUsedItemPhotos = new Set<string>();
     const legacyUsedVariants: NormalizedIntegrationVariant[] = [];
-    let hasVariantError = false;
+    let hasValidationError = false;
 
-    for (const rawVariant of rawVariants) {
+    for (let rowIndex = 0; rowIndex < rawInventoryRows.length; rowIndex += 1) {
+      const rawInventoryRow = rawInventoryRows[rowIndex];
+      const condition = normalizeFlatInventoryCondition(rawInventoryRow?.condition);
+      const size = String(rawInventoryRow?.size || "").trim();
+      const price = normalizeFlatInventoryPrice(rawInventoryRow?.price);
+      const quantity =
+        rawInventoryRow?.quantity === undefined ? undefined : Number(rawInventoryRow.quantity);
+      const rowPhotoUrl = normalizeOptionalUrl(rawInventoryRow?.condition_photo_url);
+
+      if (!size) {
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "size",
+            code: "INVENTORY_SIZE_REQUIRED",
+            message: "Inventory size is required.",
+          })
+        );
+        continue;
+      }
+
+      if (!Number.isFinite(price) || price <= 0) {
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "price",
+            code: "INVENTORY_PRICE_REQUIRED",
+            message: `Inventory size ${size} must have a price greater than 0.`,
+          })
+        );
+        continue;
+      }
+
+      if (!condition) {
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "condition",
+            code: "INVALID_INVENTORY_CONDITION",
+            message: `Inventory size ${size} must declare condition new or used.`,
+          })
+        );
+        continue;
+      }
+
+      if (condition === "used") {
+        if (quantity !== undefined && quantity !== 1) {
+          hasValidationError = true;
+          errors.push(
+            buildIntegrationItemError({
+              itemIndex,
+              rowIndex,
+              sku: rawSku,
+              field: "quantity",
+              code: "USED_PAIR_QUANTITY_MUST_BE_ONE",
+              message: `Used inventory size ${size} must omit quantity or set quantity to exactly 1.`,
+            })
+          );
+          continue;
+        }
+
+        if (!rowPhotoUrl) {
+          hasValidationError = true;
+          errors.push(
+            buildIntegrationItemError({
+              itemIndex,
+              rowIndex,
+              sku: rawSku,
+              field: "condition_photo_url",
+              code: "USED_PAIR_PHOTO_REQUIRED",
+              message: `Used inventory size ${size} must include a valid condition_photo_url.`,
+            })
+          );
+          continue;
+        }
+
+        rawUsedItems.push({
+          size,
+          price,
+          quantity: 1,
+          condition: "used",
+          condition_photo_url: rowPhotoUrl,
+          condition_rating: rawInventoryRow?.condition_rating,
+          condition_notes: rawInventoryRow?.condition_notes,
+        });
+        continue;
+      }
+
+      rawVariants.push({
+        size,
+        quantity,
+        price,
+        condition: "new",
+      });
+    }
+
+    if (hasValidationError) {
+      skippedCount += rowCount;
+      continue;
+    }
+
+    for (let rowIndex = 0; rowIndex < rawVariants.length; rowIndex += 1) {
+      const rawVariant = rawVariants[rowIndex];
       const size = String(rawVariant?.size || "").trim();
       const quantity = Number(rawVariant?.quantity);
       const price = Number(rawVariant?.price);
@@ -640,69 +808,93 @@ function validateIntegrationItems(items: unknown) {
       );
 
       if (!size) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "size",
-          message: "Variant size is required.",
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "size",
+            code: "INVENTORY_SIZE_REQUIRED",
+            message: "Variant size is required.",
+          })
+        );
         continue;
       }
 
       if (!Number.isInteger(quantity) || quantity < 0) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "quantity",
-          message: `Variant size ${size} must have an integer quantity greater than or equal to 0.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "quantity",
+            code: variantCondition === "used" ? "USED_PAIR_QUANTITY_MUST_BE_ONE" : "INVALID_REQUEST",
+            message: `Variant size ${size} must have an integer quantity greater than or equal to 0.`,
+          })
+        );
         continue;
       }
 
       if (!Number.isFinite(price) || price <= 0) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "price",
-          message: `Variant size ${size} must have a price greater than 0.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "price",
+            code: "INVENTORY_PRICE_REQUIRED",
+            message: `Variant size ${size} must have a price greater than 0.`,
+          })
+        );
         continue;
       }
 
       if (!variantCondition) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "item",
-          message: `Variant size ${size} must declare condition new or used when the listing condition is New + Used.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "condition",
+            code: "INVALID_INVENTORY_CONDITION",
+            message: `Variant size ${size} must declare condition new or used when the listing condition is New + Used.`,
+          })
+        );
         continue;
       }
 
       if (variantCondition === "used") {
         if (rawUsedItems.length > 0) {
-          hasVariantError = true;
-          errors.push({
-            item_index: itemIndex,
-            sku: rawSku,
-            field: "item",
-            message: "Do not send used variants in variants when used_items are present. Used inventory must be itemized in used_items.",
-          });
+          hasValidationError = true;
+          errors.push(
+            buildIntegrationItemError({
+              itemIndex,
+              rowIndex,
+              sku: rawSku,
+              field: "item",
+              code: "INVALID_REQUEST",
+              message: "Do not send used variants in variants when used_items are present. Used inventory must be itemized in used_items.",
+            })
+          );
           continue;
         }
 
         if (quantity !== 1) {
-          hasVariantError = true;
-          errors.push({
-            item_index: itemIndex,
-            sku: rawSku,
-            field: "quantity",
-            message: `Used variant size ${size} must have quantity exactly 1.`,
-          });
+          hasValidationError = true;
+          errors.push(
+            buildIntegrationItemError({
+              itemIndex,
+              rowIndex,
+              sku: rawSku,
+              field: "quantity",
+              code: "USED_PAIR_QUANTITY_MUST_BE_ONE",
+              message: `Used variant size ${size} must have quantity exactly 1.`,
+            })
+          );
           continue;
         }
 
@@ -717,13 +909,17 @@ function validateIntegrationItems(items: unknown) {
 
       const normalizedVariantKey = getExistingVariantKey(size.toUpperCase(), variantCondition);
       if (seenVariants.has(normalizedVariantKey)) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "size",
-          message: `Duplicate size ${size} with condition ${variantCondition} found for SKU ${rawSku}.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "size",
+            code: "INVALID_REQUEST",
+            message: `Duplicate size ${size} with condition ${variantCondition} found for SKU ${rawSku}.`,
+          })
+        );
         continue;
       }
 
@@ -736,12 +932,13 @@ function validateIntegrationItems(items: unknown) {
       });
     }
 
-    if (hasVariantError) {
+    if (hasValidationError) {
       skippedCount += rowCount;
       continue;
     }
 
-    for (const rawUsedItem of rawUsedItems) {
+    for (let rowIndex = 0; rowIndex < rawUsedItems.length; rowIndex += 1) {
+      const rawUsedItem = rawUsedItems[rowIndex];
       const size = String(rawUsedItem?.size || "").trim();
       const quantity = rawUsedItem?.quantity === undefined ? 1 : Number(rawUsedItem.quantity);
       const price = Number(rawUsedItem?.price);
@@ -749,57 +946,77 @@ function validateIntegrationItems(items: unknown) {
       const usedPhotoUrl = normalizeOptionalUrl(rawUsedItem?.condition_photo_url);
 
       if (!size) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "size",
-          message: "Used inventory size is required.",
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "size",
+            code: "INVENTORY_SIZE_REQUIRED",
+            message: "Used inventory size is required.",
+          })
+        );
         continue;
       }
 
       if (!Number.isFinite(price) || price <= 0) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "price",
-          message: `Used inventory size ${size} must have a price greater than 0.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "price",
+            code: "INVENTORY_PRICE_REQUIRED",
+            message: `Used inventory size ${size} must have a price greater than 0.`,
+          })
+        );
         continue;
       }
 
       if (quantity !== 1) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "quantity",
-          message: `Used inventory size ${size} must have quantity exactly 1.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "quantity",
+            code: "USED_PAIR_QUANTITY_MUST_BE_ONE",
+            message: `Used inventory size ${size} must have quantity exactly 1.`,
+          })
+        );
         continue;
       }
 
       if (!usedPhotoUrl) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "item",
-          message: `Used inventory size ${size} must include a valid condition_photo_url.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "condition_photo_url",
+            code: "USED_PAIR_PHOTO_REQUIRED",
+            message: `Used inventory size ${size} must include a valid condition_photo_url.`,
+          })
+        );
         continue;
       }
 
       if (seenUsedItemPhotos.has(usedPhotoUrl)) {
-        hasVariantError = true;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "item",
-          message: `Condition photo ${usedPhotoUrl} cannot represent multiple used pairs for SKU ${rawSku}.`,
-        });
+        hasValidationError = true;
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            rowIndex,
+            sku: rawSku,
+            field: "condition_photo_url",
+            code: "USED_PAIR_PHOTO_REQUIRED",
+            message: `Condition photo ${usedPhotoUrl} cannot represent multiple used pairs for SKU ${rawSku}.`,
+          })
+        );
         continue;
       }
 
@@ -813,31 +1030,37 @@ function validateIntegrationItems(items: unknown) {
       });
     }
 
-    if (hasVariantError) {
+    if (hasValidationError) {
       skippedCount += rowCount;
       continue;
     }
 
     if (legacyUsedVariants.length > 1) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "Used inventory must be itemized in used_items. One condition photo cannot represent multiple used pairs.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku,
+          field: "item",
+          code: "USED_PAIR_PHOTO_REQUIRED",
+          message: "Used inventory must be itemized in used_items. One condition photo cannot represent multiple used pairs.",
+        })
+      );
       continue;
     }
 
     if (legacyUsedVariants.length === 1) {
       if (!conditionPhotoUrl) {
         skippedCount += rowCount;
-        errors.push({
-          item_index: itemIndex,
-          sku: rawSku,
-          field: "item",
-          message: "Used inventory requires a condition photo.",
-        });
+        errors.push(
+          buildIntegrationItemError({
+            itemIndex,
+            sku: rawSku,
+            field: "condition_photo_url",
+            code: "USED_PAIR_PHOTO_REQUIRED",
+            message: "Used inventory requires a condition photo.",
+          })
+        );
         continue;
       }
 
@@ -859,34 +1082,43 @@ function validateIntegrationItems(items: unknown) {
 
     if (requestedCondition === "new" && usedItems.length > 0) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "New listings can only include DS inventory.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "New listings can only include DS inventory.",
+        })
+      );
       continue;
     }
 
     if (requestedCondition === "used_good" && variants.length > 0) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "Used listings cannot include DS variants. Put used inventory in used_items only.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "Used listings cannot include DS variants. Put used inventory in used_items only.",
+        })
+      );
       continue;
     }
 
     if (requestedCondition === "mixed" && (variants.length === 0 || usedItems.length === 0)) {
       skippedCount += rowCount;
-      errors.push({
-        item_index: itemIndex,
-        sku: rawSku,
-        field: "item",
-        message: "New + Used listings must include at least one DS variant and one used inventory unit.",
-      });
+      errors.push(
+        buildIntegrationItemError({
+          itemIndex,
+          sku: rawSku,
+          field: "item",
+          code: "INVALID_REQUEST",
+          message: "New + Used listings must include at least one DS variant and one used inventory unit.",
+        })
+      );
       continue;
     }
 
@@ -1011,6 +1243,32 @@ function normalizeIntegrationUsedItemCondition(value: unknown): UsedInventoryCon
   return "used_good";
 }
 
+function normalizeFlatInventoryCondition(value: unknown): "new" | "used" | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === "new" || normalized === "ds") {
+    return "new";
+  }
+
+  if (normalized === "used") {
+    return "used";
+  }
+
+  return null;
+}
+
+function normalizeFlatInventoryPrice(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return Number.NaN;
+  }
+
+  return Number.isInteger(parsed) ? parsed / 100 : parsed;
+}
+
 function inferUsedItemConditionFromListingCondition(
   listingCondition: "new" | "used_good" | "mixed" | null
 ): UsedInventoryCondition {
@@ -1043,9 +1301,54 @@ function inferListingConditionFromInventory(input: {
 
 function getIntegrationItemRowCount(
   rawVariants: ExternalInventoryVariantInput[],
-  rawUsedItems: ExternalUsedInventoryItemInput[]
+  rawUsedItems: ExternalUsedInventoryItemInput[],
+  rawInventoryRows: ExternalFlatInventoryRowInput[] = []
 ) {
-  return rawVariants.length + rawUsedItems.length || 1;
+  return rawVariants.length + rawUsedItems.length + rawInventoryRows.length || 1;
+}
+
+function normalizeIntegrationUpsertItemsInput(items: unknown): ExternalInventoryItemInput[] {
+  if (Array.isArray(items)) {
+    return items as ExternalInventoryItemInput[];
+  }
+
+  if (isPlainRecord(items)) {
+    if (Array.isArray(items.items)) {
+      return items.items as ExternalInventoryItemInput[];
+    }
+
+    if (
+      items.sku !== undefined ||
+      items.inventory !== undefined ||
+      items.variants !== undefined ||
+      items.used_items !== undefined
+    ) {
+      return [items as unknown as ExternalInventoryItemInput];
+    }
+  }
+
+  throw new IntegrationInventoryError(
+    "Request body must include an items array or a single sku inventory payload.",
+    "ITEMS_ARRAY_REQUIRED"
+  );
+}
+
+function buildIntegrationItemError(input: {
+  itemIndex: number;
+  rowIndex?: number;
+  sku?: string;
+  field?: IntegrationInventoryItemError["field"];
+  code?: IntegrationInventoryErrorCode | string;
+  message: string;
+}): IntegrationInventoryItemError {
+  return {
+    item_index: input.itemIndex,
+    row_index: input.rowIndex,
+    sku: input.sku,
+    field: input.field,
+    code: input.code || "INVALID_REQUEST",
+    message: input.message,
+  };
 }
 
 function normalizeBoxCondition(
@@ -1098,6 +1401,10 @@ function normalizeOptionalUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function asOptionalString(value: unknown): string | null {
