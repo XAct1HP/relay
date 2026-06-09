@@ -90,6 +90,10 @@ async function reconcileListingInventoryStatus(
   }
 }
 
+function normalizePhotoUrl(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
@@ -116,10 +120,13 @@ export async function POST(request: NextRequest) {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
       const metadata = session.metadata as Record<string, string>
+      const paymentIntentId =
+        typeof session.payment_intent === 'string' ? session.payment_intent : null
 
       const listingId = metadata.listingId
       const listingVariantId = metadata.listingVariantId || null
       const listingUsedItemId = metadata.listingUsedItemId || null
+      const usedConditionPhotoUrl = normalizePhotoUrl(metadata.usedConditionPhotoUrl)
       const size = metadata.size
       const buyerId = metadata.buyerId
       const sellerId = metadata.sellerId
@@ -127,6 +134,20 @@ export async function POST(request: NextRequest) {
 
       if (!listingId || !size || !buyerId || !sellerId) {
         return NextResponse.json({ error: 'Invalid metadata' }, { status: 400 })
+      }
+
+      if (paymentIntentId) {
+        const { data: existingOrder, error: existingOrderError } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('stripe_payment_intent_id', paymentIntentId)
+          .maybeSingle()
+
+        if (existingOrderError) {
+          console.error('Existing order lookup error:', existingOrderError)
+        } else if (existingOrder?.id) {
+          return NextResponse.json({ received: true })
+        }
       }
 
       const shoePrice = parseFloat(metadata.shoePrice || '0')
@@ -150,6 +171,42 @@ export async function POST(request: NextRequest) {
 
       const challengeCode = generateChallengeCode()
 
+      let variantUpdated = false
+      let usedItemUpdated = false
+
+      if (listingUsedItemId) {
+        if (!usedConditionPhotoUrl) {
+          console.error('Used item purchase missing condition photo snapshot:', listingUsedItemId)
+          return NextResponse.json({ error: 'Invalid used item metadata' }, { status: 400 })
+        }
+
+        const { data: updatedUsedItems, error: usedItemUpdateError } = await supabase
+          .from('listing_used_items')
+          .update({
+            quantity: 0,
+            is_active: false,
+          })
+          .eq('id', listingUsedItemId)
+          .eq('listing_id', listingId)
+          .eq('is_active', true)
+          .eq('quantity', 1)
+          .not('condition_photo_url', 'is', null)
+          .neq('condition_photo_url', '')
+          .select('id')
+
+        if (usedItemUpdateError) {
+          console.error('Used item quantity update error:', usedItemUpdateError)
+          return NextResponse.json({ error: 'Failed to reserve used item' }, { status: 500 })
+        } else if ((updatedUsedItems || []).length > 0) {
+          usedItemUpdated = true
+        } else {
+          return NextResponse.json(
+            { error: 'This used pair is no longer available' },
+            { status: 409 }
+          )
+        }
+      }
+
       const { error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -166,38 +223,32 @@ export async function POST(request: NextRequest) {
           platform_fee: platformFee,
           stripe_fee: stripeFee,
           seller_earnings: sellerEarnings,
-          stripe_payment_intent_id: session.payment_intent as string,
+          stripe_payment_intent_id: paymentIntentId,
           challenge_code: challengeCode,
           buyer_shipping_address: buyerShippingAddress,
           shipping_deadline: shippingDeadline.toISOString(),
+          purchased_condition_photo_url: listingUsedItemId ? usedConditionPhotoUrl : null,
         })
 
       if (orderError) {
         console.error('Order creation error:', orderError)
-        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
-      }
 
-      let variantUpdated = false
-      let usedItemUpdated = false
+        if (listingUsedItemId && usedItemUpdated) {
+          const { error: rollbackError } = await supabase
+            .from('listing_used_items')
+            .update({
+              quantity: 1,
+              is_active: true,
+            })
+            .eq('id', listingUsedItemId)
+            .eq('listing_id', listingId)
 
-      if (listingUsedItemId) {
-        const { data: updatedUsedItems, error: usedItemUpdateError } = await supabase
-          .from('listing_used_items')
-          .update({
-            quantity: 0,
-            is_active: false,
-          })
-          .eq('id', listingUsedItemId)
-          .eq('listing_id', listingId)
-          .eq('is_active', true)
-          .gt('quantity', 0)
-          .select('id')
-
-        if (usedItemUpdateError) {
-          console.error('Used item quantity update error:', usedItemUpdateError)
-        } else if ((updatedUsedItems || []).length > 0) {
-          usedItemUpdated = true
+          if (rollbackError) {
+            console.error('Used item rollback error:', rollbackError)
+          }
         }
+
+        return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
 
       if (!listingUsedItemId && listingVariantId) {
@@ -274,10 +325,6 @@ export async function POST(request: NextRequest) {
             }
           }
         }
-      }
-
-      if (listingUsedItemId && !usedItemUpdated) {
-        console.error('Used item was not marked unavailable after checkout:', listingUsedItemId)
       }
 
       await reconcileListingInventoryStatus(supabase, listingId)

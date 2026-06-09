@@ -154,6 +154,7 @@ export interface Order {
   tracking_status: string | null;
   auth_photos: string[];
   checkcheck_certificate_url: string | null;
+  purchased_condition_photo_url?: string | null;
   challenge_code: string | null;
   buyer_shipping_address: ShippingAddress | null;
   dispute_reason: string | null;

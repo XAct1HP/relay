@@ -327,6 +327,7 @@ CREATE TABLE orders (
   tracking_status TEXT,
   auth_photos TEXT[],
   checkcheck_certificate_url TEXT,
+  purchased_condition_photo_url TEXT,
   challenge_code TEXT,
   buyer_shipping_address JSONB,
   dispute_reason TEXT,

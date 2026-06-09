@@ -26,6 +26,10 @@ interface UsedItemRow {
   condition_photo_url: string
 }
 
+function normalizePhotoUrl(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function getLegacySizeEntry(
   sizes: Array<{ size: string; price: number; quantity: number }> | null | undefined,
   size: string
@@ -144,7 +148,7 @@ export async function POST(request: NextRequest) {
         quantity: Number(usedItem.quantity) || 0,
         is_active: usedItem.is_active !== false,
         condition: usedItem.condition,
-        condition_photo_url: usedItem.condition_photo_url,
+        condition_photo_url: normalizePhotoUrl(usedItem.condition_photo_url),
       }
     } else {
       const resolvedVariant = await resolveListingVariant(supabase, listingId, {
@@ -167,9 +171,16 @@ export async function POST(request: NextRequest) {
       resolvedUsedItemId = usedItemRow.id
       resolvedSize = usedItemRow.size
 
-      if (usedItemRow.is_active === false || usedItemRow.quantity <= 0) {
+      if (usedItemRow.is_active === false || usedItemRow.quantity !== 1) {
         return NextResponse.json(
           { error: 'This used pair is no longer available' },
+          { status: 400 }
+        )
+      }
+
+      if (!usedItemRow.condition_photo_url) {
+        return NextResponse.json(
+          { error: 'This used pair is missing its required condition photo' },
           { status: 400 }
         )
       }
@@ -251,6 +262,7 @@ export async function POST(request: NextRequest) {
         listingId,
         listingVariantId: resolvedVariantId || '',
         listingUsedItemId: resolvedUsedItemId || '',
+        usedConditionPhotoUrl: usedItemRow?.condition_photo_url || '',
         size: resolvedSize,
         buyerId: user.id,
         sellerId: listing.seller_id,

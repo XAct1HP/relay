@@ -58,6 +58,10 @@ function getUsedConditionLabel(value: ResolvedUsedItem['condition']) {
   }
 }
 
+function normalizePhotoUrl(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function getLegacySizeEntry(listing: Listing, size: string | null) {
   const sizes = Array.isArray(listing.sizes) ? listing.sizes : [];
   return sizes.find((entry) => String(entry.size) === String(size ?? '')) || null;
@@ -193,13 +197,25 @@ export default function CheckoutPage() {
               return;
             }
 
+            if (Number(usedItem.quantity) !== 1) {
+              setError('This used pair is no longer available.');
+              return;
+            }
+
+            const conditionPhotoUrl = normalizePhotoUrl(usedItem.condition_photo_url);
+
+            if (!conditionPhotoUrl) {
+              setError('This used pair is missing its required condition photo.');
+              return;
+            }
+
             resolvedUsedItemRow = {
               id: usedItem.id,
               size: String(usedItem.size),
               price: Number(usedItem.price) || 0,
               quantity: Number(usedItem.quantity) || 0,
               condition: usedItem.condition,
-              condition_photo_url: usedItem.condition_photo_url,
+              condition_photo_url: conditionPhotoUrl,
             };
 
             setResolvedUsedItem(resolvedUsedItemRow);
