@@ -95,6 +95,15 @@ export async function POST(
       )
     }
 
+    await supabase
+      .from('order_disputes')
+      .update({
+        seller_description: response,
+        seller_evidence_urls: evidenceUrls || [],
+        status: 'seller_responded',
+      })
+      .eq('order_id', orderId)
+
     return NextResponse.json(updatedOrder)
   } catch (error) {
     console.error('Seller evidence error:', error)

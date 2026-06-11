@@ -203,6 +203,7 @@ export interface Order {
   auth_requirements_evaluated_at?: string | null;
   seller_funds_frozen?: boolean;
   order_chain_of_custody?: import("./trust").OrderChainOfCustody | null;
+  order_disputes?: import("./trust").OrderDisputeRecord[] | null;
   purchased_condition_photo_url?: string | null;
   challenge_code: string | null;
   buyer_shipping_address: ShippingAddress | null;

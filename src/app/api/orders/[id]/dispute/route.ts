@@ -1,105 +1,54 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClientInstance } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-admin";
+import {
+  createBuyerDispute,
+  normalizeBuyerDisputeInput,
+} from "@/lib/buyer-order-review";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: orderId } = await params
-
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Handle SSR context
-            }
-          },
-        },
-      }
-    )
-
-    // Get current user
+    const { id: orderId } = await params;
+    const supabase = await createServerClientInstance();
+    const adminClient = createAdminClient();
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { reason, description, evidenceUrls } = await request.json()
+    const body = await request.json();
+    const normalized = normalizeBuyerDisputeInput({
+      category: body?.category,
+      description: body?.description,
+      evidenceUrls: body?.evidenceUrls,
+    });
 
-    if (!reason || !description) {
-      return NextResponse.json(
-        { error: 'Missing reason or description' },
-        { status: 400 }
-      )
-    }
+    const result = await createBuyerDispute(adminClient, {
+      orderId,
+      buyerId: user.id,
+      category: normalized.category,
+      description: normalized.description,
+      evidenceUrls: normalized.evidenceUrls,
+    });
 
-    // Fetch the order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('id, buyer_id, seller_id, status')
-      .eq('id', orderId)
-      .single()
-
-    if (orderError || !order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-    }
-
-    // Only buyer can file a dispute
-    if (order.buyer_id !== user.id) {
-      return NextResponse.json({ error: 'Only the buyer can file a dispute' }, { status: 403 })
-    }
-
-    // Validate order status — can only dispute delivered or review_window orders
-    if (!['delivered', 'review_window'].includes(order.status)) {
-      return NextResponse.json(
-        { error: 'Order must be in delivered or review_window status to dispute' },
-        { status: 400 }
-      )
-    }
-
-    // Update the order directly with dispute data
-    const { data: updatedOrder, error: updateError } = await supabase
-      .from('orders')
-      .update({
-        status: 'disputed',
-        dispute_reason: reason,
-        dispute_text_buyer: description,
-        dispute_evidence_buyer: evidenceUrls || [],
-      })
-      .eq('id', orderId)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error('Dispute update error:', updateError)
-      return NextResponse.json(
-        { error: 'Failed to file dispute' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json(updatedOrder)
+    return NextResponse.json({
+      success: true,
+      dispute: result.dispute,
+      status: "disputed",
+    });
   } catch (error) {
-    console.error('Dispute filing error:', error)
+    console.error("Dispute filing error:", error);
     return NextResponse.json(
-      { error: 'Failed to file dispute' },
-      { status: 500 }
-    )
+      {
+        error: error instanceof Error ? error.message : "Failed to file dispute",
+      },
+      { status: 400 }
+    );
   }
 }
