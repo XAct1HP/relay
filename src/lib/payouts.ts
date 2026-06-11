@@ -972,6 +972,19 @@ async function consumeReserveBalance(
   return consumed;
 }
 
+export async function consumeSellerReserveForOrder(
+  adminClient: SupabaseAdminClient,
+  input: {
+    sellerId: string;
+    orderId: string;
+    targetConsumeCents: number;
+    actorUserId?: string | null;
+    actorRole: ActorRole;
+  }
+) {
+  return consumeReserveBalance(adminClient, input);
+}
+
 export async function finalizeBuyerRefundAndSellerLoss(
   adminClient: SupabaseAdminClient,
   input: {
