@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found.' }, { status: 404 })
     }
 
-    if (order.status !== 'paid') {
+    if (order.status !== 'paid' && order.status !== 'auth_submitted') {
       return NextResponse.json(
         { error: 'This order is not awaiting authentication.' },
         { status: 400 }

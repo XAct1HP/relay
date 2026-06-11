@@ -223,6 +223,19 @@ export interface RelayAuditEvent {
   created_at: string;
 }
 
+export interface HighRiskSku {
+  id: string;
+  sku_normalized: string;
+  display_sku: string | null;
+  risk_reason: string;
+  is_active: boolean;
+  created_by_admin_id: string | null;
+  removed_by_admin_id: string | null;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SellerTierHistoryEntry {
   id: string;
   seller_id: string;

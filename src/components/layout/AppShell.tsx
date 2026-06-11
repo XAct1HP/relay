@@ -25,6 +25,7 @@ import {
   ClipboardCheck,
   Users,
   Shield,
+  ShieldCheck,
   X,
 } from "lucide-react";
 
@@ -91,6 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
+    { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
     { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },

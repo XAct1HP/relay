@@ -46,7 +46,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid challenge code' }, { status: 403 })
     }
 
-    if (order.status !== 'paid') {
+    if (order.status !== 'paid' && order.status !== 'auth_submitted') {
       return NextResponse.json(
         { error: 'Order is not awaiting authentication' },
         { status: 400 }

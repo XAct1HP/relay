@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { evaluateOrderAuthenticationRequirements } from '@/lib/order-auth'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -170,6 +171,29 @@ export async function POST(request: NextRequest) {
       shippingDeadline.setDate(shippingDeadline.getDate() + 5)
 
       const challengeCode = generateChallengeCode()
+      const randomAuditSeed = paymentIntentId || session.id || `${sellerId}:${listingId}:${size}`
+
+      const [{ data: listingRecord }, { data: sellerProfile }] = await Promise.all([
+        supabase
+          .from('listings')
+          .select('id, sku, sku_normalized')
+          .eq('id', listingId)
+          .single(),
+        supabase
+          .from('profiles')
+          .select('id, seller_tier')
+          .eq('id', sellerId)
+          .single(),
+      ])
+
+      const authDecision = await evaluateOrderAuthenticationRequirements(supabase as any, {
+        sellerId,
+        sellerTier: sellerProfile?.seller_tier || 'tier_1',
+        orderValueCents: Math.round(shoePrice * 100),
+        sku: listingRecord?.sku || null,
+        skuNormalized: listingRecord?.sku_normalized || null,
+        randomSeed: randomAuditSeed,
+      })
 
       let variantUpdated = false
       let usedItemUpdated = false
@@ -228,6 +252,16 @@ export async function POST(request: NextRequest) {
           buyer_shipping_address: buyerShippingAddress,
           shipping_deadline: shippingDeadline.toISOString(),
           purchased_condition_photo_url: listingUsedItemId ? usedConditionPhotoUrl : null,
+          relay_tag_required: authDecision.relayTagRequired,
+          checkcheck_required: authDecision.checkcheckRequired,
+          checkcheck_reason: authDecision.checkcheckReason,
+          checkcheck_status: authDecision.checkcheckStatus,
+          random_audit_required: authDecision.randomAuditRequired,
+          random_audit_rate_bps_snapshot: authDecision.randomAuditRateBpsSnapshot,
+          high_risk_sku_required: authDecision.highRiskSkuRequired,
+          high_risk_sku_id: authDecision.highRiskSkuId,
+          high_risk_sku_reason: authDecision.highRiskSkuReason,
+          auth_requirements_evaluated_at: authDecision.authRequirementsEvaluatedAt,
         })
 
       if (orderError) {

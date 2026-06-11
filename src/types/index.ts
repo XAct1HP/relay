@@ -192,8 +192,15 @@ export interface Order {
   checkcheck_required?: boolean;
   checkcheck_reason?: string | null;
   checkcheck_status?: import("./trust").CheckCheckStatus;
+  checkcheck_reviewed_at?: string | null;
+  checkcheck_reviewed_by_admin_id?: string | null;
+  checkcheck_admin_notes?: string | null;
   random_audit_required?: boolean;
+  random_audit_rate_bps_snapshot?: number | null;
   high_risk_sku_required?: boolean;
+  high_risk_sku_id?: string | null;
+  high_risk_sku_reason?: string | null;
+  auth_requirements_evaluated_at?: string | null;
   seller_funds_frozen?: boolean;
   order_chain_of_custody?: import("./trust").OrderChainOfCustody | null;
   purchased_condition_photo_url?: string | null;

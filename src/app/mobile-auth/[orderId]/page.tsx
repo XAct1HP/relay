@@ -69,6 +69,12 @@ type PublicOrder = {
   status: string
   relayTagRequired?: boolean
   checkcheckRequired?: boolean
+  checkcheckReason?: string | null
+  checkcheckStatus?: string | null
+  randomAuditRequired?: boolean
+  highRiskSkuRequired?: boolean
+  legacyAuthFlow?: boolean
+  sellerTier?: string | null
   listing?: {
     brand?: string
     model?: string
@@ -151,7 +157,7 @@ export default function MobileAuthPage() {
           setPageState("error")
           return
         }
-        if (data.status !== "paid") {
+        if (data.status !== "paid" && data.status !== "auth_submitted") {
           setError("This order is not awaiting authentication.")
           setPageState("error")
           return
@@ -561,6 +567,35 @@ export default function MobileAuthPage() {
               <p style={{ fontSize: 12, color: DIM, lineHeight: 1.7, margin: 0 }}>
                 You&apos;ll scan the tag serial, upload four custody photos, and Relay will hold the submission for manual review when needed. Automatic photo verification is not assumed here.
               </p>
+            </div>
+          )}
+          {(order?.sellerTier || order?.checkcheckReason || order?.randomAuditRequired || order?.highRiskSkuRequired || order?.status === "auth_submitted") && (
+            <div style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 16, marginBottom: 20 }}>
+              {order?.sellerTier && (
+                <p style={{ fontSize: 13, color: TEXT, margin: "0 0 8px" }}>
+                  Seller tier: <span style={{ fontWeight: 700 }}>{order.sellerTier.replace("tier_", "Tier ")}</span>
+                </p>
+              )}
+              {checkcheckRequired && order?.checkcheckReason && (
+                <p style={{ fontSize: 12, color: DIM, margin: "0 0 8px", lineHeight: 1.6 }}>
+                  CheckCheck reason: {order.checkcheckReason}
+                </p>
+              )}
+              {order?.randomAuditRequired && (
+                <p style={{ fontSize: 12, color: "#fcd34d", margin: "0 0 8px" }}>
+                  This order was selected for a random audit.
+                </p>
+              )}
+              {order?.highRiskSkuRequired && (
+                <p style={{ fontSize: 12, color: "#fca5a5", margin: "0 0 8px" }}>
+                  This order includes a high-risk SKU that requires additional review.
+                </p>
+              )}
+              {order?.status === "auth_submitted" && (
+                <p style={{ fontSize: 12, color: DIM, margin: 0, lineHeight: 1.6 }}>
+                  You are updating a previously submitted authentication package. Resubmit the required evidence so admin can review it again.
+                </p>
+              )}
             </div>
           )}
           <button

@@ -79,8 +79,33 @@ interface OrderData {
   isAuthExempt?: boolean
   relayTagRequired?: boolean
   checkcheckRequired?: boolean
+  sellerTier?: string
+  checkcheckReason?: string | null
+  checkcheckStatus?: string | null
+  checkcheckAdminNotes?: string | null
+  randomAuditRequired?: boolean
+  highRiskSkuRequired?: boolean
+  legacyAuthFlow?: boolean
+  relayTagStatus?: string | null
   custodyVerificationStatus?: string
   custodyAdminReviewRequired?: boolean
+}
+
+interface FulfillmentStatusData {
+  sellerTier: string | null
+  relayTagRequired: boolean
+  checkcheckRequired: boolean
+  checkcheckReason: string | null
+  checkcheckStatus: string | null
+  checkcheckAdminNotes: string | null
+  relayTagStatus: string | null
+  chainOfCustodyStatus: string | null
+  chainOfCustodyAdminReviewRequired: boolean
+  randomAuditRequired: boolean
+  highRiskSkuRequired: boolean
+  legacyAuthFlow: boolean
+  labelReady: boolean
+  labelBlockedReasons: string[]
 }
 
 const statusStages = ["paid", "auth_submitted", "label_created", "shipped", "delivered", "review_window", "completed"] as const
@@ -437,6 +462,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   const router = useRouter()
   const { currentUser } = useAuth()
   const [order, setOrder] = useState<OrderData | null>(null)
+  const [fulfillmentStatus, setFulfillmentStatus] = useState<FulfillmentStatusData | null>(null)
   const [statusOverride, setStatusOverride] = useState<OrderStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -534,12 +560,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       isAuthExempt: AUTH_EXEMPT_BRANDS.has(listing?.brand || ""),
       relayTagRequired: Boolean(data.relay_tag_required),
       checkcheckRequired: Boolean(data.checkcheck_required),
+      sellerTier: sellerProfile?.seller_tier || undefined,
+      checkcheckReason: data.checkcheck_reason || undefined,
+      checkcheckStatus: data.checkcheck_status || undefined,
+      checkcheckAdminNotes: data.checkcheck_admin_notes || undefined,
+      randomAuditRequired: Boolean(data.random_audit_required),
+      highRiskSkuRequired: Boolean(data.high_risk_sku_required),
+      legacyAuthFlow: !data.auth_requirements_evaluated_at,
+      relayTagStatus: data.relay_tag_id ? "bound" : null,
       custodyVerificationStatus: custody?.verification_status || undefined,
       custodyAdminReviewRequired: Boolean(custody?.admin_review_required),
     }
 
     setOrder(orderData)
     setStatusOverride(null)
+    setFulfillmentStatus(null)
     setLoading(false)
   }, [params.id, currentUser?.id])
 
@@ -547,8 +582,27 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     loadOrder()
   }, [loadOrder])
 
+  useEffect(() => {
+    async function loadFulfillmentStatus() {
+      if (!order?.id || !currentUser?.id || (order.isAuthExempt && order.legacyAuthFlow)) return
+
+      try {
+        const response = await fetch(`/api/orders/${order.id}/fulfillment-status`, { cache: "no-store" })
+        const payload = await response.json()
+        if (response.ok) {
+          setFulfillmentStatus(payload)
+        }
+      } catch (statusError) {
+        console.error("Failed to load fulfillment status:", statusError)
+      }
+    }
+
+    void loadFulfillmentStatus()
+  }, [order?.id, order?.isAuthExempt, order?.legacyAuthFlow, currentUser?.id])
+
   // ── Helpers ──
   const currentStatus = statusOverride || order?.status || "paid"
+  const isAuthExemptOrder = Boolean(order?.isAuthExempt && order?.legacyAuthFlow)
 
   const handleCopyTracking = () => {
     if (order?.trackingNumber) {
@@ -907,7 +961,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
       {/* Progress Tracker */}
       {!["completed", "disputed", "cancelled", "refunded", "refund_pending", "payout_failed", "return_pending", "return_shipped", "return_delivered"].includes(currentStatus) && (
-        <ProgressTracker currentStatus={currentStatus} isAuthExempt={order.isAuthExempt} />
+        <ProgressTracker currentStatus={currentStatus} isAuthExempt={isAuthExemptOrder} />
       )}
 
       {/* Order Summary Card */}
@@ -997,7 +1051,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       {/* ═══════════════════════════════════════════ */}
       {/* STATUS: PAID (Seller needs to authenticate) */}
       {/* ═══════════════════════════════════════════ */}
-      {currentStatus === "paid" && order.userRole === "seller" && order.isAuthExempt && (
+      {currentStatus === "paid" && order.userRole === "seller" && isAuthExemptOrder && (
         <div className="relay-card p-6 mb-6 border border-emerald-500/30 bg-emerald-500/5">
           <h2 className="text-lg font-bold text-emerald-300 mb-4 flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5" />
@@ -1040,7 +1094,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
       )}
 
-      {currentStatus === "paid" && order.userRole === "seller" && !order.isAuthExempt && (
+      {currentStatus === "paid" && order.userRole === "seller" && !isAuthExemptOrder && (
         <>
           <div className="relay-card p-6 mb-6 border border-[#5f8fff]/30 bg-[#5f8fff]/5">
             <h2 className="text-lg font-bold text-[#f5f7fb] mb-2 flex items-center gap-2">
@@ -1057,8 +1111,13 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             )}
           </p>
 
-          {(order.relayTagRequired || order.checkcheckRequired) && (
+          {(order.relayTagRequired || order.checkcheckRequired || fulfillmentStatus) && (
             <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4 space-y-2">
+              {(fulfillmentStatus?.sellerTier || order.sellerTier) && (
+                <p className="text-sm text-[#f5f7fb]">
+                  Seller tier: <span className="font-semibold">{(fulfillmentStatus?.sellerTier || order.sellerTier || "tier_1").replace("tier_", "Tier ")}</span>
+                </p>
+              )}
               {order.relayTagRequired && (
                 <p className="text-sm text-[#f5f7fb]">
                   Relay security tag required: bind an unused tag to this order and upload the custody evidence set before label generation.
@@ -1066,7 +1125,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               )}
               {order.checkcheckRequired && (
                 <p className="text-sm text-[#f5f7fb]">
-                  CheckCheck required: upload the certificate during authentication submission.
+                  CheckCheck required{(fulfillmentStatus?.checkcheckReason || order.checkcheckReason) ? `: ${fulfillmentStatus?.checkcheckReason || order.checkcheckReason}` : ": upload the certificate during authentication submission."}
+                </p>
+              )}
+              {fulfillmentStatus?.randomAuditRequired && (
+                <p className="text-sm text-amber-300">Random audit triggered for this order.</p>
+              )}
+              {fulfillmentStatus?.highRiskSkuRequired && (
+                <p className="text-sm text-red-300">High-risk SKU rules triggered CheckCheck review on this order.</p>
+              )}
+              {fulfillmentStatus?.legacyAuthFlow && (
+                <p className="text-sm text-white/60">Legacy order: this order predates the new custody engine, so it follows the older auth flow.</p>
+              )}
+              {fulfillmentStatus && (
+                <p className={`text-sm ${fulfillmentStatus.labelReady ? "text-emerald-300" : "text-amber-300"}`}>
+                  {fulfillmentStatus.labelReady ? "Label can be generated once you complete submission." : "Label cannot be generated yet."}
                 </p>
               )}
               <p className="text-xs text-white/45">
@@ -1142,10 +1215,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         <div className="relay-card p-6 mb-6 bg-white/[0.04]">
           <h2 className="text-lg font-bold text-[#f5f7fb] mb-2 flex items-center gap-2">
             <Clock className="w-5 h-5 text-[#7ca6ff]" />
-            {order.isAuthExempt ? "Awaiting Shipment" : "Awaiting Seller Authentication"}
+            {isAuthExemptOrder ? "Awaiting Shipment" : "Awaiting Seller Authentication"}
           </h2>
           <p className="text-[#7ca6ff] text-sm">
-            {order.isAuthExempt
+            {isAuthExemptOrder
               ? "This is an admin-approved listing. The seller is preparing your order and will ship it shortly."
               : order.relayTagRequired
                 ? "The seller is authenticating your item and binding a Relay security tag before shipment."
@@ -1169,18 +1242,61 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               : "Great! Your photos have been submitted. Now generate a shipping label to continue."}
           </p>
 
-          {order.relayTagRequired && order.custodyAdminReviewRequired && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-4">
-              <p className="text-amber-300 text-sm font-medium mb-1">Relay tag review pending</p>
-              <p className="text-white/60 text-sm">
-                The tag serial and custody evidence were stored for manual review. Label generation will stay blocked until review is approved.
-              </p>
+          {(order.relayTagRequired || order.checkcheckRequired || fulfillmentStatus) && (
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4 space-y-2">
+              {(fulfillmentStatus?.sellerTier || order.sellerTier) && (
+                <p className="text-sm text-[#f5f7fb]">
+                  Seller tier: <span className="font-semibold">{(fulfillmentStatus?.sellerTier || order.sellerTier || "tier_1").replace("tier_", "Tier ")}</span>
+                </p>
+              )}
+              {order.relayTagRequired && (
+                <p className="text-sm text-[#f5f7fb]">
+                  Relay tag status: {fulfillmentStatus?.relayTagStatus ? fulfillmentStatus.relayTagStatus.replace(/_/g, " ") : order.custodyVerificationStatus || "pending"}
+                </p>
+              )}
+              {order.checkcheckRequired && (
+                <p className="text-sm text-[#f5f7fb]">
+                  CheckCheck status: {(fulfillmentStatus?.checkcheckStatus || order.checkcheckStatus || "required").replace(/_/g, " ")}
+                </p>
+              )}
+              {(fulfillmentStatus?.checkcheckReason || order.checkcheckReason) && (
+                <p className="text-sm text-white/60">
+                  CheckCheck reason: {fulfillmentStatus?.checkcheckReason || order.checkcheckReason}
+                </p>
+              )}
+              {fulfillmentStatus?.checkcheckAdminNotes && (
+                <p className="text-sm text-red-300">
+                  Admin note: {fulfillmentStatus.checkcheckAdminNotes}
+                </p>
+              )}
+              {fulfillmentStatus?.chainOfCustodyAdminReviewRequired && (
+                <p className="text-sm text-amber-300">
+                  Chain-of-custody review is still pending.
+                </p>
+              )}
+              {fulfillmentStatus?.legacyAuthFlow && (
+                <p className="text-sm text-white/60">
+                  Legacy order: this order predates the new custody engine.
+                </p>
+              )}
+              {fulfillmentStatus && !fulfillmentStatus.labelReady && fulfillmentStatus.labelBlockedReasons.length > 0 && (
+                <div className="space-y-1">
+                  {fulfillmentStatus.labelBlockedReasons.map((reason) => (
+                    <p key={reason} className="text-sm text-amber-300">{reason}</p>
+                  ))}
+                </div>
+              )}
+              {fulfillmentStatus && (
+                <p className={`text-sm font-medium ${fulfillmentStatus.labelReady ? "text-emerald-300" : "text-amber-300"}`}>
+                  {fulfillmentStatus.labelReady ? "Label can be generated." : "Label cannot be generated yet."}
+                </p>
+              )}
             </div>
           )}
 
           <button
             onClick={handleGenerateLabel}
-            disabled={generatingLabel}
+            disabled={generatingLabel || Boolean(fulfillmentStatus && !fulfillmentStatus.labelReady)}
             className="relay-button-primary w-full mb-6 flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {generatingLabel ? (

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { determineTagRequirementForOrder } from "@/lib/seller-trust";
+import { getOrderFulfillmentGateStatus } from "@/lib/order-auth";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import type { SellerTier } from "@/types";
 
@@ -478,49 +478,10 @@ export async function assertOrderReadyForShippoLabel(
   adminClient: SupabaseAdminClient,
   orderId: string
 ): Promise<LabelReadinessResult> {
-  const order = await getOrderContext(adminClient, orderId);
-  const reasons: string[] = [];
-  const tagRequirement = determineTagRequirementForOrder();
-  const custody = order.order_chain_of_custody;
-
-  if (tagRequirement.required) {
-    if (!order.relay_tag_id) {
-      reasons.push("A Relay tag must be bound to the order before label purchase.");
-    }
-
-    if (!custody?.seller_scanned_tag_value) {
-      reasons.push("Seller Relay tag scan is missing.");
-    }
-
-    if (!custody?.seller_tag_photo_url || !custody?.seller_pair_photo_url || !custody?.seller_box_photo_url || !custody?.seller_sealed_package_photo_url) {
-      reasons.push("Required Relay custody photos are missing.");
-    }
-
-    if (!custody?.verification_status || custody.verification_status !== "verified") {
-      reasons.push("Relay tag verification is still pending admin review.");
-    }
-  }
-
-  if (order.checkcheck_required) {
-    if (!order.checkcheck_certificate_url) {
-      reasons.push("CheckCheck certificate must be uploaded before label purchase.");
-    }
-
-    if (!["submitted", "approved"].includes(order.checkcheck_status || "")) {
-      reasons.push("CheckCheck must be submitted or approved before label purchase.");
-    }
-  }
-
-  if (order.checkcheck_status === "admin_review") {
-    reasons.push("CheckCheck requires admin review before label purchase.");
-  }
-
-  if (order.random_audit_required) {
-    reasons.push("This order is under random audit review before label purchase.");
-  }
+  const gateStatus = await getOrderFulfillmentGateStatus(adminClient, orderId);
 
   return {
-    ready: reasons.length === 0,
-    reasons,
+    ready: gateStatus.labelReady,
+    reasons: gateStatus.labelBlockedReasons,
   };
 }

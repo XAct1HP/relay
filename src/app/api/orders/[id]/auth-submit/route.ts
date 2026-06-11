@@ -44,7 +44,7 @@ export async function POST(
 
       const { data: order, error: orderError } = await serviceClient
         .from('orders')
-        .select('id, seller_id, challenge_code, status, relay_tag_required, checkcheck_required')
+        .select('id, seller_id, challenge_code, status, relay_tag_required, checkcheck_required, checkcheck_status')
         .eq('id', orderId)
         .single()
 
@@ -52,9 +52,9 @@ export async function POST(
         return NextResponse.json({ error: 'Order not found' }, { status: 404 })
       }
 
-      if (order.status !== 'paid') {
+      if (order.status !== 'paid' && order.status !== 'auth_submitted') {
         return NextResponse.json(
-          { error: 'Order must be in paid status to submit authentication' },
+          { error: 'Order must be awaiting authentication or resubmission' },
           { status: 400 }
         )
       }
@@ -106,6 +106,9 @@ export async function POST(
           auth_photos: authPhotos,
           checkcheck_certificate_url: checkcheckCertificateUrl || null,
           checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
+          checkcheck_reviewed_at: null,
+          checkcheck_reviewed_by_admin_id: null,
+          checkcheck_admin_notes: null,
           status: 'auth_submitted',
         })
         .eq('id', orderId)
@@ -155,7 +158,7 @@ export async function POST(
 
       const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select('id, seller_id, status, relay_tag_required, checkcheck_required')
+        .select('id, seller_id, status, relay_tag_required, checkcheck_required, checkcheck_status')
         .eq('id', orderId)
         .single()
 
@@ -170,9 +173,9 @@ export async function POST(
         )
       }
 
-      if (order.status !== 'paid') {
+      if (order.status !== 'paid' && order.status !== 'auth_submitted') {
         return NextResponse.json(
-          { error: 'Order must be in paid status to submit authentication' },
+          { error: 'Order must be awaiting authentication or resubmission' },
           { status: 400 }
         )
       }
@@ -221,6 +224,9 @@ export async function POST(
           auth_photos: authPhotos,
           checkcheck_certificate_url: checkcheckCertificateUrl || null,
           checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
+          checkcheck_reviewed_at: null,
+          checkcheck_reviewed_by_admin_id: null,
+          checkcheck_admin_notes: null,
           status: 'auth_submitted',
         })
         .eq('id', orderId)
