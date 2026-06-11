@@ -22,6 +22,9 @@ export interface User {
   sales_count: number;
   avg_rating: number;
   instagram_url: string | null;
+  is_banned?: boolean;
+  ban_reason?: string | null;
+  dispute_flags_count?: number;
   seller_tier?: import("./trust").SellerTier;
   trust_score?: number;
   completed_order_count?: number;
@@ -43,6 +46,13 @@ export interface User {
   tier_manually_overridden_by?: string | null;
   tier_override_reason?: string | null;
   tier_last_evaluated_at?: string | null;
+  recommended_seller_tier?: import("./trust").SellerTier;
+  recommended_trust_score?: number;
+  tier_locked?: boolean;
+  tier_locked_at?: string | null;
+  is_founding_seller?: boolean;
+  tier_3_approved_at?: string | null;
+  tier_3_approved_by?: string | null;
   created_at: string;
   updated_at: string;
 }

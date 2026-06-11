@@ -23,6 +23,7 @@ import {
   LogOut,
   ClipboardCheck,
   Users,
+  Shield,
   X,
 } from "lucide-react";
 
@@ -87,6 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
     ...sellerLinks,

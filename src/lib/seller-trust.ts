@@ -25,7 +25,15 @@ export interface SellerTierEligibilityResult {
   trustScore: number;
   eligibleTier: SellerTier;
   manualOverrideApplied: boolean;
+  adminApprovalRequired: boolean;
   reasons: string[];
+  breakdown: {
+    lifetimeGmv: number;
+    completedOrders: number;
+    accountAge: number;
+    disputeRate: number;
+    buyerCompletionRate: number;
+  };
   hardThresholds: Record<SellerTier, { satisfied: boolean; reasons: string[] }>;
 }
 
@@ -114,6 +122,18 @@ export const SELLER_TIER_THRESHOLDS = {
   },
 } as const;
 
+export function mapTrustScoreToTier(score: number): SellerTier {
+  if (score >= 90) {
+    return "tier_3";
+  }
+
+  if (score >= 60) {
+    return "tier_2";
+  }
+
+  return "tier_1";
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -188,14 +208,66 @@ export function calculateSellerTrustScore(snapshot: SellerTrustSnapshot) {
   return clamp(Math.round(weightedScore), 0, TRUST_SCORE_MAX);
 }
 
+export function calculateSellerTrustScoreBreakdown(snapshot: SellerTrustSnapshot) {
+  const accountAgeDays = calculateAccountAgeDays(snapshot);
+  const disputeRateBps = calculateDisputeRateBps(snapshot);
+
+  const breakdown = {
+    lifetimeGmv: clamp(
+      Math.round(clamp(snapshot.lifetimeGmvCents / TIER_3_GMV_CENTS, 0, 1) * SELLER_TRUST_WEIGHTS.lifetimeGmv),
+      0,
+      SELLER_TRUST_WEIGHTS.lifetimeGmv
+    ),
+    completedOrders: clamp(
+      Math.round(clamp(snapshot.completedOrderCount / TIER_3_COMPLETED_ORDERS, 0, 1) * SELLER_TRUST_WEIGHTS.completedOrders),
+      0,
+      SELLER_TRUST_WEIGHTS.completedOrders
+    ),
+    accountAge: clamp(
+      Math.round(clamp(accountAgeDays / TIER_3_ACCOUNT_AGE_DAYS, 0, 1) * SELLER_TRUST_WEIGHTS.accountAge),
+      0,
+      SELLER_TRUST_WEIGHTS.accountAge
+    ),
+    disputeRate: clamp(
+      Math.round(clamp(1 - disputeRateBps / 500, 0, 1) * SELLER_TRUST_WEIGHTS.disputeRate),
+      0,
+      SELLER_TRUST_WEIGHTS.disputeRate
+    ),
+    buyerCompletionRate: clamp(
+      Math.round(clamp(snapshot.buyerCompletionRateBps / 10000, 0, 1) * SELLER_TRUST_WEIGHTS.buyerCompletionRate),
+      0,
+      SELLER_TRUST_WEIGHTS.buyerCompletionRate
+    ),
+  };
+
+  return {
+    trustScore: clamp(
+      breakdown.lifetimeGmv +
+        breakdown.completedOrders +
+        breakdown.accountAge +
+        breakdown.disputeRate +
+        breakdown.buyerCompletionRate,
+      0,
+      TRUST_SCORE_MAX
+    ),
+    breakdown,
+    accountAgeDays,
+    disputeRateBps,
+  };
+}
+
 /**
  * Promotions only occur when the seller clears both the trust score floor and
  * the tier-specific hard thresholds.
  */
 export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): SellerTierEligibilityResult {
-  const trustScore = calculateSellerTrustScore(snapshot);
-  const disputeRateBps = calculateDisputeRateBps(snapshot);
-  const accountAgeDays = calculateAccountAgeDays(snapshot);
+  const {
+    trustScore,
+    breakdown,
+    disputeRateBps,
+    accountAgeDays,
+  } = calculateSellerTrustScoreBreakdown(snapshot);
+  const scoreMappedTier = mapTrustScoreToTier(trustScore);
 
   const tier2Reasons: string[] = [];
   if (trustScore < SELLER_TIER_THRESHOLDS.tier_2.trustScoreFloor) {
@@ -253,27 +325,33 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
       trustScore,
       eligibleTier: snapshot.sellerTier,
       manualOverrideApplied: true,
+      adminApprovalRequired: false,
       reasons: ["manual tier override is active"],
+      breakdown,
       hardThresholds,
     };
   }
 
-  if (hardThresholds.tier_3.satisfied) {
+  if (scoreMappedTier === "tier_3" && hardThresholds.tier_3.satisfied) {
     return {
       trustScore,
       eligibleTier: "tier_3",
       manualOverrideApplied: false,
+      adminApprovalRequired: !snapshot.isFoundingSeller && !snapshot.tier3ApprovedAt,
       reasons: [],
+      breakdown,
       hardThresholds,
     };
   }
 
-  if (hardThresholds.tier_2.satisfied) {
+  if ((scoreMappedTier === "tier_2" || scoreMappedTier === "tier_3") && hardThresholds.tier_2.satisfied) {
     return {
       trustScore,
       eligibleTier: "tier_2",
       manualOverrideApplied: false,
+      adminApprovalRequired: false,
       reasons: [],
+      breakdown,
       hardThresholds,
     };
   }
@@ -282,10 +360,12 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
     trustScore,
     eligibleTier: "tier_1",
     manualOverrideApplied: false,
+    adminApprovalRequired: false,
     reasons: [
       ...hardThresholds.tier_2.reasons,
       ...hardThresholds.tier_3.reasons,
     ],
+    breakdown,
     hardThresholds,
   };
 }

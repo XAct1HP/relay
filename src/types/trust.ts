@@ -56,6 +56,8 @@ export type AuditActorRole = "system" | "admin" | "seller" | "buyer";
 export interface SellerTrustSnapshot {
   sellerTier: SellerTier;
   trustScore: number;
+  recommendedSellerTier?: SellerTier;
+  recommendedTrustScore?: number;
   completedOrderCount: number;
   lifetimeGmvCents: number;
   trailing30dOrderCount: number;
@@ -69,6 +71,9 @@ export interface SellerTrustSnapshot {
   buyerCompletionRateBps: number;
   authenticityViolationCount: number;
   tierManuallyOverridden: boolean;
+  tierLocked?: boolean;
+  isFoundingSeller?: boolean;
+  tier3ApprovedAt?: string | Date | null;
   createdAt: string | Date;
   sellerApprovedAt?: string | Date | null;
   firstCompletedOrderAt?: string | Date | null;
@@ -192,6 +197,57 @@ export interface RelayAuditEvent {
   event_type: string;
   order_id: string | null;
   seller_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SellerTierHistoryEntry {
+  id: string;
+  seller_id: string;
+  previous_tier: SellerTier | null;
+  new_tier: SellerTier;
+  recommended_tier: SellerTier | null;
+  trust_score: number | null;
+  change_source:
+    | "automated_evaluation"
+    | "manual_override"
+    | "manual_unlock"
+    | "admin_approval"
+    | "authenticity_violation"
+    | "tag_tampering_violation"
+    | "dispute_rate_demotion";
+  actor_user_id: string | null;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SellerTrustEvaluation {
+  id: string;
+  seller_id: string;
+  trust_score: number;
+  recommended_tier: SellerTier;
+  applied_tier: SellerTier;
+  was_tier_changed: boolean;
+  manual_override_applied: boolean;
+  admin_approval_required: boolean;
+  breakdown: Record<string, unknown>;
+  reasons: unknown[];
+  hard_thresholds: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  evaluated_by_user_id: string | null;
+  created_at: string;
+}
+
+export interface SellerViolation {
+  id: string;
+  seller_id: string;
+  order_id: string | null;
+  violation_type: "authenticity" | "tag_tampering" | "dispute_rate" | "manual_demotion" | "other";
+  severity: "low" | "medium" | "high" | "critical";
+  penalty_outcome: string | null;
+  notes: string | null;
+  actor_user_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }

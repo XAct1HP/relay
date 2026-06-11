@@ -20,6 +20,7 @@ import {
   LogOut,
   ClipboardCheck,
   Users,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -68,6 +69,7 @@ export function Sidebar() {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
     ...sellerLinks,
