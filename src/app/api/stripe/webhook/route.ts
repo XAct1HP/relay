@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { evaluateOrderAuthenticationRequirements } from '@/lib/order-auth'
 import { buildOrderPayoutSnapshotForTier } from '@/lib/payouts'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -235,7 +236,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const { error: orderError } = await supabase
+      const { data: insertedOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
           listing_id: listingId,
@@ -272,6 +273,8 @@ export async function POST(request: NextRequest) {
           reserve_hold_duration_days_snapshot: payoutSnapshot.reserveHoldDurationDays,
           minimum_reserve_balance_cents_snapshot: payoutSnapshot.minimumReserveBalanceCents,
         })
+        .select('id')
+        .single()
 
       if (orderError) {
         console.error('Order creation error:', orderError)
@@ -293,6 +296,25 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
       }
+
+      await logRelayAuditEvent(supabase, {
+        actorUserId: buyerId,
+        actorRole: 'buyer',
+        orderId: insertedOrder?.id || null,
+        sellerId,
+        eventType: 'stripe.checkout_session_completed',
+        metadata: {
+          listingId,
+          paymentIntentId,
+          sellerTierSnapshot: payoutSnapshot.sellerTierSnapshot,
+          payoutSchedule: payoutSnapshot.payoutSchedule,
+          reservePercentageBps: payoutSnapshot.reservePercentageBps,
+          checkcheckRequired: authDecision.checkcheckRequired,
+          checkcheckReason: authDecision.checkcheckReason,
+          randomAuditRequired: authDecision.randomAuditRequired,
+          highRiskSkuRequired: authDecision.highRiskSkuRequired,
+        },
+      })
 
       if (!listingUsedItemId && listingVariantId) {
         const { data: decrementedRows, error: decrementError } = await supabase.rpc(

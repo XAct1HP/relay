@@ -809,6 +809,9 @@ export async function releaseEligibleReserveEntries(
     throw new Error(error.message || "Failed to load releasable reserve entries");
   }
 
+  let releasedEntryCount = 0;
+  let releasedAmountCents = 0;
+
   const groupedBySeller = new Map<string, ReserveEntryRow[]>();
   for (const row of (rows || []) as ReserveEntryRow[]) {
     const bucket = groupedBySeller.get(row.seller_id) || [];
@@ -827,6 +830,8 @@ export async function releaseEligibleReserveEntries(
       (sum: number, row: ReserveEntryRow) => sum + (row.amount_cents || 0),
       0
     );
+    releasedEntryCount += sellerRows.length;
+    releasedAmountCents += totalRelease;
 
     await adminClient
       .from("seller_reserve_accounts")
@@ -860,6 +865,12 @@ export async function releaseEligibleReserveEntries(
       });
     }
   }
+
+  return {
+    releasedEntryCount,
+    releasedAmountCents,
+    sellerCount: groupedBySeller.size,
+  };
 }
 
 async function consumeReserveBalance(

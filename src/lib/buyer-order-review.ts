@@ -44,9 +44,11 @@ interface BuyerOrderReviewContext {
   status: string;
   review_deadline: string | null;
   seller_funds_frozen: boolean;
+  payout_status: string | null;
   relay_tag_required: boolean | null;
   relay_tag_id: string | null;
   auth_requirements_evaluated_at: string | null;
+  checkcheck_status: string | null;
   order_chain_of_custody: OrderChainOfCustody | OrderChainOfCustody[] | null;
   relay_tag: RelayTagRecord | RelayTagRecord[] | null;
   order_disputes: OrderDisputeRow[] | OrderDisputeRow | null;
@@ -110,9 +112,11 @@ export async function loadBuyerOrderReviewContext(
       status,
       review_deadline,
       seller_funds_frozen,
+      payout_status,
       relay_tag_required,
       relay_tag_id,
       auth_requirements_evaluated_at,
+      checkcheck_status,
       relay_tag:relay_tags!orders_relay_tag_id_fkey(
         id,
         tag_serial_number,
@@ -195,6 +199,24 @@ export function evaluateBuyerCompletionEligibility(
     );
     autoCompleteBlockedReasons.push(
       "Seller funds are frozen, so auto-complete is paused."
+    );
+  }
+
+  if (context.payout_status === "frozen") {
+    blockedReasons.push(
+      "Payouts are frozen for this order while it is under review."
+    );
+    autoCompleteBlockedReasons.push(
+      "Payouts are frozen, so auto-complete is paused."
+    );
+  }
+
+  if (context.checkcheck_status === "admin_review") {
+    blockedReasons.push(
+      "Authentication evidence is waiting on admin review."
+    );
+    autoCompleteBlockedReasons.push(
+      "Authentication evidence is still waiting on admin review."
     );
   }
 
