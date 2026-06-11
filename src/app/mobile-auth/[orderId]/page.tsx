@@ -328,7 +328,7 @@ export default function MobileAuthPage() {
     const res = await fetch("/api/orders/" + orderId + "/upload-photo", { method: "POST", body: fd })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || "Upload failed")
-    return data.url
+    return data.storageRef || data.url
   }
 
   const handleSubmit = async () => {

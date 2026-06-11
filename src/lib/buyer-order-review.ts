@@ -45,6 +45,7 @@ interface BuyerOrderReviewContext {
   review_deadline: string | null;
   seller_funds_frozen: boolean;
   payout_status: string | null;
+  dispute_admin_exception_until: string | null;
   relay_tag_required: boolean | null;
   relay_tag_id: string | null;
   auth_requirements_evaluated_at: string | null;
@@ -113,6 +114,7 @@ export async function loadBuyerOrderReviewContext(
       review_deadline,
       seller_funds_frozen,
       payout_status,
+      dispute_admin_exception_until,
       relay_tag_required,
       relay_tag_id,
       auth_requirements_evaluated_at,
@@ -257,6 +259,13 @@ export function evaluateBuyerCompletionEligibility(
         "Buyer tag scan, tag photo, and pair photo are required before completing the order."
       );
     }
+  }
+
+  const hasAdminDisputeException =
+    Boolean(context.dispute_admin_exception_until) &&
+    new Date(context.dispute_admin_exception_until as string).getTime() > Date.now();
+  if (reviewWindowExpired && !hasAdminDisputeException) {
+    blockedReasons.push("The review window has expired for this order.");
   }
 
   return {
@@ -412,6 +421,17 @@ export async function createBuyerDispute(
     throw new Error(
       "Order must be delivered or in the review window before a dispute can be opened"
     );
+  }
+
+  const hasAdminDisputeException =
+    Boolean(context.dispute_admin_exception_until) &&
+    new Date(context.dispute_admin_exception_until as string).getTime() > Date.now();
+  if (
+    context.review_deadline &&
+    new Date(context.review_deadline).getTime() <= Date.now() &&
+    !hasAdminDisputeException
+  ) {
+    throw new Error("The buyer dispute window has expired for this order");
   }
 
   const eligibility = evaluateBuyerCompletionEligibility(context);

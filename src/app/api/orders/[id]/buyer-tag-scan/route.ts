@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { recordBuyerRelayTagScan } from "@/lib/relay-tags";
+import { assertStorageObjectRefForOrder } from "@/lib/secure-storage";
 
 export async function POST(
   request: NextRequest,
@@ -19,6 +20,21 @@ export async function POST(
     }
 
     const body = await request.json();
+    if (typeof body?.buyerTagPhotoUrl === "string") {
+      assertStorageObjectRefForOrder(body.buyerTagPhotoUrl, {
+        bucket: "order-photos",
+        orderId,
+        allowedPrefixes: ["buyer-evidence/", "buyer-custody/"],
+      });
+    }
+    if (typeof body?.buyerPairPhotoUrl === "string") {
+      assertStorageObjectRefForOrder(body.buyerPairPhotoUrl, {
+        bucket: "order-photos",
+        orderId,
+        allowedPrefixes: ["buyer-evidence/", "buyer-custody/"],
+      });
+    }
+
     await recordBuyerRelayTagScan(createAdminClient(), {
       orderId,
       buyerId: user.id,

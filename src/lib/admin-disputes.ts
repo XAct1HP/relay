@@ -11,6 +11,7 @@ import {
 } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
+import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
 import type { DisputeCategory, RelayAuditEvent, SellerTier } from "@/types";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
@@ -704,15 +705,36 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
   const mismatchReason =
     custody?.mismatch_reason ||
     (buyerTagValue && !tagMatch ? "Buyer-scanned tag does not match the seller-bound Relay tag." : null);
+  const signedCustody = custody
+    ? {
+        ...custody,
+        seller_tag_photo_url: await resolveSignedMediaValue(adminClient, custody.seller_tag_photo_url),
+        seller_pair_photo_url: await resolveSignedMediaValue(adminClient, custody.seller_pair_photo_url),
+        seller_box_photo_url: await resolveSignedMediaValue(adminClient, custody.seller_box_photo_url),
+        seller_sealed_package_photo_url: await resolveSignedMediaValue(adminClient, custody.seller_sealed_package_photo_url),
+        buyer_tag_photo_url: await resolveSignedMediaValue(adminClient, custody.buyer_tag_photo_url),
+        buyer_pair_photo_url: await resolveSignedMediaValue(adminClient, custody.buyer_pair_photo_url),
+      }
+    : null;
+  const signedDispute = {
+    ...dispute,
+    evidence_urls: await resolveSignedMediaList(adminClient, dispute.evidence_urls),
+    buyer_evidence_urls: await resolveSignedMediaList(adminClient, dispute.buyer_evidence_urls),
+    seller_evidence_urls: await resolveSignedMediaList(adminClient, dispute.seller_evidence_urls),
+  };
 
   return {
     order: {
       ...order,
+      auth_photos: await resolveSignedMediaList(adminClient, order.auth_photos),
+      checkcheck_certificate_url: await resolveSignedMediaValue(adminClient, order.checkcheck_certificate_url),
+      dispute_evidence_buyer: await resolveSignedMediaList(adminClient, order.dispute_evidence_buyer),
+      dispute_evidence_seller: await resolveSignedMediaList(adminClient, order.dispute_evidence_seller),
       buyer,
       seller,
       relay_tag: relayTag,
-      order_chain_of_custody: custody,
-      order_dispute: dispute,
+      order_chain_of_custody: signedCustody,
+      order_dispute: signedDispute,
       order_payouts: orderPayouts,
     },
     reserveEntries,

@@ -5,6 +5,7 @@ import {
   createBuyerDispute,
   normalizeBuyerDisputeInput,
 } from "@/lib/buyer-order-review";
+import { assertStorageObjectRefForOrder } from "@/lib/secure-storage";
 
 export async function POST(
   request: NextRequest,
@@ -27,6 +28,13 @@ export async function POST(
       category: body?.category,
       description: body?.description,
       evidenceUrls: body?.evidenceUrls,
+    });
+    normalized.evidenceUrls.forEach((evidenceUrl) => {
+      assertStorageObjectRefForOrder(evidenceUrl, {
+        bucket: "order-photos",
+        orderId,
+        allowedPrefixes: ["buyer-evidence/", "buyer-custody/"],
+      });
     });
 
     const result = await createBuyerDispute(adminClient, {

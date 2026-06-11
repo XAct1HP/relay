@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { assertOrderReadyForShippoLabel } from '@/lib/relay-tags'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
 
 const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, seller_id, status')
+      .select('id, seller_id, status, shipping_label_url, tracking_number')
       .eq('id', orderId)
       .single()
 
@@ -60,6 +61,14 @@ export async function POST(request: NextRequest) {
 
     if (order.seller_id !== user.id) {
       return NextResponse.json({ error: 'Only the seller can purchase a label' }, { status: 403 })
+    }
+
+    if (order.status === 'label_created' && order.shipping_label_url && order.tracking_number) {
+      return NextResponse.json({
+        trackingNumber: order.tracking_number,
+        labelUrl: order.shipping_label_url,
+        orderId,
+      })
     }
 
     const readiness = await assertOrderReadyForShippoLabel(createAdminClient(), orderId)
@@ -158,6 +167,17 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await logRelayAuditEvent(createAdminClient(), {
+      actorUserId: user.id,
+      actorRole: 'seller',
+      orderId,
+      sellerId: user.id,
+      eventType: 'order.shipping_label_generated',
+      metadata: {
+        trackingNumber,
+      },
+    })
 
     return NextResponse.json({
       trackingNumber,

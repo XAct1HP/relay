@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { assertStorageObjectRefForOrder } from '@/lib/secure-storage'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
 
 export async function POST(
   request: NextRequest,
@@ -42,6 +44,17 @@ export async function POST(
 
     const { response, evidenceUrls } = await request.json()
 
+    const normalizedEvidenceUrls = Array.isArray(evidenceUrls)
+      ? evidenceUrls.filter((value: unknown): value is string => typeof value === 'string')
+      : []
+    normalizedEvidenceUrls.forEach((evidenceUrl) => {
+      assertStorageObjectRefForOrder(evidenceUrl, {
+        bucket: 'order-photos',
+        orderId,
+        allowedPrefixes: ['seller-evidence/'],
+      })
+    })
+
     if (!response) {
       return NextResponse.json(
         { error: 'A text response is required' },
@@ -81,7 +94,7 @@ export async function POST(
       .from('orders')
       .update({
         dispute_text_seller: response,
-        dispute_evidence_seller: evidenceUrls || [],
+        dispute_evidence_seller: normalizedEvidenceUrls,
       })
       .eq('id', orderId)
       .select()
@@ -99,10 +112,21 @@ export async function POST(
       .from('order_disputes')
       .update({
         seller_description: response,
-        seller_evidence_urls: evidenceUrls || [],
+        seller_evidence_urls: normalizedEvidenceUrls,
         status: 'seller_responded',
       })
       .eq('order_id', orderId)
+
+    await logRelayAuditEvent(supabase, {
+      actorUserId: user.id,
+      actorRole: 'seller',
+      sellerId: user.id,
+      orderId,
+      eventType: 'order.dispute_seller_response_submitted',
+      metadata: {
+        evidenceCount: normalizedEvidenceUrls.length,
+      },
+    })
 
     return NextResponse.json(updatedOrder)
   } catch (error) {

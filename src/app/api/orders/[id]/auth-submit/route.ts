@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { bindRelayTagToOrder } from '@/lib/relay-tags'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
+import { assertStorageObjectRefForOrder } from '@/lib/secure-storage'
 
 export async function POST(
   request: NextRequest,
@@ -65,6 +67,14 @@ export async function POST(
 
       isAuthorized = true
 
+      authPhotos.forEach((photoUrl: string) => {
+        assertStorageObjectRefForOrder(photoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['auth/'],
+        })
+      })
+
       if (order.relay_tag_required) {
         if (
           !relayTagScanValue ||
@@ -78,6 +88,27 @@ export async function POST(
             { status: 400 }
           )
         }
+
+        assertStorageObjectRefForOrder(sellerTagPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerPairPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerBoxPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerSealedPackagePhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
 
         await bindRelayTagToOrder(serviceClient as any, {
           orderId,
@@ -97,6 +128,14 @@ export async function POST(
           { error: 'CheckCheck certificate URL is required' },
           { status: 400 }
         )
+      }
+
+      if (checkcheckCertificateUrl) {
+        assertStorageObjectRefForOrder(checkcheckCertificateUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['checkcheck/'],
+        })
       }
 
       // Update using service role client
@@ -122,6 +161,18 @@ export async function POST(
           { status: 500 }
         )
       }
+
+      await logRelayAuditEvent(serviceClient, {
+        actorRole: 'seller',
+        orderId,
+        sellerId: order.seller_id,
+        eventType: 'order.auth_submitted',
+        metadata: {
+          authPhotoCount: authPhotos.length,
+          checkcheckSubmitted: Boolean(checkcheckCertificateUrl),
+          relayTagRequired: Boolean(order.relay_tag_required),
+        },
+      })
 
       return NextResponse.json(updatedOrder)
     } else {
@@ -180,6 +231,14 @@ export async function POST(
         )
       }
 
+      authPhotos.forEach((photoUrl: string) => {
+        assertStorageObjectRefForOrder(photoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['auth/'],
+        })
+      })
+
       if (order.relay_tag_required) {
         if (
           !relayTagScanValue ||
@@ -193,6 +252,27 @@ export async function POST(
             { status: 400 }
           )
         }
+
+        assertStorageObjectRefForOrder(sellerTagPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerPairPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerBoxPhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
+        assertStorageObjectRefForOrder(sellerSealedPackagePhotoUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['seller-custody/'],
+        })
 
         await bindRelayTagToOrder(createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -218,6 +298,14 @@ export async function POST(
         )
       }
 
+      if (checkcheckCertificateUrl) {
+        assertStorageObjectRefForOrder(checkcheckCertificateUrl, {
+          bucket: 'order-photos',
+          orderId,
+          allowedPrefixes: ['checkcheck/'],
+        })
+      }
+
       const { data: updatedOrder, error: updateError } = await supabase
         .from('orders')
         .update({
@@ -240,6 +328,22 @@ export async function POST(
           { status: 500 }
         )
       }
+
+      await logRelayAuditEvent(createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      ), {
+        actorUserId: user.id,
+        actorRole: 'seller',
+        orderId,
+        sellerId: order.seller_id,
+        eventType: 'order.auth_submitted',
+        metadata: {
+          authPhotoCount: authPhotos.length,
+          checkcheckSubmitted: Boolean(checkcheckCertificateUrl),
+          relayTagRequired: Boolean(order.relay_tag_required),
+        },
+      })
 
       return NextResponse.json(updatedOrder)
     }

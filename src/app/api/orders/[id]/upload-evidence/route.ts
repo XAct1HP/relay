@@ -2,6 +2,11 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { buildStorageObjectRef, createSignedStorageUrl, sanitizeUploadedFileName } from '@/lib/secure-storage'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 /**
  * Server-side upload endpoint for dispute evidence photos.
@@ -86,14 +91,30 @@ export async function POST(
       )
     }
 
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB.' },
+        { status: 400 }
+      )
+    }
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Only JPG, PNG, and WebP are allowed.' },
+        { status: 400 }
+      )
+    }
+
     // Upload to storage using service role key
-    const path = `${orderId}/${fileName}`
+    const extension = sanitizeUploadedFileName(fileName).split('.').pop() || 'jpg'
+    const folder = isBuyer ? 'buyer-evidence' : 'seller-evidence'
+    const path = `${orderId}/${folder}/${user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`
     const buffer = Buffer.from(await file.arrayBuffer())
 
     const { error: uploadError } = await supabase.storage
       .from('order-photos')
       .upload(path, buffer, {
-        upsert: true,
+        upsert: false,
         contentType: file.type || 'image/jpeg',
       })
 
@@ -105,11 +126,26 @@ export async function POST(
       )
     }
 
-    const { data: urlData } = supabase.storage
-      .from('order-photos')
-      .getPublicUrl(path)
+    const storageRef = buildStorageObjectRef('order-photos', path)
+    const signedUrl = await createSignedStorageUrl(supabase as any, storageRef)
 
-    return NextResponse.json({ url: urlData.publicUrl })
+    await logRelayAuditEvent(supabase, {
+      actorUserId: user.id,
+      actorRole: isBuyer ? 'buyer' : 'seller',
+      orderId,
+      sellerId: order.seller_id,
+      eventType: 'order.dispute_evidence_uploaded',
+      metadata: {
+        storageRef,
+        actorSide: isBuyer ? 'buyer' : 'seller',
+      },
+    })
+
+    return NextResponse.json({
+      url: signedUrl,
+      signedUrl,
+      storageRef,
+    })
   } catch (error) {
     console.error('Evidence upload error:', error)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })

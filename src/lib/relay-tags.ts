@@ -155,6 +155,21 @@ export async function bindRelayTagToOrder(
     throw new Error("Only the seller on this order can bind a Relay tag");
   }
 
+  if (order.relay_tag_id && order.relay_tag_id !== null) {
+    const existingCustody = order.order_chain_of_custody;
+    const existingSubmittedValue = normalizeTagValue(existingCustody?.seller_scanned_tag_value);
+    const normalizedRequestedValue = normalizeTagValue(input.scannedValue);
+
+    if (
+      order.relay_tag_id !== null &&
+      existingCustody?.order_id &&
+      existingSubmittedValue &&
+      existingSubmittedValue !== normalizedRequestedValue
+    ) {
+      throw new Error("Relay tag binding is immutable after submission. Contact admin to review or reject the current custody submission.");
+    }
+  }
+
   const normalizedScan = normalizeTagValue(input.scannedValue);
   const normalizedBarcode = normalizeTagValue(input.scannedBarcodeValue);
 
@@ -186,6 +201,10 @@ export async function bindRelayTagToOrder(
 
   if (tag.status !== "assigned_to_seller" && tag.status !== "bound_to_order" && tag.status !== "submitted_by_seller") {
     throw new Error("This Relay tag is not available for binding");
+  }
+
+  if (order.relay_tag_id && order.relay_tag_id !== tag.id) {
+    throw new Error("This order already has a different Relay tag bound and it cannot be replaced automatically.");
   }
 
   const nowIso = new Date().toISOString();

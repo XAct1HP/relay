@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { processOrderPayoutTrigger } from '@/lib/payouts'
+import { logRelayAuditEvent } from '@/lib/relay-audit'
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +44,7 @@ export async function POST(
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, buyer_id, status')
+      .select('id, buyer_id, seller_id, status')
       .eq('id', orderId)
       .single()
 
@@ -72,6 +73,7 @@ export async function POST(
       .from('orders')
       .update({
         status: 'delivered',
+        delivered_at: new Date().toISOString(),
         review_deadline: reviewDeadline.toISOString(),
       })
       .eq('id', orderId)
@@ -90,6 +92,17 @@ export async function POST(
       trigger: 'delivery',
       actorUserId: user.id,
       actorRole: 'buyer',
+    })
+
+    await logRelayAuditEvent(createAdminClient(), {
+      actorUserId: user.id,
+      actorRole: 'buyer',
+      orderId,
+      sellerId: order.seller_id || null,
+      eventType: 'order.delivered_marked_by_buyer',
+      metadata: {
+        reviewDeadline: reviewDeadline.toISOString(),
+      },
     })
 
     return NextResponse.json(updatedOrder)

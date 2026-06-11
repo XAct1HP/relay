@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/hooks/useAuth"
 import {
   BUYER_DISPUTE_CATEGORIES,
@@ -364,8 +363,8 @@ const DisputeForm = ({
           throw new Error(err.error || "Failed to upload evidence photo")
         }
 
-        const { url } = await res.json()
-        uploadedUrls.push(url)
+        const payload = await res.json()
+        uploadedUrls.push((payload.storageRef || payload.url) as string)
       }
 
       onSubmit(reason, description, uploadedUrls)
@@ -930,29 +929,11 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   // ── Load order ──
   const loadOrder = useCallback(async () => {
     if (!currentUser?.id) return
-    const supabase = createClient()
+    const response = await fetch(`/api/orders/${params.id}`, { cache: "no-store" })
+    const data = await response.json()
 
-    const { data, error: fetchError } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        listings(*),
-        buyer:profiles!orders_buyer_id_fkey(*),
-        seller:profiles!orders_seller_id_fkey(*),
-        order_chain_of_custody(*),
-        relay_tag:relay_tags!orders_relay_tag_id_fkey(
-          id,
-          tag_serial_number,
-          barcode_value,
-          status
-        ),
-        order_disputes(*)
-      `)
-      .eq("id", params.id)
-      .single()
-
-    if (fetchError || !data) {
-      setError(fetchError?.message || "Order not found")
+    if (!response.ok || !data) {
+      setError(data?.error || "Order not found")
       setLoading(false)
       return
     }
@@ -1102,7 +1083,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     }
 
     const payload = await res.json()
-    return payload.url as string
+    return (payload.storageRef || payload.url) as string
   }
 
   const submitBuyerCustodyEvidence = async (input: {
@@ -1153,16 +1134,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       throw new Error(payload.error || "Failed to submit buyer Relay tag scan")
     }
 
-    setOrder((prev) =>
-      prev
-        ? {
-            ...prev,
-            buyerScannedTagValue: scannedValue.toUpperCase(),
-            buyerTagPhotoUrl,
-            buyerPairPhotoUrl,
-          }
-        : prev
-    )
+    await loadOrder()
   }
 
   // ── Generate shipping label ──
@@ -1367,20 +1339,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       }
 
       setShowDisputeForm(false)
-      setOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "disputed",
-              disputeReason: payload.category,
-              disputeCategory: payload.category,
-              disputeStatus: "open",
-              disputeTextBuyer: payload.description,
-              disputeEvidenceBuyer: evidenceUrls,
-              sellerFundsFrozen: true,
-            }
-          : prev
-      )
+      await loadOrder()
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -1416,8 +1375,8 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           throw new Error(err.error || "Failed to upload evidence photo")
         }
 
-        const { url } = await uploadRes.json()
-        uploadedUrls.push(url)
+        const payload = await uploadRes.json()
+        uploadedUrls.push((payload.storageRef || payload.url) as string)
       }
 
       const res = await fetch(`/api/orders/${order.id}/seller-evidence`, {
@@ -1434,15 +1393,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         throw new Error(errData.error || "Failed to submit evidence")
       }
 
-      setOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              disputeTextSeller: sellerResponse,
-              disputeEvidenceSeller: uploadedUrls,
-            }
-          : prev
-      )
+      await loadOrder()
       setSellerResponse("")
       setSellerEvidenceFiles([])
       setSellerEvidencePreviews([])
