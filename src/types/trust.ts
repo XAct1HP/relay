@@ -115,6 +115,11 @@ export interface RelayTag {
   barcode_value: string | null;
   assigned_seller_id: string | null;
   assigned_order_id: string | null;
+  assigned_by_admin_id?: string | null;
+  voided_by_admin_id?: string | null;
+  void_reason?: string | null;
+  source_batch_label?: string | null;
+  imported_at?: string | null;
   status: RelayTagStatus;
   assigned_to_seller_at: string | null;
   bound_to_order_at: string | null;
@@ -126,6 +131,23 @@ export interface RelayTag {
   voided_at: string | null;
   photo_verification_status: RelayTagPhotoVerificationStatus;
   admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SellerTagRequest {
+  id: string;
+  seller_id: string;
+  requested_quantity: number;
+  seller_tier_snapshot: SellerTier;
+  policy_type: "welcome" | "additional_request" | "bundle_250" | "monthly_replenishment";
+  request_reason: string | null;
+  status: "pending" | "approved" | "fulfilled" | "rejected";
+  admin_notes: string | null;
+  reviewed_by_admin_id: string | null;
+  reviewed_at: string | null;
+  fulfilled_at: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

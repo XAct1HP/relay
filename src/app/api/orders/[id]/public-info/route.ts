@@ -18,22 +18,24 @@ export async function GET(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('id, status, listing_id, listings(brand, model)')
-      .eq('id', orderId)
-      .single()
+     const { data: order, error: orderError } = await supabase
+       .from('orders')
+       .select('id, status, listing_id, relay_tag_required, checkcheck_required, listings(brand, model)')
+       .eq('id', orderId)
+       .single()
 
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
     // Only expose minimal info — no seller/buyer details, no prices
-    return NextResponse.json({
-      id: order.id,
-      status: order.status,
-      listing: order.listings,
-    })
+     return NextResponse.json({
+       id: order.id,
+       status: order.status,
+       relayTagRequired: order.relay_tag_required,
+       checkcheckRequired: order.checkcheck_required,
+       listing: order.listings,
+     })
   } catch (error) {
     console.error('Public order info error:', error)
     return NextResponse.json({ error: 'Failed to load order' }, { status: 500 })

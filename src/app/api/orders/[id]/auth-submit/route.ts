@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { bindRelayTagToOrder } from '@/lib/relay-tags'
 
 export async function POST(
   request: NextRequest,
@@ -9,19 +10,22 @@ export async function POST(
 ) {
   try {
     const { id: orderId } = await params
-    const { authPhotos, checkcheckCertificateUrl, challengeCode } = await request.json()
+    const {
+      authPhotos,
+      checkcheckCertificateUrl,
+      challengeCode,
+      relayTagScanValue,
+      relayTagBarcodeValue,
+      sellerTagPhotoUrl,
+      sellerPairPhotoUrl,
+      sellerBoxPhotoUrl,
+      sellerSealedPackagePhotoUrl,
+    } = await request.json()
 
     // Validate inputs
     if (!authPhotos || !Array.isArray(authPhotos) || authPhotos.length < 8) {
       return NextResponse.json(
         { error: 'At least 8 authentication photos are required' },
-        { status: 400 }
-      )
-    }
-
-    if (!checkcheckCertificateUrl) {
-      return NextResponse.json(
-        { error: 'CheckCheck certificate URL is required' },
         { status: 400 }
       )
     }
@@ -40,7 +44,7 @@ export async function POST(
 
       const { data: order, error: orderError } = await serviceClient
         .from('orders')
-        .select('id, challenge_code, status')
+        .select('id, seller_id, challenge_code, status, relay_tag_required, checkcheck_required')
         .eq('id', orderId)
         .single()
 
@@ -61,12 +65,47 @@ export async function POST(
 
       isAuthorized = true
 
+      if (order.relay_tag_required) {
+        if (
+          !relayTagScanValue ||
+          !sellerTagPhotoUrl ||
+          !sellerPairPhotoUrl ||
+          !sellerBoxPhotoUrl ||
+          !sellerSealedPackagePhotoUrl
+        ) {
+          return NextResponse.json(
+            { error: 'Relay tag serial and all required seller custody photos are required' },
+            { status: 400 }
+          )
+        }
+
+        await bindRelayTagToOrder(serviceClient as any, {
+          orderId,
+          sellerId: order.seller_id,
+          actorRole: 'seller',
+          scannedValue: relayTagScanValue,
+          scannedBarcodeValue: relayTagBarcodeValue || null,
+          sellerTagPhotoUrl,
+          sellerPairPhotoUrl,
+          sellerBoxPhotoUrl,
+          sellerSealedPackagePhotoUrl,
+        })
+      }
+
+      if (order.checkcheck_required && !checkcheckCertificateUrl) {
+        return NextResponse.json(
+          { error: 'CheckCheck certificate URL is required' },
+          { status: 400 }
+        )
+      }
+
       // Update using service role client
       const { data: updatedOrder, error: updateError } = await serviceClient
         .from('orders')
         .update({
           auth_photos: authPhotos,
-          checkcheck_certificate_url: checkcheckCertificateUrl,
+          checkcheck_certificate_url: checkcheckCertificateUrl || null,
+          checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
           status: 'auth_submitted',
         })
         .eq('id', orderId)
@@ -116,7 +155,7 @@ export async function POST(
 
       const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select('id, seller_id, status')
+        .select('id, seller_id, status, relay_tag_required, checkcheck_required')
         .eq('id', orderId)
         .single()
 
@@ -138,11 +177,50 @@ export async function POST(
         )
       }
 
+      if (order.relay_tag_required) {
+        if (
+          !relayTagScanValue ||
+          !sellerTagPhotoUrl ||
+          !sellerPairPhotoUrl ||
+          !sellerBoxPhotoUrl ||
+          !sellerSealedPackagePhotoUrl
+        ) {
+          return NextResponse.json(
+            { error: 'Relay tag serial and all required seller custody photos are required' },
+            { status: 400 }
+          )
+        }
+
+        await bindRelayTagToOrder(createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        ) as any, {
+          orderId,
+          sellerId: order.seller_id,
+          actorUserId: user.id,
+          actorRole: 'seller',
+          scannedValue: relayTagScanValue,
+          scannedBarcodeValue: relayTagBarcodeValue || null,
+          sellerTagPhotoUrl,
+          sellerPairPhotoUrl,
+          sellerBoxPhotoUrl,
+          sellerSealedPackagePhotoUrl,
+        })
+      }
+
+      if (order.checkcheck_required && !checkcheckCertificateUrl) {
+        return NextResponse.json(
+          { error: 'CheckCheck certificate URL is required' },
+          { status: 400 }
+        )
+      }
+
       const { data: updatedOrder, error: updateError } = await supabase
         .from('orders')
         .update({
           auth_photos: authPhotos,
-          checkcheck_certificate_url: checkcheckCertificateUrl,
+          checkcheck_certificate_url: checkcheckCertificateUrl || null,
+          checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
           status: 'auth_submitted',
         })
         .eq('id', orderId)

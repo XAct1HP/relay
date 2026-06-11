@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { assertOrderReadyForShippoLabel } from '@/lib/relay-tags'
 
 const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
 
@@ -58,6 +60,14 @@ export async function POST(request: NextRequest) {
 
     if (order.seller_id !== user.id) {
       return NextResponse.json({ error: 'Only the seller can purchase a label' }, { status: 403 })
+    }
+
+    const readiness = await assertOrderReadyForShippoLabel(createAdminClient(), orderId)
+    if (!readiness.ready) {
+      return NextResponse.json(
+        { error: readiness.reasons[0] || 'Order is not ready for label generation', reasons: readiness.reasons },
+        { status: 400 }
+      )
     }
 
     // Purchase label using the rate (synchronous mode)

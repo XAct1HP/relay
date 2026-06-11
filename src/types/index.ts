@@ -195,6 +195,7 @@ export interface Order {
   random_audit_required?: boolean;
   high_risk_sku_required?: boolean;
   seller_funds_frozen?: boolean;
+  order_chain_of_custody?: import("./trust").OrderChainOfCustody | null;
   purchased_condition_photo_url?: string | null;
   challenge_code: string | null;
   buyer_shipping_address: ShippingAddress | null;

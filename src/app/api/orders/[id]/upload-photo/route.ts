@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { recordCustodyUpload } from '@/lib/relay-tags'
 
 /**
  * Public upload endpoint for the mobile auth flow.
@@ -33,7 +34,7 @@ export async function POST(
     // Verify challenge code
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, challenge_code, status')
+      .select('id, challenge_code, status, seller_id, buyer_id')
       .eq('id', orderId)
       .single()
 
@@ -74,6 +75,27 @@ export async function POST(
     const { data: urlData } = supabase.storage
       .from('order-photos')
       .getPublicUrl(path)
+
+    const uploadTypeMap: Record<string, any> = {
+      'relay-tag.jpg': 'seller_tag_photo',
+      'seller-pair.jpg': 'seller_pair_photo',
+      'seller-box.jpg': 'seller_box_photo',
+      'sealed-package.jpg': 'seller_sealed_package_photo',
+      'buyer-tag.jpg': 'buyer_tag_photo',
+      'buyer-pair.jpg': 'buyer_pair_photo',
+    }
+
+    const uploadType = uploadTypeMap[fileName.toLowerCase()]
+    if (uploadType) {
+      await recordCustodyUpload(supabase as any, {
+        orderId,
+        sellerId: order.seller_id || null,
+        buyerId: order.buyer_id || null,
+        actorRole: uploadType.startsWith('buyer_') ? 'buyer' : 'seller',
+        uploadType,
+        filePath: path,
+      })
+    }
 
     return NextResponse.json({ url: urlData.publicUrl })
   } catch (error) {

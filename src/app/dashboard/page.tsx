@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -384,6 +384,12 @@ export default function DashboardPage() {
               <button className="relay-button-secondary flex items-center gap-2">
                 <FileSpreadsheet className="w-4 h-4" />
                 Bulk Import
+              </button>
+            </Link>
+            <Link href="/tags">
+              <button className="relay-button-secondary flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                Relay Tags
               </button>
             </Link>
           </div>

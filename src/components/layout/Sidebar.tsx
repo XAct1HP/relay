@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   MessageSquare,
   Package,
+  Tag,
   Palette,
   Settings,
   ChevronLeft,
@@ -55,6 +56,7 @@ export function Sidebar() {
     { href: "/inventory/bulk-import", label: "Bulk Import", icon: FileSpreadsheet },
     { href: "/messages", label: "Messages", icon: MessageSquare },
     { href: "/orders", label: "Orders", icon: Package },
+    { href: "/tags", label: "Relay Tags", icon: Tag },
     { href: "/profile/studio", label: "Profile Studio", icon: Palette },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -70,6 +72,7 @@ export function Sidebar() {
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
+    { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
     ...sellerLinks,

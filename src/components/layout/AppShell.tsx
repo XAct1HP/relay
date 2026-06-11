@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   MessageSquare,
   Package,
+  Tag,
   Palette,
   Settings,
   Rss,
@@ -74,6 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/inventory/bulk-import", label: "Bulk Import", icon: FileSpreadsheet },
     { href: "/messages", label: "Messages", icon: MessageSquare },
     { href: "/orders", label: "Orders", icon: Package },
+    { href: "/tags", label: "Relay Tags", icon: Tag },
     { href: "/profile/studio", label: "Profile Studio", icon: Palette },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -89,6 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
+    { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
     ...sellerLinks,

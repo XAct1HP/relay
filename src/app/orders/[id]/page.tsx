@@ -77,6 +77,10 @@ interface OrderData {
   returnPackingSlipId?: string
   returnStatus?: string
   isAuthExempt?: boolean
+  relayTagRequired?: boolean
+  checkcheckRequired?: boolean
+  custodyVerificationStatus?: string
+  custodyAdminReviewRequired?: boolean
 }
 
 const statusStages = ["paid", "auth_submitted", "label_created", "shipped", "delivered", "review_window", "completed"] as const
@@ -467,7 +471,8 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         *,
         listings(*),
         buyer:profiles!orders_buyer_id_fkey(*),
-        seller:profiles!orders_seller_id_fkey(*)
+        seller:profiles!orders_seller_id_fkey(*),
+        order_chain_of_custody(*)
       `)
       .eq("id", params.id)
       .single()
@@ -481,6 +486,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     const isBuyer = data.buyer_id === currentUser.id
     const sellerProfile = data.seller
     const listing = data.listings
+    const custody = Array.isArray(data.order_chain_of_custody)
+      ? data.order_chain_of_custody[0]
+      : data.order_chain_of_custody
 
     const orderData: OrderData = {
       id: data.id,
@@ -524,6 +532,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       returnPackingSlipId: data.return_packing_slip_id || undefined,
       returnStatus: data.return_status || undefined,
       isAuthExempt: AUTH_EXEMPT_BRANDS.has(listing?.brand || ""),
+      relayTagRequired: Boolean(data.relay_tag_required),
+      checkcheckRequired: Boolean(data.checkcheck_required),
+      custodyVerificationStatus: custody?.verification_status || undefined,
+      custodyAdminReviewRequired: Boolean(custody?.admin_review_required),
     }
 
     setOrder(orderData)
@@ -1035,15 +1047,33 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               <Shield className="w-5 h-5 text-[#5f8fff]" />
               Post-Sale Authentication Required
             </h2>
-            <p className="text-[#7ca6ff] text-sm mb-4">
-              Please authenticate the item to proceed.
-              {order.shippingDeadline && (
-                <>
-                  {" "}You have until{" "}
-                  <span className="font-semibold">{order.shippingDeadline}</span> to ship.
-                </>
+          <p className="text-[#7ca6ff] text-sm mb-4">
+            Please authenticate the item to proceed.
+            {order.shippingDeadline && (
+              <>
+                {" "}You have until{" "}
+                <span className="font-semibold">{order.shippingDeadline}</span> to ship.
+              </>
+            )}
+          </p>
+
+          {(order.relayTagRequired || order.checkcheckRequired) && (
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4 space-y-2">
+              {order.relayTagRequired && (
+                <p className="text-sm text-[#f5f7fb]">
+                  Relay security tag required: bind an unused tag to this order and upload the custody evidence set before label generation.
+                </p>
               )}
-            </p>
+              {order.checkcheckRequired && (
+                <p className="text-sm text-[#f5f7fb]">
+                  CheckCheck required: upload the certificate during authentication submission.
+                </p>
+              )}
+              <p className="text-xs text-white/45">
+                Shipping labels stay blocked until all required evidence is submitted and any manual review clears.
+              </p>
+            </div>
+          )}
 
             {/* Challenge Code */}
             <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-4">
@@ -1117,7 +1147,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           <p className="text-[#7ca6ff] text-sm">
             {order.isAuthExempt
               ? "This is an admin-approved listing. The seller is preparing your order and will ship it shortly."
-              : "The seller is authenticating your item. You\u0027ll be notified once a shipping label is created."}
+              : order.relayTagRequired
+                ? "The seller is authenticating your item and binding a Relay security tag before shipment."
+                : "The seller is authenticating your item. You\u0027ll be notified once a shipping label is created."}
           </p>
         </div>
       )}
@@ -1132,8 +1164,19 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             Authentication Submitted
           </h2>
           <p className="text-[#7ca6ff] text-sm mb-4">
-            Great! Your photos have been submitted. Now generate a shipping label to continue.
+            {order.relayTagRequired
+              ? "Your authentication and Relay tag evidence have been submitted. Shipping labels unlock after any required admin review clears."
+              : "Great! Your photos have been submitted. Now generate a shipping label to continue."}
           </p>
+
+          {order.relayTagRequired && order.custodyAdminReviewRequired && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-4">
+              <p className="text-amber-300 text-sm font-medium mb-1">Relay tag review pending</p>
+              <p className="text-white/60 text-sm">
+                The tag serial and custody evidence were stored for manual review. Label generation will stay blocked until review is approved.
+              </p>
+            </div>
+          )}
 
           <button
             onClick={handleGenerateLabel}
@@ -1180,7 +1223,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             Authentication Complete
           </h2>
           <p className="text-[#7ca6ff] text-sm">
-            The seller has authenticated the item. A shipping label is being generated.
+            {order.relayTagRequired
+              ? "The seller has submitted authentication and Relay tag evidence. Relay will clear any required review before shipment."
+              : "The seller has authenticated the item. A shipping label is being generated."}
           </p>
         </div>
       )}
