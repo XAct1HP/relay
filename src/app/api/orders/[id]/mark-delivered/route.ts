@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { processOrderPayoutTrigger } from '@/lib/payouts'
 
 export async function POST(
   request: NextRequest,
@@ -31,7 +33,6 @@ export async function POST(
       }
     )
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -40,7 +41,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Fetch the order
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('id, buyer_id, status')
@@ -51,7 +51,6 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Validate user is the buyer
     if (order.buyer_id !== user.id) {
       return NextResponse.json(
         { error: 'Only the buyer can mark an order as delivered' },
@@ -59,7 +58,6 @@ export async function POST(
       )
     }
 
-    // Validate order status
     if (order.status !== 'shipped') {
       return NextResponse.json(
         { error: 'Order must be in shipped status to mark as delivered' },
@@ -67,11 +65,9 @@ export async function POST(
       )
     }
 
-    // Set review deadline to 48 hours from now
     const reviewDeadline = new Date()
     reviewDeadline.setHours(reviewDeadline.getHours() + 48)
 
-    // Update the order
     const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
       .update({
@@ -83,12 +79,18 @@ export async function POST(
       .single()
 
     if (updateError) {
-      console.error('Mark delivered error:', updateError)
       return NextResponse.json(
         { error: 'Failed to mark order as delivered' },
         { status: 500 }
       )
     }
+
+    await processOrderPayoutTrigger(createAdminClient(), {
+      orderId,
+      trigger: 'delivery',
+      actorUserId: user.id,
+      actorRole: 'buyer',
+    })
 
     return NextResponse.json(updatedOrder)
   } catch (error) {

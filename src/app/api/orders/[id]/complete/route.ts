@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
@@ -8,11 +7,8 @@ import {
   markBuyerCustodyVerified,
   markOrderTagCompleted,
 } from "@/lib/buyer-order-review";
+import { processOrderPayoutTrigger } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
-});
 
 export async function POST(
   request: NextRequest,
@@ -86,7 +82,6 @@ export async function POST(
         .eq("id", existingReview.id);
 
       if (reviewUpdateError) {
-        console.error("Review update error:", reviewUpdateError);
         return NextResponse.json(
           { error: "Failed to update review" },
           { status: 500 }
@@ -102,7 +97,6 @@ export async function POST(
       });
 
       if (reviewInsertError) {
-        console.error("Review insert error:", reviewInsertError);
         return NextResponse.json(
           { error: "Failed to create review" },
           { status: 500 }
@@ -118,97 +112,27 @@ export async function POST(
       });
     }
 
-    const { data: payoutOrder, error: payoutOrderError } = await adminClient
+    const payoutResult = await processOrderPayoutTrigger(adminClient, {
+      orderId,
+      trigger: "buyer_confirmation",
+      actorUserId: user.id,
+      actorRole: "buyer",
+    });
+
+    const { data: order, error: orderError } = await adminClient
       .from("orders")
-      .select("id, seller_id, seller_earnings, stripe_transfer_id, relay_tag_id")
+      .select("id, seller_id, relay_tag_id")
       .eq("id", orderId)
       .single();
 
-    if (payoutOrderError || !payoutOrder) {
+    if (orderError || !order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    const { data: sellerProfile } = await adminClient
-      .from("profiles")
-      .select("stripe_account_id")
-      .eq("id", payoutOrder.seller_id)
-      .single();
-
-    if (!sellerProfile?.stripe_account_id) {
-      await adminClient
-        .from("orders")
-        .update({
-          status: "payout_failed",
-          review_rating: rating,
-          review_comment: comment,
-        })
-        .eq("id", orderId);
-
-      return NextResponse.json(
-        { error: "Seller payout account not set up. Our team has been notified." },
-        { status: 500 }
-      );
-    }
-
-    if (!payoutOrder.seller_earnings || payoutOrder.seller_earnings <= 0) {
-      await adminClient
-        .from("orders")
-        .update({
-          status: "payout_failed",
-          review_rating: rating,
-          review_comment: comment,
-        })
-        .eq("id", orderId);
-
-      return NextResponse.json(
-        { error: "Order has no valid payout amount. Our team has been notified." },
-        { status: 500 }
-      );
-    }
-
-    let transferId = payoutOrder.stripe_transfer_id;
-    if (!transferId) {
-      try {
-        const transfer = await stripe.transfers.create(
-          {
-            amount: Math.round(payoutOrder.seller_earnings * 100),
-            currency: "usd",
-            destination: sellerProfile.stripe_account_id,
-            metadata: {
-              orderId,
-            },
-          },
-          {
-            idempotencyKey: `order-complete-${orderId}`,
-          }
-        );
-        transferId = transfer.id;
-      } catch (transferError) {
-        console.error("Stripe transfer error:", transferError);
-        await adminClient
-          .from("orders")
-          .update({
-            status: "payout_failed",
-            review_rating: rating,
-            review_comment: comment,
-          })
-          .eq("id", orderId);
-
-        return NextResponse.json(
-          {
-            error:
-              "Payout to seller failed. Our team has been notified and will resolve this.",
-          },
-          { status: 500 }
-        );
-      }
     }
 
     const { error: updateError } = await adminClient
       .from("orders")
       .update({
         status: "completed",
-        stripe_transfer_id: transferId,
         review_rating: rating,
         review_comment: comment,
         seller_funds_frozen: false,
@@ -217,7 +141,6 @@ export async function POST(
       .in("status", ["delivered", "review_window"]);
 
     if (updateError) {
-      console.error("Order completion update error:", updateError);
       return NextResponse.json(
         { error: "Failed to update order" },
         { status: 500 }
@@ -225,7 +148,7 @@ export async function POST(
     }
 
     await markOrderTagCompleted(adminClient, {
-      relayTagId: payoutOrder.relay_tag_id,
+      relayTagId: order.relay_tag_id,
       orderId,
     });
 
@@ -233,11 +156,12 @@ export async function POST(
       actorUserId: user.id,
       actorRole: "buyer",
       orderId,
-      sellerId: payoutOrder.seller_id,
+      sellerId: order.seller_id,
       eventType: "order.completed_by_buyer",
       metadata: {
         rating,
         reviewWindowExpired: eligibility.reviewWindowExpired,
+        payoutStepsProcessed: payoutResult.processedSteps.length,
       },
     });
 

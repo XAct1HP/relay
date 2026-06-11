@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { evaluateOrderAuthenticationRequirements } from '@/lib/order-auth'
+import { buildOrderPayoutSnapshotForTier } from '@/lib/payouts'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -194,6 +195,9 @@ export async function POST(request: NextRequest) {
         skuNormalized: listingRecord?.sku_normalized || null,
         randomSeed: randomAuditSeed,
       })
+      const payoutSnapshot = buildOrderPayoutSnapshotForTier(
+        sellerProfile?.seller_tier || 'tier_1'
+      )
 
       let variantUpdated = false
       let usedItemUpdated = false
@@ -262,6 +266,11 @@ export async function POST(request: NextRequest) {
           high_risk_sku_id: authDecision.highRiskSkuId,
           high_risk_sku_reason: authDecision.highRiskSkuReason,
           auth_requirements_evaluated_at: authDecision.authRequirementsEvaluatedAt,
+          seller_tier_snapshot: payoutSnapshot.sellerTierSnapshot,
+          payout_schedule: payoutSnapshot.payoutSchedule,
+          reserve_percentage_bps_snapshot: payoutSnapshot.reservePercentageBps,
+          reserve_hold_duration_days_snapshot: payoutSnapshot.reserveHoldDurationDays,
+          minimum_reserve_balance_cents_snapshot: payoutSnapshot.minimumReserveBalanceCents,
         })
 
       if (orderError) {

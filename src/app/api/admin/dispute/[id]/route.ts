@@ -1,15 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import Stripe from 'stripe'
 import crypto from 'crypto'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20',
-})
+import { requireAdminBearerToken } from '@/lib/admin-access'
+import {
+  applySellerDisputeLossPenalties,
+  processOrderPayoutTrigger,
+  unfreezeOrderPayouts,
+} from '@/lib/payouts'
 
 const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
 
-// Platform return address
 const RETURN_ADDRESS = {
   name: 'Relay Returns',
   street1: '411 E Washington St',
@@ -20,11 +19,8 @@ const RETURN_ADDRESS = {
   country: 'US',
 }
 
-/**
- * Generate a short, unique packing slip ID like "RET-A3F8K2"
- */
 function generatePackingSlipId(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no I/O/0/1 to avoid confusion
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   const random = crypto.randomBytes(6)
   let id = ''
   for (let i = 0; i < 6; i++) {
@@ -33,11 +29,7 @@ function generatePackingSlipId(): string {
   return `RET-${id}`
 }
 
-/**
- * Create a return shipping label via Shippo (buyer → platform)
- */
 async function createReturnLabel(buyerAddress: any) {
-  // Create a shipment from buyer to platform return address
   const shipmentRes = await fetch('https://api.goshippo.com/shipments/', {
     method: 'POST',
     headers: {
@@ -69,25 +61,20 @@ async function createReturnLabel(buyerAddress: any) {
   })
 
   if (!shipmentRes.ok) {
-    const errBody = await shipmentRes.text()
-    console.error('Shippo return shipment error:', shipmentRes.status, errBody)
     throw new Error('Failed to create return shipment')
   }
 
   const shipment = await shipmentRes.json()
-
   if (!shipment.rates || shipment.rates.length === 0) {
     throw new Error('No return shipping rates available')
   }
 
-  // Pick the cheapest rate
   const cheapestRate = shipment.rates.reduce(
     (min: any, rate: any) =>
       parseFloat(rate.amount) < parseFloat(min.amount) ? rate : min,
     shipment.rates[0]
   )
 
-  // Purchase the label
   const labelRes = await fetch('https://api.goshippo.com/transactions/', {
     method: 'POST',
     headers: {
@@ -102,22 +89,17 @@ async function createReturnLabel(buyerAddress: any) {
   })
 
   if (!labelRes.ok) {
-    const errBody = await labelRes.text()
-    console.error('Shippo return label error:', labelRes.status, errBody)
     throw new Error('Failed to purchase return label')
   }
 
   let label = await labelRes.json()
-
-  // Poll if queued
   if (label.status === 'QUEUED' || label.status === 'WAITING') {
     const txnId = label.object_id
     for (let attempt = 0; attempt < 10; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 2000))
-      const pollRes = await fetch(
-        `https://api.goshippo.com/transactions/${txnId}`,
-        { headers: { Authorization: `ShippoToken ${SHIPPO_API_KEY}` } }
-      )
+      const pollRes = await fetch(`https://api.goshippo.com/transactions/${txnId}`, {
+        headers: { Authorization: `ShippoToken ${SHIPPO_API_KEY}` },
+      })
       if (pollRes.ok) {
         label = await pollRes.json()
         if (label.status === 'SUCCESS' || label.status === 'ERROR') break
@@ -126,12 +108,11 @@ async function createReturnLabel(buyerAddress: any) {
   }
 
   if (label.status === 'ERROR') {
-    console.error('Shippo return label error:', JSON.stringify(label.messages))
     throw new Error(label.messages?.[0]?.text || 'Return label generation failed')
   }
 
   const trackingNumber =
-    label.tracking_number || label.tracking_numbers?.[0] || 'RET-TEST-' + Date.now()
+    label.tracking_number || label.tracking_numbers?.[0] || `RET-${Date.now()}`
   const labelUrl =
     label.label_download?.href ||
     label.label_download?.pdf?.url ||
@@ -148,39 +129,7 @@ export async function PATCH(
 ) {
   try {
     const { id: orderId } = await params
-
-    // Use service role client for admin operations
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Verify admin via auth header
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(token)
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: adminProfile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (adminProfile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
+    const { user, adminClient } = await requireAdminBearerToken(request)
     const { ruling, adminNotes } = await request.json()
 
     if (!ruling || !['buyer', 'seller'].includes(ruling)) {
@@ -190,11 +139,10 @@ export async function PATCH(
       )
     }
 
-    // Fetch the order
-    const { data: order, error: fetchError } = await supabase
+    const { data: order, error: fetchError } = await adminClient
       .from('orders')
       .select(
-        'id, buyer_id, seller_id, price, seller_earnings, stripe_payment_intent_id, stripe_transfer_id, status, buyer_shipping_address'
+        'id, buyer_id, seller_id, status, buyer_shipping_address, stripe_transfer_id'
       )
       .eq('id', orderId)
       .single()
@@ -210,132 +158,115 @@ export async function PATCH(
       )
     }
 
+    const { data: dispute } = await adminClient
+      .from('order_disputes')
+      .select('id, category')
+      .eq('order_id', orderId)
+      .maybeSingle()
+
     if (ruling === 'buyer') {
-      // ── BUYER WINS: Generate return label, do NOT refund yet ──────────
-
-      // 1. Generate a return shipping label via Shippo
-      let returnTrackingNumber: string | null = null
-      let returnLabelUrl: string | null = null
-
-      if (order.buyer_shipping_address) {
-        try {
-          const returnLabel = await createReturnLabel(order.buyer_shipping_address)
-          returnTrackingNumber = returnLabel.trackingNumber
-          returnLabelUrl = returnLabel.labelUrl
-        } catch (err) {
-          console.error('Return label generation error:', err)
-          return NextResponse.json(
-            {
-              error:
-                'Failed to generate return shipping label. Check buyer address and try again.',
-            },
-            { status: 500 }
-          )
-        }
-      } else {
+      if (!order.buyer_shipping_address) {
         return NextResponse.json(
           { error: 'Buyer shipping address not found on order. Cannot create return label.' },
           { status: 400 }
         )
       }
 
-      // 2. Generate packing slip ID
+      const returnLabel = await createReturnLabel(order.buyer_shipping_address)
       const packingSlipId = generatePackingSlipId()
+      const nowIso = new Date().toISOString()
 
-      // 3. Update order → return_pending (NO refund yet)
-      const { error: updateError } = await supabase
+      await adminClient
         .from('orders')
         .update({
           status: 'return_pending',
           dispute_ruling: 'buyer',
           admin_notes: adminNotes || null,
-          return_label_url: returnLabelUrl,
-          return_tracking_number: returnTrackingNumber,
+          return_label_url: returnLabel.labelUrl,
+          return_tracking_number: returnLabel.trackingNumber,
           return_packing_slip_id: packingSlipId,
           return_status: 'pending',
-          return_created_at: new Date().toISOString(),
+          return_created_at: nowIso,
+          seller_funds_frozen: true,
         })
         .eq('id', orderId)
 
-      if (updateError) {
-        console.error('Order update error:', updateError)
-        return NextResponse.json(
-          { error: 'Failed to update order' },
-          { status: 500 }
-        )
+      if (dispute?.id) {
+        await adminClient
+          .from('order_disputes')
+          .update({
+            status: 'resolved',
+            admin_resolution: adminNotes || 'Buyer won dispute; return required before refund.',
+            financial_outcome: 'return_required_refund_pending',
+            seller_penalty_outcome: dispute.category || 'buyer_dispute_win',
+            resolved_by_admin_id: user.id,
+            resolved_at: nowIso,
+          })
+          .eq('id', dispute.id)
       }
 
-      // 4. Flag the seller — increment dispute_flags_count
-      const { data: sellerProfile } = await supabase
+      await applySellerDisputeLossPenalties(adminClient, {
+        orderId,
+        sellerId: order.seller_id,
+        category: dispute?.category || null,
+        actorUserId: user.id,
+        notes: adminNotes || null,
+      })
+
+      const { data: sellerProfile } = await adminClient
         .from('profiles')
         .select('dispute_flags_count')
         .eq('id', order.seller_id)
         .single()
 
-      const currentFlags = sellerProfile?.dispute_flags_count || 0
-      await supabase
+      await adminClient
         .from('profiles')
-        .update({ dispute_flags_count: currentFlags + 1 })
+        .update({ dispute_flags_count: (sellerProfile?.dispute_flags_count || 0) + 1 })
         .eq('id', order.seller_id)
+    } else {
+      await unfreezeOrderPayouts(adminClient, {
+        orderId,
+        sellerId: order.seller_id,
+        actorUserId: user.id,
+        actorRole: 'admin',
+        reason: adminNotes || 'Seller won dispute',
+      })
 
-    } else if (ruling === 'seller') {
-      // ── SELLER WINS: Transfer earnings to seller ─────────────────────
-      let transferId = order.stripe_transfer_id
-      if (!transferId) {
-        const { data: sellerProfile } = await supabase
-          .from('profiles')
-          .select('stripe_account_id')
-          .eq('id', order.seller_id)
-          .single()
+      await processOrderPayoutTrigger(adminClient, {
+        orderId,
+        trigger: 'manual_override',
+        actorUserId: user.id,
+        actorRole: 'admin',
+        allowFrozenProcessing: true,
+        overrideReason: adminNotes || null,
+      })
 
-        if (sellerProfile?.stripe_account_id && order.seller_earnings > 0) {
-          try {
-            const transfer = await stripe.transfers.create(
-              {
-                amount: Math.round(order.seller_earnings * 100),
-                currency: 'usd',
-                destination: sellerProfile.stripe_account_id,
-                metadata: { orderId: order.id },
-              },
-              { idempotencyKey: `dispute-seller-${orderId}` }
-            )
-            transferId = transfer.id
-          } catch (err) {
-            console.error('Stripe transfer error:', err)
-            return NextResponse.json(
-              { error: 'Failed to transfer funds to seller' },
-              { status: 500 }
-            )
-          }
-        } else if (!sellerProfile?.stripe_account_id) {
-          return NextResponse.json(
-            { error: 'Seller has no Stripe Connect account. Cannot complete payout.' },
-            { status: 400 }
-          )
-        }
-      }
-
-      const { error: updateError } = await supabase
+      await adminClient
         .from('orders')
         .update({
           status: 'completed',
           dispute_ruling: 'seller',
-          stripe_transfer_id: transferId,
           admin_notes: adminNotes || null,
+          seller_funds_frozen: false,
         })
         .eq('id', orderId)
 
-      if (updateError) {
-        console.error('Order update error:', updateError)
-        return NextResponse.json(
-          { error: 'Failed to update order' },
-          { status: 500 }
-        )
+      if (dispute?.id) {
+        await adminClient
+          .from('order_disputes')
+          .update({
+            status: 'resolved',
+            admin_resolution: adminNotes || 'Seller won dispute.',
+            financial_outcome: 'seller_paid',
+            seller_penalty_outcome: 'none',
+            resolved_by_admin_id: user.id,
+            resolved_at: new Date().toISOString(),
+          })
+          .eq('id', dispute.id)
       }
     }
 
-    // Fetch and return the updated order
-    const { data: updatedOrder } = await supabase
+    const { data: updatedOrder } = await adminClient
       .from('orders')
       .select('*')
       .eq('id', orderId)
@@ -345,7 +276,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Dispute ruling error:', error)
     return NextResponse.json(
-      { error: 'Failed to resolve dispute' },
+      { error: error instanceof Error ? error.message : 'Failed to resolve dispute' },
       { status: 500 }
     )
   }

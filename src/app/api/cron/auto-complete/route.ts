@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   evaluateBuyerCompletionEligibility,
   loadBuyerOrderReviewContext,
   markOrderTagCompleted,
 } from "@/lib/buyer-order-review";
+import { processOrderPayoutTrigger } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
-});
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,11 +24,9 @@ export async function GET(request: NextRequest) {
       .from("orders")
       .select("id")
       .in("status", ["delivered", "review_window"])
-      .lt("review_deadline", now)
-      .is("stripe_transfer_id", null);
+      .lt("review_deadline", now);
 
     if (queryError) {
-      console.error("Auto-complete query error:", queryError);
       return NextResponse.json(
         { error: "Failed to query orders" },
         { status: 500 }
@@ -65,78 +59,39 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        const { data: payoutOrder, error: payoutOrderError } = await adminClient
+        const payoutResult = await processOrderPayoutTrigger(adminClient, {
+          orderId: candidate.id,
+          trigger: "review_window_expiry",
+          actorRole: "system",
+        });
+
+        const { data: order, error: orderError } = await adminClient
           .from("orders")
-          .select(
-            "id, seller_id, seller_earnings, stripe_transfer_id, relay_tag_id, status"
-          )
+          .select("id, seller_id, relay_tag_id")
           .eq("id", candidate.id)
           .single();
 
-        if (payoutOrderError || !payoutOrder) {
+        if (orderError || !order) {
           results.push({
             orderId: candidate.id,
             status: "error",
-            error: payoutOrderError?.message || "Order not found",
+            error: orderError?.message || "Order not found",
           });
           continue;
-        }
-
-        const { data: sellerProfile } = await adminClient
-          .from("profiles")
-          .select("stripe_account_id")
-          .eq("id", payoutOrder.seller_id)
-          .single();
-
-        if (!sellerProfile?.stripe_account_id) {
-          await adminClient
-            .from("orders")
-            .update({ status: "payout_failed" })
-            .eq("id", payoutOrder.id);
-
-          results.push({
-            orderId: payoutOrder.id,
-            status: "payout_failed",
-            error: "No seller Stripe account",
-          });
-          continue;
-        }
-
-        let transferId = payoutOrder.stripe_transfer_id;
-        if (payoutOrder.seller_earnings > 0 && !transferId) {
-          const transfer = await stripe.transfers.create(
-            {
-              amount: Math.round(payoutOrder.seller_earnings * 100),
-              currency: "usd",
-              destination: sellerProfile.stripe_account_id,
-              metadata: {
-                orderId: payoutOrder.id,
-              },
-            },
-            {
-              idempotencyKey: `order-complete-${payoutOrder.id}`,
-            }
-          );
-          transferId = transfer.id;
         }
 
         const { error: updateError } = await adminClient
           .from("orders")
           .update({
             status: "completed",
-            stripe_transfer_id: transferId,
             seller_funds_frozen: false,
           })
-          .eq("id", payoutOrder.id)
-          .eq("status", payoutOrder.status);
+          .eq("id", order.id)
+          .in("status", ["delivered", "review_window"]);
 
         if (updateError) {
-          console.error(
-            `Auto-complete: failed to update order ${payoutOrder.id}:`,
-            updateError
-          );
           results.push({
-            orderId: payoutOrder.id,
+            orderId: order.id,
             status: "error",
             error: "DB update failed",
           });
@@ -144,23 +99,23 @@ export async function GET(request: NextRequest) {
         }
 
         await markOrderTagCompleted(adminClient, {
-          relayTagId: payoutOrder.relay_tag_id,
-          orderId: payoutOrder.id,
+          relayTagId: order.relay_tag_id,
+          orderId: order.id,
         });
 
         await logRelayAuditEvent(adminClient, {
           actorRole: "system",
-          orderId: payoutOrder.id,
-          sellerId: payoutOrder.seller_id,
+          orderId: order.id,
+          sellerId: order.seller_id,
           eventType: "order.auto_completed_after_review_window",
           metadata: {
             reviewDeadlinePassed: true,
+            payoutStepsProcessed: payoutResult.processedSteps.length,
           },
         });
 
-        results.push({ orderId: payoutOrder.id, status: "completed" });
+        results.push({ orderId: order.id, status: "completed" });
       } catch (error) {
-        console.error("Auto-complete order error:", candidate.id, error);
         results.push({
           orderId: candidate.id,
           status: "error",

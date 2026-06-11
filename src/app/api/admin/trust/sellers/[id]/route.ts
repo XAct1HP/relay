@@ -58,6 +58,13 @@ export async function GET(
           status,
           price,
           created_at,
+          payout_status,
+          seller_amount_paid_cents,
+          seller_amount_held_in_reserve_cents,
+          seller_amount_frozen_cents,
+          seller_amount_refunded_cents,
+          payout_frozen_at,
+          payout_last_trigger,
           checkcheck_status,
           random_audit_required,
           high_risk_sku_required,
@@ -74,7 +81,7 @@ export async function GET(
 
     const seller = sellerResult.data;
     const orderIds = (reviewOrdersResult.data || []).map((order) => order.id);
-    const [custodyRowsResult, disputeRowsResult] = await Promise.all([
+    const [custodyRowsResult, disputeRowsResult, payoutRowsResult, reserveByOrderResult] = await Promise.all([
       orderIds.length > 0
         ? adminClient
             .from("order_chain_of_custody")
@@ -87,6 +94,19 @@ export async function GET(
             .select("order_id, category, status")
             .in("order_id", orderIds)
         : Promise.resolve({ data: [], error: null }),
+      orderIds.length > 0
+        ? adminClient
+            .from("order_payouts")
+            .select("*")
+            .in("order_id", orderIds)
+            .order("created_at", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      orderIds.length > 0
+        ? adminClient
+            .from("seller_reserve_entries")
+            .select("order_id, amount_cents, status, release_eligible_at, entry_type, is_frozen")
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     const custodyByOrder = new Map(
@@ -95,14 +115,52 @@ export async function GET(
     const disputeByOrder = new Map(
       ((disputeRowsResult.data || []) as Array<{ order_id: string; category: string; status: string }>).map((row) => [row.order_id, row])
     );
+    const payoutRowsByOrder = new Map<string, any[]>();
+    for (const row of payoutRowsResult.data || []) {
+      const bucket = payoutRowsByOrder.get(row.order_id) || [];
+      bucket.push(row);
+      payoutRowsByOrder.set(row.order_id, bucket);
+    }
+    const reserveRowsByOrder = new Map<string, any[]>();
+    for (const row of reserveByOrderResult.data || []) {
+      const bucket = reserveRowsByOrder.get(row.order_id) || [];
+      bucket.push(row);
+      reserveRowsByOrder.set(row.order_id, bucket);
+    }
 
-    const reviewOrders = (reviewOrdersResult.data || []).filter((order) => {
+    const recentOrders = (reviewOrdersResult.data || []).map((order) => {
+      const reserveRows = reserveRowsByOrder.get(order.id) || [];
+      const heldReserveCents = reserveRows.reduce((sum, row) => {
+        return row.status === "held" ? sum + (row.amount_cents || 0) : sum;
+      }, 0);
+      const consumedReserveCents = reserveRows.reduce((sum, row) => {
+        return row.status === "consumed" ? sum + (row.amount_cents || 0) : sum;
+      }, 0);
+      const nextReserveReleaseAt = reserveRows
+        .filter((row) => row.status === "held" && row.release_eligible_at)
+        .map((row) => row.release_eligible_at as string)
+        .sort()[0] || null;
+
+      return {
+        ...order,
+        orderPayouts: payoutRowsByOrder.get(order.id) || [],
+        heldReserveCents,
+        consumedReserveCents,
+        frozenReserveCents: reserveRows.reduce((sum, row) => {
+          return row.is_frozen ? sum + (row.amount_cents || 0) : sum;
+        }, 0),
+        nextReserveReleaseAt,
+      };
+    });
+
+    const reviewOrders = recentOrders.filter((order) => {
       const custody = custodyByOrder.get(order.id);
       const dispute = disputeByOrder.get(order.id);
 
       return (
         order.checkcheck_status === "admin_review" ||
         order.status === "disputed" ||
+        order.payout_status === "frozen" ||
         order.random_audit_required ||
         custody?.admin_review_required ||
         custody?.verification_status === "admin_review" ||
@@ -119,6 +177,7 @@ export async function GET(
       evaluations: evaluationsResult.data || [],
       violations: violationsResult.data || [],
       tags: tagsResult.data || [],
+      recentOrders,
       reviewOrders,
     });
   } catch (error) {

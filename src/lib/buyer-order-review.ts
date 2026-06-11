@@ -6,6 +6,7 @@ import {
   isBuyerDisputeCategory,
 } from "@/lib/order-disputes";
 import { isLegacyOrderAuthFlow } from "@/lib/order-auth";
+import { freezeOrderPayoutsForDispute } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import type { DisputeCategory, OrderChainOfCustody } from "@/types";
 
@@ -449,6 +450,14 @@ export async function createBuyerDispute(
       updated_at: nowIso,
     })
     .eq("id", input.orderId);
+
+  await freezeOrderPayoutsForDispute(adminClient, {
+    orderId: input.orderId,
+    sellerId: context.seller_id,
+    actorUserId: input.buyerId,
+    actorRole: "buyer",
+    reason: `Buyer opened ${input.category} dispute`,
+  });
 
   if (requiresCustodyReview) {
     await adminClient

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
 import type {
+  OrderPayoutRecord,
   SellerTier,
   SellerTierHistoryEntry,
   SellerTrustEvaluation,
@@ -36,6 +37,28 @@ interface SellerTrustDetailResponse {
   evaluations: SellerTrustEvaluation[];
   violations: SellerViolation[];
   tags: RelayTag[];
+  recentOrders: Array<{
+    id: string;
+    status: string;
+    payout_status?: string | null;
+    price: number;
+    created_at: string;
+    seller_amount_paid_cents?: number;
+    seller_amount_held_in_reserve_cents?: number;
+    seller_amount_frozen_cents?: number;
+    seller_amount_refunded_cents?: number;
+    payout_frozen_at?: string | null;
+    payout_last_trigger?: string | null;
+    checkcheck_status: string;
+    random_audit_required: boolean;
+    high_risk_sku_required: boolean;
+    heldReserveCents: number;
+    consumedReserveCents: number;
+    frozenReserveCents: number;
+    nextReserveReleaseAt: string | null;
+    orderPayouts: OrderPayoutRecord[];
+    listing?: { brand?: string; model?: string } | null;
+  }>;
   reviewOrders: Array<{
     id: string;
     status: string;
@@ -198,6 +221,32 @@ export default function AdminSellerTrustDetailPage() {
     }
   }
 
+  async function processManualPayout(orderId: string) {
+    setActionLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}/payout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: `Manual payout review from seller trust detail for ${sellerId}`,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to process manual payout");
+      }
+
+      await loadSeller();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to process manual payout");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   if (isLoading || loading) {
     return <div className="py-12 text-center text-white/40">Loading seller trust details...</div>;
   }
@@ -210,7 +259,7 @@ export default function AdminSellerTrustDetailPage() {
     return <div className="py-12 text-center text-white/40">Seller not found.</div>;
   }
 
-  const { seller, reserveAccount, reserveEntries, tierHistory, evaluations, violations, tags, reviewOrders } = data;
+  const { seller, reserveAccount, reserveEntries, tierHistory, evaluations, violations, tags, recentOrders, reviewOrders } = data;
 
   return (
     <div className="space-y-6 pb-12">
@@ -492,6 +541,90 @@ export default function AdminSellerTrustDetailPage() {
                 </div>
               ))}
               {tags.length === 0 && <p className="text-white/45">No tags assigned to this seller yet.</p>}
+            </div>
+          </div>
+
+          <div className="relay-card p-5">
+            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Recent Order Payouts</h2>
+            <div className="space-y-3">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[#f5f7fb] font-medium">
+                        {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Order")}
+                      </p>
+                      <p className="text-white/40 text-sm">
+                        {order.id.slice(0, 8)}... · {order.status} · {formatMoney(Math.round((order.price || 0) * 100))}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.16em] text-white/40">Payout Status</p>
+                      <p className="text-[#f5f7fb] font-semibold">{order.payout_status || "pending"}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-white/40">Amount paid</p>
+                      <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.seller_amount_paid_cents || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/40">Held in reserve</p>
+                      <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.heldReserveCents || order.seller_amount_held_in_reserve_cents || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/40">Frozen funds</p>
+                      <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.seller_amount_frozen_cents || order.frozenReserveCents || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/40">Consumed reserve</p>
+                      <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.consumedReserveCents || 0)}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-white/45 space-y-1">
+                    <p>Last trigger: {order.payout_last_trigger || "none"}</p>
+                    <p>
+                      Reserve release date:{" "}
+                      {order.nextReserveReleaseAt
+                        ? new Date(order.nextReserveReleaseAt).toLocaleString()
+                        : "indefinite / none"}
+                    </p>
+                    {order.payout_frozen_at && (
+                      <p>Frozen at: {new Date(order.payout_frozen_at).toLocaleString()}</p>
+                    )}
+                  </div>
+
+                  {order.orderPayouts.length > 0 && (
+                    <div className="space-y-2">
+                      {order.orderPayouts.map((row) => (
+                        <div key={row.id} className="rounded-lg border border-white/5 bg-black/10 p-3 text-xs text-white/60">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>{row.payout_step.replaceAll("_", " ")}</span>
+                            <span>{row.status}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-3">
+                            <span>Paid {formatMoney(row.net_paid_cents)}</span>
+                            <span>Reserve {formatMoney(row.reserve_withheld_cents + row.minimum_balance_top_up_cents)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!["paid", "refunded", "frozen"].includes(order.payout_status || "") && (
+                    <button
+                      onClick={() => processManualPayout(order.id)}
+                      disabled={actionLoading}
+                      className="relay-button-secondary w-full"
+                    >
+                      Process Manual Payout
+                    </button>
+                  )}
+                </div>
+              ))}
+              {recentOrders.length === 0 && <p className="text-white/45">No recent orders found for this seller.</p>}
             </div>
           </div>
 

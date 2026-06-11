@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:payouts": "npx tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck --outDir .tmp-payout-tests scripts/test-payout-calculations.ts src/lib/payout-calculations.ts && node .tmp-payout-tests/scripts/test-payout-calculations.js",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
     "test:e2e:debug": "npx playwright test --debug",

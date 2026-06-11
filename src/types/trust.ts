@@ -10,6 +10,21 @@ export type CheckCheckStatus =
 
 export type ReserveEntryStatus = "pending" | "held" | "released" | "consumed";
 
+export type OrderPayoutStatus =
+  | "pending"
+  | "partially_paid"
+  | "paid"
+  | "frozen"
+  | "refunded"
+  | "failed";
+
+export type OrderPayoutStep =
+  | "final_release"
+  | "delivery_release"
+  | "carrier_acceptance_release"
+  | "delivery_balance_release"
+  | "manual_override_release";
+
 export type ReserveEntryType =
   | "hold"
   | "release"
@@ -95,6 +110,7 @@ export interface SellerReserveEntry {
   id: string;
   seller_id: string;
   order_id: string | null;
+  order_payout_id?: string | null;
   entry_type: ReserveEntryType;
   amount_cents: number;
   reserve_percentage_bps: number;
@@ -103,8 +119,33 @@ export interface SellerReserveEntry {
   released_at: string | null;
   consumed_at: string | null;
   status: ReserveEntryStatus;
+  is_frozen?: boolean;
+  frozen_at?: string | null;
+  freeze_reason?: string | null;
   description: string | null;
   metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderPayoutRecord {
+  id: string;
+  order_id: string;
+  seller_id: string;
+  payout_step: OrderPayoutStep;
+  status: "pending" | "paid" | "frozen" | "failed" | "cancelled";
+  gross_amount_cents: number;
+  reserve_withheld_cents: number;
+  minimum_balance_top_up_cents: number;
+  net_paid_cents: number;
+  reserve_release_eligible_at: string | null;
+  stripe_transfer_id: string | null;
+  idempotency_key: string;
+  trigger_source: string | null;
+  failure_reason: string | null;
+  metadata: Record<string, unknown>;
+  paid_at: string | null;
+  frozen_at: string | null;
   created_at: string;
   updated_at: string;
 }
