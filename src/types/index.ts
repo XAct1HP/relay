@@ -22,6 +22,27 @@ export interface User {
   sales_count: number;
   avg_rating: number;
   instagram_url: string | null;
+  seller_tier?: import("./trust").SellerTier;
+  trust_score?: number;
+  completed_order_count?: number;
+  lifetime_gmv_cents?: number;
+  trailing_30d_order_count?: number;
+  trailing_30d_dispute_count?: number;
+  trailing_90d_order_count?: number;
+  trailing_90d_dispute_count?: number;
+  trailing_180d_order_count?: number;
+  trailing_180d_dispute_count?: number;
+  buyer_completion_completed_count?: number;
+  buyer_completion_eligible_order_count?: number;
+  buyer_completion_rate_bps?: number;
+  seller_approved_at?: string | null;
+  first_completed_order_at?: string | null;
+  authenticity_violation_count?: number;
+  last_authenticity_violation_at?: string | null;
+  tier_manually_overridden?: boolean;
+  tier_manually_overridden_by?: string | null;
+  tier_override_reason?: string | null;
+  tier_last_evaluated_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -156,6 +177,14 @@ export interface Order {
   tracking_status: string | null;
   auth_photos: string[];
   checkcheck_certificate_url: string | null;
+  relay_tag_required?: boolean;
+  relay_tag_id?: string | null;
+  checkcheck_required?: boolean;
+  checkcheck_reason?: string | null;
+  checkcheck_status?: import("./trust").CheckCheckStatus;
+  random_audit_required?: boolean;
+  high_risk_sku_required?: boolean;
+  seller_funds_frozen?: boolean;
   purchased_condition_photo_url?: string | null;
   challenge_code: string | null;
   buyer_shipping_address: ShippingAddress | null;
@@ -252,3 +281,5 @@ export interface PaginatedResponse<T> {
   per_page: number;
   total_pages: number;
 }
+
+export * from "./trust";
