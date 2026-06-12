@@ -449,7 +449,7 @@ export default function ListingDetailPage({
   const hasMultipleImages = listing.images.length > 1;
 
   // Used inventory sort/filter logic
-  const usedSizes = [...new Set(listing.usedItems.map((item) => item.size))].sort(
+  const usedSizes = Array.from(new Set(listing.usedItems.map((item) => item.size))).sort(
     (a, b) => parseFloat(a) - parseFloat(b)
   );
 
