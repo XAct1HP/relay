@@ -2,16 +2,24 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Box, CheckCircle2, Clock, Package, RefreshCw, Tag, ChevronDown, ChevronUp } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Lock,
+  Package,
+  RefreshCw,
+  ShoppingCart,
+  Tag,
+  Truck,
+} from "lucide-react";
 import useAuth from "@/hooks/useAuth";
-import type { RelayTag, SellerTagRequest, SellerTier } from "@/types";
-
-interface SellerTagPolicy {
-  sellerTier: SellerTier;
-  requestMode: "welcome_pack" | "on_demand_request" | "bundle_250" | "monthly_replenishment";
-  defaultRequestQuantity: number;
-  description: string;
-}
+import { TAG_BUNDLES, isBundleUnlocked, formatBundlePrice } from "@/lib/tag-bundles";
+import type { TagBundle } from "@/lib/tag-bundles";
+import type { RelayTag, TagOrder, SellerTier } from "@/types";
 
 interface SellerTagDashboardData {
   profile: {
@@ -20,7 +28,12 @@ interface SellerTagDashboardData {
     seller_application_status: string | null;
     is_verified_seller: boolean | null;
   };
-  policy: SellerTagPolicy;
+  policy: {
+    sellerTier: SellerTier;
+    requestMode: string;
+    defaultRequestQuantity: number;
+    description: string;
+  };
   counts: {
     available: number;
     used: number;
@@ -28,11 +41,7 @@ interface SellerTagDashboardData {
   };
   availableTags: RelayTag[];
   usedTags: RelayTag[];
-  requests: SellerTagRequest[];
-}
-
-function formatTierLabel(tier: SellerTier) {
-  return tier.replace("tier_", "Tier ");
+  requests: any[];
 }
 
 function formatDate(value: string | null | undefined) {
@@ -46,29 +55,43 @@ function statusTone(status: RelayTag["status"]) {
   return "bg-[#5f8fff]/15 text-[#7ca6ff]";
 }
 
-function requestStatusTone(status: string) {
+function orderStatusTone(status: string) {
   if (status === "fulfilled") return "bg-emerald-500/15 text-emerald-300";
-  if (status === "rejected") return "bg-red-500/15 text-red-300";
-  return "bg-[#5f8fff]/15 text-[#7ca6ff]";
+  if (status === "shipped") return "bg-[#5f8fff]/15 text-[#7ca6ff]";
+  if (status === "processing") return "bg-amber-500/15 text-amber-300";
+  return "bg-white/10 text-white/60";
 }
 
-type TabId = "inventory" | "request" | "history";
+type TabId = "inventory" | "buy" | "orders";
 
 export default function SellerTagsPage() {
   const { currentUser, isLoading } = useAuth();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<SellerTagDashboardData | null>(null);
+  const [tagOrders, setTagOrders] = useState<TagOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [requestedQuantity, setRequestedQuantity] = useState(50);
-  const [requestReason, setRequestReason] = useState("");
   const [activeTab, setActiveTab] = useState<TabId>("inventory");
   const [showUsed, setShowUsed] = useState(false);
+
+  // Show success message if redirected from Stripe
+  useEffect(() => {
+    const purchased = searchParams.get("purchased");
+    if (purchased) {
+      const bundle = TAG_BUNDLES.find((b) => b.id === purchased);
+      if (bundle) {
+        setSuccess(`Payment confirmed! Your ${bundle.name} pack (${bundle.quantity} tags) is being prepared for shipment.`);
+        setActiveTab("orders");
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (currentUser?.role === "seller") {
       void loadData();
+      void loadOrders();
     } else if (!isLoading) {
       setLoading(false);
     }
@@ -83,44 +106,51 @@ export default function SellerTagsPage() {
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to load Relay tag dashboard");
+        throw new Error(payload.error || "Failed to load tag dashboard");
       }
 
       setData(payload);
-      setRequestedQuantity(payload.policy?.defaultRequestQuantity || 50);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Relay tag dashboard");
+      setError(err instanceof Error ? err.message : "Failed to load tag dashboard");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleRequestTags() {
-    if (!data) return;
+  async function loadOrders() {
+    try {
+      const response = await fetch("/api/seller/tags/orders", { cache: "no-store" });
+      const payload = await response.json();
+      if (response.ok) {
+        setTagOrders(payload.orders || []);
+      }
+    } catch {
+      // Non-critical, fail silently
+    }
+  }
 
-    setSubmitting(true);
+  async function handlePurchase(bundle: TagBundle) {
+    setPurchasing(bundle.id);
     setError("");
-    setSuccess("");
 
     try {
-      const response = await fetch("/api/seller/tag-requests", {
+      const response = await fetch("/api/seller/tags/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestedQuantity, requestReason }),
+        body: JSON.stringify({ bundleId: bundle.id }),
       });
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to submit Relay tag request");
+        throw new Error(payload.error || "Failed to start checkout");
       }
 
-      setSuccess("Tag request submitted successfully.");
-      setRequestReason("");
-      await loadData();
+      if (payload.url) {
+        window.location.href = payload.url;
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit Relay tag request");
-    } finally {
-      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "Failed to start checkout");
+      setPurchasing(null);
     }
   }
 
@@ -135,16 +165,18 @@ export default function SellerTagsPage() {
   if (!data) {
     return (
       <div className="relay-card p-4 border border-red-500/20 bg-red-500/10 text-red-300">
-        {error || "Relay tag dashboard is unavailable right now."}
+        {error || "Tag dashboard is unavailable right now."}
       </div>
     );
   }
 
-  const pendingRequests = data.requests.filter((r) => r.status === "pending" || r.status === "approved");
-  const tabs: { id: TabId; label: string }[] = [
+  const sellerTier = data.profile.seller_tier;
+  const pendingOrders = tagOrders.filter((o) => o.status === "paid" || o.status === "processing" || o.status === "shipped");
+
+  const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "inventory", label: "Inventory" },
-    { id: "request", label: "Request Tags" },
-    { id: "history", label: `Requests (${data.requests.length})` },
+    { id: "buy", label: "Buy Tags" },
+    { id: "orders", label: "Orders", count: pendingOrders.length || undefined },
   ];
 
   return (
@@ -159,7 +191,7 @@ export default function SellerTagsPage() {
           </p>
         </div>
         <button
-          onClick={() => void loadData()}
+          onClick={() => { void loadData(); void loadOrders(); }}
           className="relay-button-secondary inline-flex items-center gap-2 self-start"
         >
           <RefreshCw className="w-4 h-4" />
@@ -190,28 +222,14 @@ export default function SellerTagsPage() {
           <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">{data.counts.used}</p>
         </div>
         <div className="relay-card p-4 sm:p-5">
-          <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">Pending Requests</p>
-          <p className="text-2xl sm:text-3xl font-bold text-[#7ca6ff]">{pendingRequests.length}</p>
+          <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">In Transit</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#7ca6ff]">{pendingOrders.length}</p>
         </div>
         <div className="relay-card p-4 sm:p-5">
           <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">Tier</p>
           <div className="inline-flex px-3 py-1.5 rounded-xl border border-[#5f8fff]/20 bg-[#5f8fff]/10 text-[#7ca6ff] text-lg font-semibold">
-            {formatTierLabel(data.profile.seller_tier)}
+            {sellerTier.replace("tier_", "Tier ")}
           </div>
-        </div>
-      </div>
-
-      {/* Tier policy banner - compact */}
-      <div className="relay-card p-4 border border-white/5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <div className="flex items-center gap-2 text-white/50">
-            <Tag className="w-4 h-4 text-[#7ca6ff]" />
-            <span className="font-medium text-white/70">Tier Policy</span>
-          </div>
-          <span className="text-white/50">{data.policy.description}</span>
-          <span className="px-2 py-0.5 rounded-full bg-white/5 text-white/50 text-xs">
-            {data.policy.requestMode.replace(/_/g, " ")}
-          </span>
         </div>
       </div>
 
@@ -221,21 +239,25 @@ export default function SellerTagsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-2 ${
               activeTab === tab.id
                 ? "border-[#5f8fff] text-[#f5f7fb]"
                 : "border-transparent text-white/40 hover:text-white/60"
             }`}
           >
             {tab.label}
+            {tab.count && tab.count > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-[#5f8fff]/20 text-[#7ca6ff] text-xs font-semibold">
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Inventory tab */}
       {activeTab === "inventory" && (
         <div className="space-y-4">
-          {/* Available tags */}
           <div className="relay-card overflow-hidden">
             <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
               <Package className="w-4 h-4 text-emerald-400" />
@@ -245,7 +267,13 @@ export default function SellerTagsPage() {
 
             {data.availableTags.length === 0 ? (
               <div className="p-8 text-center text-white/40 text-sm">
-                No tags available. Request more below.
+                <p>No tags in your inventory.</p>
+                <button
+                  onClick={() => setActiveTab("buy")}
+                  className="text-[#7ca6ff] hover:text-[#9ab8ff] font-medium mt-2 transition-colors"
+                >
+                  Purchase tags to get started
+                </button>
               </div>
             ) : (
               <div className="divide-y divide-white/5">
@@ -293,7 +321,7 @@ export default function SellerTagsPage() {
               <>
                 {data.usedTags.length === 0 ? (
                   <div className="px-5 pb-4 text-white/40 text-sm">
-                    Used tags will appear here after they are bound to orders.
+                    Used tags appear here after they are bound to orders.
                   </div>
                 ) : (
                   <div className="divide-y divide-white/5 border-t border-white/5">
@@ -333,81 +361,134 @@ export default function SellerTagsPage() {
         </div>
       )}
 
-      {activeTab === "request" && (
-        <div className="max-w-lg">
-          <div className="relay-card p-5 sm:p-6 space-y-5">
-            <div className="flex items-center gap-2">
-              <Box className="w-5 h-5 text-[#7ca6ff]" />
-              <h2 className="text-lg font-semibold text-[#f5f7fb]">Request More Tags</h2>
-            </div>
+      {/* Buy Tags tab */}
+      {activeTab === "buy" && (
+        <div className="space-y-6">
+          <p className="text-white/50 text-sm">
+            Purchase Relay security tags shipped directly to you. Higher tiers unlock better per-tag pricing.
+          </p>
 
-            <div>
-              <label className="block text-sm text-white/60 mb-2">Quantity</label>
-              <input
-                type="number"
-                min={1}
-                value={requestedQuantity}
-                onChange={(e) => setRequestedQuantity(Number(e.target.value))}
-                className="relay-input w-full"
-              />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {TAG_BUNDLES.map((bundle) => {
+              const unlocked = isBundleUnlocked(bundle, sellerTier);
+              const isPurchasing = purchasing === bundle.id;
 
-            <div>
-              <label className="block text-sm text-white/60 mb-2">Reason (optional)</label>
-              <textarea
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-                rows={3}
-                placeholder="Any context for the admin reviewing this request."
-                className="relay-input w-full resize-none"
-              />
-            </div>
+              return (
+                <div
+                  key={bundle.id}
+                  className={`relay-card p-5 sm:p-6 relative overflow-hidden transition-all ${
+                    unlocked
+                      ? "border border-white/10 hover:border-white/20"
+                      : "border border-white/5 opacity-60"
+                  }`}
+                >
+                  {!unlocked && (
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-white/40 text-xs font-medium">
+                        <Lock className="w-3 h-3" />
+                        {bundle.minTier.replace("tier_", "Tier ")}
+                      </div>
+                    </div>
+                  )}
 
-            <button
-              onClick={handleRequestTags}
-              disabled={submitting || requestedQuantity <= 0}
-              className="relay-button-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Submitting..." : "Submit Request"}
-            </button>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <h3 className="text-lg font-semibold text-[#f5f7fb]">{bundle.name}</h3>
+                        <span className="text-white/40 text-sm">{bundle.quantity} tags</span>
+                      </div>
+                      <p className="text-white/50 text-sm">{bundle.description}</p>
+                    </div>
+
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-[#f5f7fb]">
+                        {formatBundlePrice(bundle.priceCents)}
+                      </span>
+                      <span className="text-white/40 text-sm">{bundle.pricePerTag}/tag</span>
+                    </div>
+
+                    <button
+                      onClick={() => handlePurchase(bundle)}
+                      disabled={!unlocked || isPurchasing || purchasing !== null}
+                      className={`w-full py-2.5 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+                        unlocked
+                          ? "relay-button-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                          : "bg-white/5 text-white/30 cursor-not-allowed"
+                      }`}
+                    >
+                      {isPurchasing ? (
+                        "Redirecting to Stripe..."
+                      ) : !unlocked ? (
+                        <>
+                          <Lock className="w-4 h-4" />
+                          Unlock at {bundle.minTier.replace("tier_", "Tier ")}
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-4 h-4" />
+                          Purchase
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {activeTab === "history" && (
+      {/* Orders tab */}
+      {activeTab === "orders" && (
         <div className="relay-card overflow-hidden">
           <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
             <Clock className="w-4 h-4 text-[#7ca6ff]" />
-            <h2 className="font-semibold text-[#f5f7fb]">Request History</h2>
+            <h2 className="font-semibold text-[#f5f7fb]">Tag Orders</h2>
           </div>
 
-          {data.requests.length === 0 ? (
+          {tagOrders.length === 0 ? (
             <div className="p-8 text-center text-white/40 text-sm">
-              No tag requests submitted yet.
+              <p>No tag orders yet.</p>
+              <button
+                onClick={() => setActiveTab("buy")}
+                className="text-[#7ca6ff] hover:text-[#9ab8ff] font-medium mt-2 transition-colors"
+              >
+                Browse tag bundles
+              </button>
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {data.requests.map((request) => (
-                <div key={request.id} className="px-5 py-4">
+              {tagOrders.map((order) => (
+                <div key={order.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3 mb-1">
                     <div>
                       <p className="text-[#f5f7fb] font-medium text-sm">
-                        {request.requested_quantity} tags
+                        {order.bundle_name} Pack
                         <span className="text-white/40 font-normal ml-2">
-                          {request.policy_type.replace(/_/g, " ")}
+                          {order.quantity} tags
                         </span>
                       </p>
-                      <p className="text-white/40 text-xs mt-0.5">{formatDate(request.created_at)}</p>
+                      <p className="text-white/40 text-xs mt-0.5">
+                        {formatDate(order.paid_at || order.created_at)} · {formatBundlePrice(order.price_cents)}
+                      </p>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${requestStatusTone(request.status)}`}>
-                      {request.status}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${orderStatusTone(order.status)}`}>
+                      {order.status}
                     </span>
                   </div>
-                  {request.request_reason && (
-                    <p className="text-white/50 text-sm mt-2">{request.request_reason}</p>
+
+                  {order.shipping_tracking_number && (
+                    <div className="flex items-center gap-2 mt-2 text-xs text-[#7ca6ff]">
+                      <Truck className="w-3.5 h-3.5" />
+                      <span>
+                        {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
+                        {order.shipping_tracking_number}
+                      </span>
+                    </div>
                   )}
-                  {request.admin_notes && (
-                    <p className="text-white/40 text-xs mt-1.5 italic">Admin: {request.admin_notes}</p>
+
+                  {order.admin_notes && (
+                    <p className="text-white/40 text-xs mt-2 italic">Note: {order.admin_notes}</p>
                   )}
                 </div>
               ))}

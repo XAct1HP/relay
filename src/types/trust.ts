@@ -193,6 +193,32 @@ export interface SellerTagRequest {
   updated_at: string;
 }
 
+export type TagOrderStatus =
+  | "paid"
+  | "processing"
+  | "shipped"
+  | "fulfilled";
+
+export interface TagOrder {
+  id: string;
+  seller_id: string;
+  bundle_id: string;
+  bundle_name: string;
+  quantity: number;
+  price_cents: number;
+  status: TagOrderStatus;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  shipping_tracking_number: string | null;
+  shipping_carrier: string | null;
+  admin_notes: string | null;
+  paid_at: string | null;
+  shipped_at: string | null;
+  fulfilled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface RelayTagScanEvent {
   id: string;
   relay_tag_id: string;

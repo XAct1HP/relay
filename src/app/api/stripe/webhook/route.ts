@@ -126,6 +126,50 @@ export async function POST(request: NextRequest) {
       const paymentIntentId =
         typeof session.payment_intent === 'string' ? session.payment_intent : null
 
+      // --- Tag bundle purchase ---
+      if (metadata.type === 'tag_bundle_purchase') {
+        const { bundleId, bundleName, quantity, priceCents, sellerId } = metadata
+
+        if (!bundleId || !sellerId || !quantity) {
+          return NextResponse.json({ error: 'Invalid tag bundle metadata' }, { status: 400 })
+        }
+
+        // Deduplicate by checkout session id
+        if (paymentIntentId) {
+          const { data: existing } = await supabase
+            .from('tag_orders')
+            .select('id')
+            .eq('stripe_payment_intent_id', paymentIntentId)
+            .maybeSingle()
+
+          if (existing?.id) {
+            return NextResponse.json({ received: true })
+          }
+        }
+
+        const { error: insertError } = await supabase
+          .from('tag_orders')
+          .insert({
+            seller_id: sellerId,
+            bundle_id: bundleId,
+            bundle_name: bundleName || bundleId,
+            quantity: parseInt(quantity, 10),
+            price_cents: parseInt(priceCents || '0', 10),
+            status: 'paid',
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: paymentIntentId,
+            paid_at: new Date().toISOString(),
+          })
+
+        if (insertError) {
+          console.error('Tag order creation error:', insertError)
+          return NextResponse.json({ error: 'Failed to create tag order' }, { status: 500 })
+        }
+
+        return NextResponse.json({ received: true })
+      }
+
+      // --- Shoe purchase (existing logic) ---
       const listingId = metadata.listingId
       const listingVariantId = metadata.listingVariantId || null
       const listingUsedItemId = metadata.listingUsedItemId || null
