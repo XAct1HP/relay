@@ -46,25 +46,25 @@ function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
   const isPositive = trend === "up";
 
   return (
-    <div className="relay-card p-5">
+    <div className="relay-card p-4 sm:p-5">
       <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 bg-white/5 rounded-lg">
-              <Icon className="w-5 h-5 text-[#5f8fff]" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-3 sm:mb-4">
+            <div className="p-1.5 sm:p-2 bg-white/5 rounded-lg">
+              <Icon className="w-4 sm:w-5 h-4 sm:h-5 text-[#5f8fff]" />
             </div>
           </div>
-          <p className="text-white/60 text-sm mb-1">{label}</p>
-          <p className="text-2xl font-semibold text-[#f5f7fb]">{value}</p>
+          <p className="text-white/60 text-xs sm:text-sm mb-1">{label}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-[#f5f7fb]">{value}</p>
         </div>
-        <div className="flex flex-col items-end">
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${isPositive ? "bg-green-500/20" : "bg-red-500/20"}`}>
+        <div className="flex flex-col items-end flex-shrink-0">
+          <div className={`flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg ${isPositive ? "bg-green-500/20" : "bg-red-500/20"}`}>
             {isPositive ? (
-              <ArrowUpRight className="w-4 h-4 text-green-400" />
+              <ArrowUpRight className="w-3 sm:w-4 h-3 sm:h-4 text-green-400" />
             ) : (
-              <ArrowDownRight className="w-4 h-4 text-red-400" />
+              <ArrowDownRight className="w-3 sm:w-4 h-3 sm:h-4 text-red-400" />
             )}
-            <span className={`text-xs font-semibold ${isPositive ? "text-green-400" : "text-red-400"}`}>
+            <span className={`text-[10px] sm:text-xs font-semibold ${isPositive ? "text-green-400" : "text-red-400"}`}>
               {trendValue}
             </span>
           </div>
@@ -88,23 +88,28 @@ function ChartCard({ title, children }: any) {
 function OrderRow({ order }: any) {
   return (
     <Link href={`/orders/${order.id}`}>
-      <div className="flex items-center justify-between py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <Package className="w-4 h-4 text-[#5f8fff]" />
-            <div>
-              <p className="text-[#f5f7fb] font-medium truncate">{order.shoe}</p>
-              <p className="text-white/40 text-sm">{order.buyer}</p>
+      <div className="flex items-center justify-between py-3 sm:py-4 px-3 sm:px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Package className="w-4 h-4 text-[#5f8fff] flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[#f5f7fb] font-medium truncate text-sm sm:text-base">{order.shoe}</p>
+              <div className="flex items-center gap-2 mt-0.5 sm:hidden">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${order.statusColor}`}>
+                  {order.status}
+                </span>
+                <span className="text-white/40 text-xs">{order.date}</span>
+              </div>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.statusColor}`}>
+        <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+          <span className={`hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-semibold ${order.statusColor}`}>
             {order.status}
           </span>
-          <span className="text-[#f5f7fb] font-semibold w-24 text-right">${order.price.toFixed(2)}</span>
-          <span className="text-white/40 text-sm w-20 text-right">{order.date}</span>
-          <ExternalLink className="w-4 h-4 text-white/30 group-hover:text-[#5f8fff] transition-colors" />
+          <span className="text-[#f5f7fb] font-semibold text-sm sm:text-base">{"$"}{order.price.toFixed(0)}</span>
+          <span className="hidden sm:inline text-white/40 text-sm w-20 text-right">{order.date}</span>
+          <ExternalLink className="hidden sm:block w-4 h-4 text-white/30 group-hover:text-[#5f8fff] transition-colors" />
         </div>
       </div>
     </Link>
@@ -396,7 +401,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Top Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <MetricCard
             icon={DollarSign}
             label="Total Revenue"
@@ -576,39 +581,39 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Stats Bottom */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="relay-card p-5 text-center">
-            <TrendingUp className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Total Sales</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="relay-card p-4 sm:p-5 text-center">
+            <TrendingUp className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Total Sales</p>
+            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
               {metrics.totalSales}
             </p>
-            <p className="text-white/40 text-xs mt-2">lifetime orders</p>
+            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">lifetime orders</p>
           </div>
 
-          <div className="relay-card p-5 text-center">
-            <DollarSign className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Avg Order Value</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">
-              ${metrics.avgOrderValue.toFixed(2)}
+          <div className="relay-card p-4 sm:p-5 text-center">
+            <DollarSign className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Avg Order</p>
+            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
+              {"$"}{metrics.avgOrderValue.toFixed(0)}
             </p>
-            <p className="text-white/40 text-xs mt-2">per transaction</p>
+            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">per transaction</p>
           </div>
 
-          <div className="relay-card p-5 text-center">
-            <MessageSquare className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Conversations</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">{metrics.totalConversations}</p>
-            <p className="text-white/40 text-xs mt-2">active threads</p>
+          <div className="relay-card p-4 sm:p-5 text-center">
+            <MessageSquare className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Conversations</p>
+            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">{metrics.totalConversations}</p>
+            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">active threads</p>
           </div>
 
-          <div className="relay-card p-5 text-center">
-            <Star className="w-6 h-6 text-[#5f8fff] mx-auto mb-3" />
-            <p className="text-white/60 text-sm mb-2">Rating</p>
-            <p className="text-3xl font-bold text-[#f5f7fb]">
+          <div className="relay-card p-4 sm:p-5 text-center">
+            <Star className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Rating</p>
+            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
               {metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "—"}
             </p>
-            <p className="text-white/40 text-xs mt-2">{metrics.ratingTrend.value}</p>
+            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">{metrics.ratingTrend.value}</p>
           </div>
         </div>
       </div>

@@ -341,7 +341,7 @@ export default function ListingReviewsPage() {
                         {listing.sizes?.map((s, idx) => (
                           <div key={idx} className="p-2 rounded-lg bg-white/[0.02] border border-white/5 text-center">
                             <p className="text-[#f5f7fb] text-sm font-bold">{s.size}</p>
-                            <p className="text-[#5f8fff] text-xs font-semibold">${s.price}</p>
+                            <p className="text-[#5f8fff] text-xs font-semibold">{"$"}{s.price}</p>
                             <p className="text-white/30 text-[10px]">qty: {s.quantity}</p>
                           </div>
                         ))}

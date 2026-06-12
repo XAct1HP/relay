@@ -1543,21 +1543,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between text-[#7ca6ff]">
                 <span>Shoe Price</span>
-                <span>${order.price.toFixed(2)}</span>
+                <span>{"$"}{order.price.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-[#7ca6ff]">
                 <span>Shipping</span>
-                <span>${order.shippingCost.toFixed(2)}</span>
+                <span>{"$"}{order.shippingCost.toFixed(2)}</span>
               </div>
               {order.userRole === "seller" && (
                 <>
                   <div className="flex justify-between text-[#7ca6ff]">
                     <span>Platform Fee</span>
-                    <span>-${order.platformFee.toFixed(2)}</span>
+                    <span>-{"$"}{order.platformFee.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-[#7ca6ff]">
                     <span>Stripe Fee</span>
-                    <span>-${order.stripeFee.toFixed(2)}</span>
+                    <span>-{"$"}{order.stripeFee.toFixed(2)}</span>
                   </div>
                 </>
               )}
@@ -2373,7 +2373,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
           {order.userRole === "seller" && (
             <p className="text-sm text-emerald-300">
-              Earnings of <span className="font-bold">${order.sellerEarnings.toFixed(2)}</span> have been
+              Earnings of <span className="font-bold">{"$"}{order.sellerEarnings.toFixed(2)}</span> have been
               transferred to your account.
             </p>
           )}

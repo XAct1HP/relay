@@ -353,7 +353,7 @@ export default function OrdersPage() {
 
                     {/* Price & Arrow */}
                     <div className="flex flex-shrink-0 items-center gap-3 text-right">
-                      <div className="font-semibold text-[#f5f7fb]">${order.price.toFixed(2)}</div>
+                      <div className="font-semibold text-[#f5f7fb]">{"$"}{order.price.toFixed(2)}</div>
                       <ChevronRight className="h-5 w-5 text-[#7ca6ff] transition-transform group-hover:translate-x-1" />
                     </div>
                   </div>

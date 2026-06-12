@@ -85,8 +85,8 @@ function MetricCard({
   };
 
   return (
-    <div className="relay-card p-5">
-      <p className="text-white/45 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
+    <div className="relay-card p-4 sm:p-5">
+      <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
       <div className={`inline-flex rounded-xl border px-3 py-2 text-lg font-semibold ${tones[tone]}`}>
         {value}
       </div>
@@ -172,7 +172,7 @@ export default function AdminDisputesPage() {
 
       {data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
             <MetricCard label="All Disputes" value={data.counts.total} />
             <MetricCard label="Open" value={data.counts.open} tone="red" />
             <MetricCard label="Resolved" value={data.counts.resolved} tone="green" />
@@ -252,25 +252,32 @@ export default function AdminDisputesPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 xl:min-w-[520px]">
+                      {/* Desktop stat grid */}
+                      <div className="hidden md:grid md:grid-cols-4 gap-3 xl:min-w-[520px]">
                         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-1">Status</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Status</p>
                           <p className="font-semibold text-[#f5f7fb]">{formatLabel(dispute.status)}</p>
                         </div>
                         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-1">Payout</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Payout</p>
                           <p className="font-semibold text-[#f5f7fb]">{formatLabel(dispute.payoutStatus)}</p>
                         </div>
                         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-1">Reserve</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Reserve</p>
                           <p className="font-semibold text-[#f5f7fb]">{formatLabel(dispute.reserveStatus)}</p>
                         </div>
                         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-1">Review Deadline</p>
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Review Deadline</p>
                           <p className="font-semibold text-[#f5f7fb]">
                             {dispute.reviewDeadline ? new Date(dispute.reviewDeadline).toLocaleDateString() : "n/a"}
                           </p>
                         </div>
+                      </div>
+                      {/* Mobile compact stats */}
+                      <div className="md:hidden flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        <span className="text-white/50">{formatLabel(dispute.status)}</span>
+                        <span className="text-white/50">Payout: <span className="text-[#f5f7fb] font-medium">{formatLabel(dispute.payoutStatus)}</span></span>
+                        <span className="text-white/50">Reserve: <span className="text-[#f5f7fb] font-medium">{formatLabel(dispute.reserveStatus)}</span></span>
                       </div>
 
                       <div className="flex items-center gap-2 text-sm font-medium text-[#7ca6ff]">

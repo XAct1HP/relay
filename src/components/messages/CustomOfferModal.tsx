@@ -227,7 +227,7 @@ export function CustomOfferModal({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-white/60">Listed Price (Size {selectedSize})</span>
                   <span className="text-sm font-semibold text-relay-text">
-                    ${originalPrice.toFixed(2)}
+                    {"$"}{originalPrice.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -264,20 +264,20 @@ export function CustomOfferModal({
               <div className="bg-relay-accent-strong/10 border border-relay-accent-strong/30 rounded-lg p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/60">Offer Price</span>
-                  <span className="text-white/80">${offerPriceNum.toFixed(2)}</span>
+                  <span className="text-white/80">{"$"}{offerPriceNum.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/60">Relay Fee (1%)</span>
-                  <span className="text-white/60">-${relayFee.toFixed(2)}</span>
+                  <span className="text-white/60">-{"$"}{relayFee.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/60">Stripe Fee (3% + $0.30)</span>
-                  <span className="text-white/60">-${stripeFee.toFixed(2)}</span>
+                  <span className="text-white/60">-{"$"}{stripeFee.toFixed(2)}</span>
                 </div>
                 <div className="border-t border-relay-accent/20 pt-2 flex items-center justify-between">
                   <span className="font-semibold text-sm text-relay-accent">You earn</span>
                   <span className="font-semibold text-sm text-relay-accent">
-                    ${Math.max(0, sellerEarnings).toFixed(2)}
+                    {"$"}{Math.max(0, sellerEarnings).toFixed(2)}
                   </span>
                 </div>
               </div>

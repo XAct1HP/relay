@@ -85,9 +85,9 @@ function InfoCard({
   value: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-      <p className="text-xs uppercase tracking-[0.16em] text-white/40 mb-1">{label}</p>
-      <div className="text-[#f5f7fb] font-semibold">{value}</div>
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+      <p className="text-[10px] sm:text-xs uppercase tracking-[0.16em] text-white/50 mb-1">{label}</p>
+      <div className="text-[#f5f7fb] font-semibold text-sm sm:text-base break-words">{value}</div>
     </div>
   );
 }
@@ -133,7 +133,7 @@ function ImageGrid({
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium text-[#f5f7fb]">{title}</p>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
         {visible.map((image) => (
           <a
             key={image.label}
@@ -326,34 +326,34 @@ export default function AdminDisputeDetailPage() {
         </div>
       )}
 
-      <div className="relay-card p-5">
+      <div className="relay-card p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-4">
           <Shield className="w-5 h-5 text-[#7ca6ff]" />
           <h2 className="text-lg font-semibold text-[#f5f7fb]">Order Overview</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <InfoCard label="Buyer" value={buyer ? sellerDisplayNameForUi(buyer) : "Unknown"} />
           <InfoCard label="Seller" value={seller ? sellerDisplayNameForUi(seller) : "Unknown"} />
           <InfoCard label="Trust Score" value={seller?.trust_score || 0} />
           <InfoCard label="Order Value" value={formatMoney(data.computed.orderValueCents)} />
           <InfoCard label="SKU / Size" value={`${data.order?.listing?.sku || data.order?.listing?.sku_normalized || "n/a"} / ${data.order?.size || "n/a"}`} />
-          <InfoCard label="Delivery Date" value={data.order?.delivered_at ? new Date(data.order.delivered_at).toLocaleString() : "Not delivered"} />
-          <InfoCard label="Review Deadline" value={data.order?.review_deadline ? new Date(data.order.review_deadline).toLocaleString() : "No deadline"} />
+          <InfoCard label="Delivery" value={data.order?.delivered_at ? new Date(data.order.delivered_at).toLocaleDateString() : "Not delivered"} />
+          <InfoCard label="Deadline" value={data.order?.review_deadline ? new Date(data.order.review_deadline).toLocaleDateString() : "No deadline"} />
           <InfoCard label="Payout / Reserve" value={`${formatLabel(data.order?.payout_status)} / ${formatLabel(data.reserveSummary.status)}`} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="relay-card p-5 space-y-5">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+        <div className="relay-card p-4 sm:p-5 space-y-4 sm:space-y-5">
           <div className="flex items-center gap-2">
             <Tag className="w-5 h-5 text-amber-300" />
             <h2 className="text-lg font-semibold text-[#f5f7fb]">Chain of Custody</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoCard label="Seller Scanned Tag" value={custody?.seller_scanned_tag_value || "Missing"} />
-            <InfoCard label="Buyer Scanned Tag" value={custody?.buyer_scanned_tag_value || "Missing"} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <InfoCard label="Seller Tag" value={custody?.seller_scanned_tag_value || "Missing"} />
+            <InfoCard label="Buyer Tag" value={custody?.buyer_scanned_tag_value || "Missing"} />
             <InfoCard label="Tag Match" value={data.computed.tagMatch ? "Match" : "Mismatch / pending"} />
             <InfoCard label="Tag Status" value={formatLabel(relayTag?.status || null)} />
             <InfoCard label="Verification" value={formatLabel(custody?.verification_status || null)} />
@@ -370,19 +370,19 @@ export default function AdminDisputeDetailPage() {
           <ImageGrid title="Buyer Evidence" images={buyerPhotos} />
         </div>
 
-        <div className="relay-card p-5 space-y-5">
+        <div className="relay-card p-4 sm:p-5 space-y-4 sm:space-y-5">
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-[#7ca6ff]" />
             <h2 className="text-lg font-semibold text-[#f5f7fb]">Authentication</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoCard label="CheckCheck Required" value={data.order?.checkcheck_required ? "Yes" : "No"} />
-            <InfoCard label="CheckCheck Status" value={formatLabel(data.order?.checkcheck_status)} />
-            <InfoCard label="CheckCheck Reason" value={data.order?.checkcheck_reason || "None"} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <InfoCard label="CheckCheck" value={data.order?.checkcheck_required ? "Required" : "Not required"} />
+            <InfoCard label="CC Status" value={formatLabel(data.order?.checkcheck_status)} />
+            <InfoCard label="CC Reason" value={data.order?.checkcheck_reason || "None"} />
             <InfoCard label="High-Risk SKU" value={data.order?.high_risk_sku_required ? "Yes" : "No"} />
             <InfoCard label="Random Audit" value={data.order?.random_audit_required ? "Yes" : "No"} />
-            <InfoCard label="Legacy Auth Flow" value={data.computed.legacyDisputeFlow ? "Yes" : "No"} />
+            <InfoCard label="Legacy Auth" value={data.computed.legacyDisputeFlow ? "Yes" : "No"} />
           </div>
 
           {data.order?.checkcheck_certificate_url && (
@@ -401,20 +401,20 @@ export default function AdminDisputeDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-6">
-        <div className="relay-card p-5 space-y-5">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr,0.8fr] gap-4 sm:gap-6">
+        <div className="relay-card p-4 sm:p-5 space-y-4 sm:space-y-5">
           <div className="flex items-center gap-2">
             <Flag className="w-5 h-5 text-red-300" />
             <h2 className="text-lg font-semibold text-[#f5f7fb]">Dispute Review</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-white/40 mb-2">Buyer Claim</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+              <p className="text-[10px] sm:text-xs uppercase tracking-[0.16em] text-white/50 mb-2">Buyer Claim</p>
               <p className="text-sm text-[#f5f7fb]">{dispute.buyer_description || data.order?.dispute_text_buyer || "No buyer explanation submitted."}</p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-white/40 mb-2">Seller Response</p>
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+              <p className="text-[10px] sm:text-xs uppercase tracking-[0.16em] text-white/50 mb-2">Seller Response</p>
               <p className="text-sm text-[#f5f7fb]">{dispute.seller_description || data.order?.dispute_text_seller || "No seller response submitted yet."}</p>
             </div>
             <InfoCard label="Admin Notes" value={dispute.admin_resolution || data.order?.admin_notes || "No admin note yet"} />
@@ -436,11 +436,11 @@ export default function AdminDisputeDetailPage() {
             }))}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <InfoCard label="Amount Paid" value={formatMoney(data.order?.seller_amount_paid_cents || 0)} />
-            <InfoCard label="Held In Reserve" value={formatMoney(data.reserveSummary.heldCents || data.order?.seller_amount_held_in_reserve_cents || 0)} />
-            <InfoCard label="Frozen Funds" value={formatMoney(data.order?.seller_amount_frozen_cents || data.reserveSummary.frozenCents || 0)} />
-            <InfoCard label="Consumed Reserve" value={formatMoney(data.reserveSummary.consumedCents || 0)} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <InfoCard label="Paid" value={formatMoney(data.order?.seller_amount_paid_cents || 0)} />
+            <InfoCard label="In Reserve" value={formatMoney(data.reserveSummary.heldCents || data.order?.seller_amount_held_in_reserve_cents || 0)} />
+            <InfoCard label="Frozen" value={formatMoney(data.order?.seller_amount_frozen_cents || data.reserveSummary.frozenCents || 0)} />
+            <InfoCard label="Consumed" value={formatMoney(data.reserveSummary.consumedCents || 0)} />
           </div>
 
           {payouts.length > 0 && (
@@ -479,8 +479,8 @@ export default function AdminDisputeDetailPage() {
           )}
         </div>
 
-        <div className="space-y-6">
-          <div className="relay-card p-5 space-y-4">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="relay-card p-4 sm:p-5 space-y-4">
             <div className="flex items-center gap-2">
               <HandCoins className="w-5 h-5 text-emerald-300" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Admin Actions</h2>
@@ -498,7 +498,7 @@ export default function AdminDisputeDetailPage() {
               <button
                 onClick={() => void submitAction("approve_buyer_claim", {}, "Buyer claim approved and return workflow started.")}
                 disabled={saving}
-                className="relay-button-secondary inline-flex items-center justify-center gap-2 bg-green-500/20 text-green-300"
+                className="relay-button-secondary inline-flex items-center justify-center gap-2 !bg-emerald-500/20 !text-emerald-300 !border-emerald-500/30"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Approve Buyer Claim
@@ -506,7 +506,7 @@ export default function AdminDisputeDetailPage() {
               <button
                 onClick={() => void submitAction("deny_buyer_claim", {}, "Buyer claim denied and seller payout resumed.")}
                 disabled={saving}
-                className="relay-button-secondary inline-flex items-center justify-center gap-2 bg-blue-500/20 text-[#7ca6ff]"
+                className="relay-button-secondary inline-flex items-center justify-center gap-2 !bg-[#5f8fff]/20 !text-[#7ca6ff] !border-[#5f8fff]/30"
               >
                 <Shield className="w-4 h-4" />
                 Deny Buyer Claim
@@ -622,7 +622,7 @@ export default function AdminDisputeDetailPage() {
                 <button
                   onClick={() => void submitAction("issue_refund_now", {}, "Refund issued through the existing payout/refund flow.")}
                   disabled={saving}
-                  className="relay-button-secondary inline-flex items-center justify-center gap-2 bg-red-500/20 text-red-300"
+                  className="relay-button-danger inline-flex items-center justify-center gap-2"
                 >
                   <HandCoins className="w-4 h-4" />
                   Issue Refund Now
@@ -653,7 +653,7 @@ export default function AdminDisputeDetailPage() {
                 <button
                   onClick={() => void submitAction("ban_seller", {}, "Seller banned.")}
                   disabled={saving}
-                  className="relay-button-secondary inline-flex items-center justify-center gap-2 bg-red-500/20 text-red-300"
+                  className="relay-button-danger inline-flex items-center justify-center gap-2"
                 >
                   <Ban className="w-4 h-4" />
                   Ban Seller
@@ -693,7 +693,7 @@ export default function AdminDisputeDetailPage() {
             </div>
           </div>
 
-          <div className="relay-card p-5 space-y-4">
+          <div className="relay-card p-4 sm:p-5 space-y-4">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#7ca6ff]" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Timeline / Event Log</h2>

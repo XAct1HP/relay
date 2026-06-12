@@ -85,8 +85,8 @@ function MetricCard({
   };
 
   return (
-    <div className="relay-card p-5">
-      <p className="text-white/50 text-xs uppercase tracking-[0.18em] mb-2">{label}</p>
+    <div className="relay-card p-4 sm:p-5">
+      <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
       <div className={`inline-flex px-3 py-2 rounded-xl border text-lg font-semibold ${tones[tone]}`}>
         {value}
       </div>
@@ -201,7 +201,7 @@ export default function AdminTrustDashboardPage() {
 
       {data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
             <MetricCard label="Sellers" value={data.metrics.sellerCount} />
             <MetricCard label="Pending Tier 3 Approval" value={data.metrics.pendingTier3Approvals} tone="amber" />
             <MetricCard label="Locked Tiers" value={data.metrics.lockedCount} tone="green" />
@@ -263,31 +263,41 @@ export default function AdminTrustDashboardPage() {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 xl:min-w-[780px]">
+                    {/* Desktop: grid layout / Mobile: compact inline stats */}
+                    <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-6 gap-3 xl:min-w-[780px]">
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">Score</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Score</p>
                         <p className="text-[#f5f7fb] font-semibold">{seller.trust_score}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">GMV</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">GMV</p>
                         <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.lifetime_gmv_cents)}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">Completed</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Completed</p>
                         <p className="text-[#f5f7fb] font-semibold">{seller.completed_order_count}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">Buyer Completion</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Buyer Completion</p>
                         <p className="text-[#f5f7fb] font-semibold">{formatPercent(seller.buyer_completion_rate_bps)}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">Reserve</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Reserve</p>
                         <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.reserve_balance_cents)}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-1">Review Queue</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Review Queue</p>
                         <p className="text-[#f5f7fb] font-semibold">{seller.review_queue_count}</p>
                       </div>
+                    </div>
+                    <div className="md:hidden flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <span className="text-white/50">Score <span className="text-[#f5f7fb] font-semibold">{seller.trust_score}</span></span>
+                      <span className="text-white/50">GMV <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.lifetime_gmv_cents)}</span></span>
+                      <span className="text-white/50">Orders <span className="text-[#f5f7fb] font-semibold">{seller.completed_order_count}</span></span>
+                      <span className="text-white/50">Reserve <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.reserve_balance_cents)}</span></span>
+                      {seller.review_queue_count > 0 && (
+                        <span className="text-amber-300 font-semibold">{seller.review_queue_count} to review</span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 text-[#7ca6ff] text-sm font-medium">

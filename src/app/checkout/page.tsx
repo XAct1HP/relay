@@ -499,7 +499,7 @@ export default function CheckoutPage() {
             )}
           </div>
           <div className="text-right">
-            <p className="text-xl font-bold text-relay-text">${shoePrice.toFixed(2)}</p>
+            <p className="text-xl font-bold text-relay-text">{"$"}{shoePrice.toFixed(2)}</p>
           </div>
         </div>
       </div>
@@ -634,13 +634,13 @@ export default function CheckoutPage() {
           <div className="space-y-3 mb-6">
             <div className="flex justify-between text-relay-muted">
               <span>Shoe Price</span>
-              <span className="text-relay-text">${shoePrice.toFixed(2)}</span>
+              <span className="text-relay-text">{"$"}{shoePrice.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-relay-muted">
               <span>
                 Shipping ({shippingRate.provider} - {shippingRate.servicelevel?.name})
               </span>
-              <span className="text-relay-text">${shippingCost.toFixed(2)}</span>
+              <span className="text-relay-text">{"$"}{shippingCost.toFixed(2)}</span>
             </div>
             {shippingRate.estimated_days && (
               <p className="text-xs text-relay-subtle">
@@ -649,7 +649,7 @@ export default function CheckoutPage() {
             )}
             <div className="border-t border-white/10 pt-3 flex justify-between">
               <span className="text-relay-text font-semibold">Total</span>
-              <span className="text-xl font-bold text-relay-text">${total.toFixed(2)}</span>
+              <span className="text-xl font-bold text-relay-text">{"$"}{total.toFixed(2)}</span>
             </div>
           </div>
 

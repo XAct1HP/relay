@@ -122,14 +122,14 @@ function OfferCard({
           <div className="flex justify-between items-center text-xs">
             <span className="text-white/60">Original Price</span>
             <span className="text-relay-text line-through">
-              ${offer.originalPrice.toFixed(2)}
+              {"$"}{offer.originalPrice.toFixed(2)}
             </span>
           </div>
         )}
         <div className="flex justify-between items-center text-sm">
           <span className="text-white/60">Offer Price</span>
           <span className="text-relay-accent font-semibold">
-            ${offer.offerPrice.toFixed(2)}
+            {"$"}{offer.offerPrice.toFixed(2)}
           </span>
         </div>
       </div>

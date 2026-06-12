@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   Camera,
   ChevronRight,
+  Filter,
   MessageSquare,
   Package,
   Shield,
@@ -44,6 +45,7 @@ interface UsedInventoryCard {
 }
 
 type InventoryTab = "new" | "used";
+type UsedSortOption = "price_asc" | "price_desc" | "size_asc" | "condition";
 
 interface ListingDetail {
   id: string;
@@ -109,6 +111,8 @@ export default function ListingDetailPage({
   const [messagingLoading, setMessagingLoading] = useState(false);
   const [sellerId, setSellerId] = useState<string | null>(null);
   const [isPreviewListing, setIsPreviewListing] = useState(false);
+  const [usedSort, setUsedSort] = useState<UsedSortOption>("price_asc");
+  const [usedSizeFilter, setUsedSizeFilter] = useState<string>("all");
 
   useEffect(() => {
     if (testModeLoading) {
@@ -444,6 +448,260 @@ export default function ListingDetailPage({
 
   const hasMultipleImages = listing.images.length > 1;
 
+  // Used inventory sort/filter logic
+  const usedSizes = [...new Set(listing.usedItems.map((item) => item.size))].sort(
+    (a, b) => parseFloat(a) - parseFloat(b)
+  );
+
+  const conditionRank: Record<string, number> = {
+    like_new: 0,
+    used_excellent: 1,
+    used_good: 2,
+    used_fair: 3,
+  };
+
+  const sortedUsedItems = [...listing.usedItems]
+    .filter((item) => usedSizeFilter === "all" || item.size === usedSizeFilter)
+    .sort((a, b) => {
+      switch (usedSort) {
+        case "price_asc":
+          return a.price - b.price;
+        case "price_desc":
+          return b.price - a.price;
+        case "size_asc":
+          return parseFloat(a.size) - parseFloat(b.size);
+        case "condition":
+          return (conditionRank[a.condition] ?? 9) - (conditionRank[b.condition] ?? 9);
+        default:
+          return 0;
+      }
+    });
+
+  const usedPriceRange =
+    listing.usedItems.length > 0
+      ? {
+          low: Math.min(...listing.usedItems.map((i) => i.price)),
+          high: Math.max(...listing.usedItems.map((i) => i.price)),
+        }
+      : null;
+
+  // Shared components for the page
+  const SellerCard = () => {
+    const cardContent = (
+      <div className={`relay-subcard p-4 ${!isPreviewListing ? "hover:border-white/20 transition-colors cursor-pointer" : ""} border border-white/10`}>
+        <div className="flex items-center gap-3 mb-4">
+          <img
+            src={listing.seller.avatar}
+            alt={listing.seller.displayName}
+            className="w-12 h-12 rounded-full border border-white/10"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-relay-text">{listing.seller.displayName}</p>
+              {listing.seller.isVerified && (
+                <BadgeCheck size={16} className="text-relay-accent flex-shrink-0" />
+              )}
+            </div>
+            <p className="text-sm text-relay-subtle">@{listing.seller.username}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/10">
+          <div>
+            <p className="text-relay-subtle text-xs">Sales</p>
+            <p className="text-relay-text font-semibold text-sm mt-1">
+              {listing.seller.totalSales.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-relay-subtle text-xs">Rating</p>
+            <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.rating}</p>
+          </div>
+          <div>
+            <p className="text-relay-subtle text-xs">Joined</p>
+            <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.joinedDate}</p>
+          </div>
+        </div>
+        <div className={`w-full mt-4 relay-button-secondary text-sm text-center ${isPreviewListing ? "opacity-70" : ""}`}>
+          {isPreviewListing ? "Preview Seller Card" : "View Profile"}
+        </div>
+      </div>
+    );
+
+    if (isPreviewListing) return cardContent;
+    return <Link href={`/profile/${listing.seller.username}`}>{cardContent}</Link>;
+  };
+
+  // Used inventory tab page-level view
+  if (inventoryTab === "used" && hasUsedInventory) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-6 text-sm text-relay-muted">
+          <Link href="/marketplace" className="hover:text-relay-text transition-colors">
+            Marketplace
+          </Link>
+          <ChevronRight size={16} />
+          <Link href={`/marketplace?brand=${listing.brand}`} className="hover:text-relay-text transition-colors">
+            {listing.brand}
+          </Link>
+          <ChevronRight size={16} />
+          <span className="text-relay-text">{listing.model}</span>
+        </div>
+
+        {/* Tab bar */}
+        {showInventoryTabs && (
+          <div className="relay-card p-1.5 mb-6">
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setInventoryTab("new")}
+                className="rounded-xl px-4 py-3 text-sm font-semibold transition-colors bg-white/5 text-relay-subtle hover:bg-white/10"
+              >
+                New / DS
+              </button>
+              <button
+                className="rounded-xl px-4 py-3 text-sm font-semibold transition-colors bg-relay-accent text-white"
+              >
+                Used ({listing.usedItems.length})
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Used page header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
+          <div>
+            <p className="relay-eyebrow text-relay-accent mb-2">{listing.brand}</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-relay-text">
+              {listing.model}
+              <span className="text-relay-subtle font-normal ml-3">Used Inventory</span>
+            </h1>
+            {usedPriceRange && (
+              <p className="text-relay-muted mt-2">
+                {listing.usedItems.length} pair{listing.usedItems.length !== 1 ? "s" : ""} available
+                {usedPriceRange.low !== usedPriceRange.high
+                  ? ` from $${usedPriceRange.low} to $${usedPriceRange.high}`
+                  : ` at $${usedPriceRange.low}`}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={handleMessageSeller}
+            disabled={messagingLoading || !viewerCanMessageSeller}
+            className="relay-button-secondary py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <MessageSquare size={16} />
+            {!viewerCanMessageSeller
+              ? "Messaging Unavailable"
+              : messagingLoading
+              ? "Opening..."
+              : "Message Seller"}
+          </button>
+        </div>
+
+        {/* Sort/filter bar */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-relay-subtle" />
+            <select
+              value={usedSizeFilter}
+              onChange={(e) => setUsedSizeFilter(e.target.value)}
+              className="relay-select !w-auto !py-2 !text-xs"
+            >
+              <option value="all">All Sizes</option>
+              {usedSizes.map((s) => (
+                <option key={s} value={s}>Size {s}</option>
+              ))}
+            </select>
+          </div>
+          <select
+            value={usedSort}
+            onChange={(e) => setUsedSort(e.target.value as UsedSortOption)}
+            className="relay-select !w-auto !py-2 !text-xs"
+          >
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="size_asc">Size: Small to Large</option>
+            <option value="condition">Condition: Best First</option>
+          </select>
+          {usedSizeFilter !== "all" && (
+            <button
+              onClick={() => setUsedSizeFilter("all")}
+              className="text-xs text-relay-accent hover:text-relay-accent/80 transition-colors"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+
+        {/* Used inventory grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {sortedUsedItems.map((usedItem) => (
+            <div key={usedItem.id} className="relay-card overflow-hidden group">
+              {/* Condition photo */}
+              <div className="relative aspect-square bg-white/[0.02]">
+                <img
+                  src={usedItem.conditionPhotoUrl}
+                  alt={`${listing.brand} ${listing.model} - Size ${usedItem.size}`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 rounded-lg bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[11px] font-medium text-white inline-flex items-center gap-1.5">
+                  <Camera size={12} />
+                  Condition Photo
+                </div>
+                <div className="absolute top-3 right-3 rounded-lg bg-black/60 backdrop-blur-sm px-2.5 py-1 text-sm font-semibold text-white">
+                  {"$"}{usedItem.price}
+                </div>
+              </div>
+              {/* Card body */}
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-relay-text font-semibold">Size {usedItem.size}</p>
+                    <p className="text-xs text-relay-subtle mt-0.5">
+                      {getUsedConditionLabel(usedItem.condition)}
+                    </p>
+                  </div>
+                  <p className="text-xl font-bold text-relay-text">{"$"}{usedItem.price}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!currentUser) {
+                      router.push("/auth/login");
+                      return;
+                    }
+                    router.push(`/checkout?listing=${params.id}&usedItem=${encodeURIComponent(usedItem.id)}`);
+                  }}
+                  disabled={isPreviewListing || sellerOnVacation}
+                  className="relay-button-accent w-full py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <ShoppingCart size={16} />
+                  {isPreviewListing ? "Preview Only" : sellerOnVacation ? "Seller Unavailable" : "Buy Now"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {sortedUsedItems.length === 0 && (
+          <div className="relay-empty text-center py-12 mb-8">
+            <p>No used pairs match this filter.</p>
+            <button
+              onClick={() => setUsedSizeFilter("all")}
+              className="text-sm text-relay-accent mt-2 hover:text-relay-accent/80 transition-colors"
+            >
+              Show all sizes
+            </button>
+          </div>
+        )}
+
+        {/* Seller card */}
+        <div className="max-w-sm">
+          <SellerCard />
+        </div>
+      </div>
+    );
+  }
+
+  // DS / New tab (default view)
   return (
     <div>
       <div className="flex items-center gap-2 mb-8 text-sm text-relay-muted">
@@ -462,7 +720,7 @@ export default function ListingDetailPage({
         <div className="flex h-full flex-col gap-4">
           <div className="flex items-start gap-3">
             {hasMultipleImages && (
-              <div className="flex w-[64px] flex-shrink-0 flex-col gap-2">
+              <div className="hidden sm:flex w-[64px] flex-shrink-0 flex-col gap-2">
                 {listing.images.map((imageUrl, index) => (
                   <button
                     key={index}
@@ -497,22 +755,36 @@ export default function ListingDetailPage({
               )}
 
               {hasMultipleImages && (
-                <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
-                  <p className="text-sm font-medium text-relay-text">
-                    {currentImageIndex + 1} / {totalImages}
-                  </p>
-                </div>
+                <>
+                  <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-lg bg-black/50 backdrop-blur-sm border border-white/20">
+                    <p className="text-sm font-medium text-relay-text">
+                      {currentImageIndex + 1} / {totalImages}
+                    </p>
+                  </div>
+                  {/* Mobile thumbnail strip */}
+                  <div className="sm:hidden absolute bottom-4 left-4 flex gap-1.5">
+                    {listing.images.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          currentImageIndex === index ? "bg-relay-accent w-5" : "bg-white/40"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
 
-          <div className="relay-card p-6 lg:flex-1">
-            <h2 className="text-xl font-semibold text-relay-text mb-4">Description</h2>
-            <p className="text-relay-muted leading-relaxed whitespace-pre-wrap">
+          <div className="relay-card p-5 sm:p-6 lg:flex-1">
+            <h2 className="text-lg sm:text-xl font-semibold text-relay-text mb-3 sm:mb-4">Description</h2>
+            <p className="text-relay-muted text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
               {displayDescription}
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 mt-6 border-t border-white/10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5 sm:pt-6 mt-5 sm:mt-6 border-t border-white/10">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <Shield size={16} className="text-relay-accent" />
@@ -595,51 +867,42 @@ export default function ListingDetailPage({
           </div>
 
           {showInventoryTabs && (
-            <div className="relay-card p-2">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="relay-card p-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  onClick={() => setInventoryTab("new")}
-                  className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                    inventoryTab === "new"
-                      ? "bg-relay-accent text-white"
-                      : "bg-white/5 text-relay-subtle hover:bg-white/10"
-                  }`}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold transition-colors bg-relay-accent text-white"
                 >
                   New / DS
                 </button>
                 <button
                   onClick={() => setInventoryTab("used")}
-                  className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                    inventoryTab === "used"
-                      ? "bg-relay-accent text-white"
-                      : "bg-white/5 text-relay-subtle hover:bg-white/10"
-                  }`}
+                  className="rounded-xl px-4 py-3 text-sm font-semibold transition-colors bg-white/5 text-relay-subtle hover:bg-white/10"
                 >
-                  Used
+                  Used ({listing.usedItems.length})
                 </button>
               </div>
             </div>
           )}
 
-          {hasDsInventory && inventoryTab === "new" && (
-            <div className="relay-card p-6">
+          {hasDsInventory && (
+            <div className="relay-card p-5 sm:p-6">
               <h2 className="text-sm font-semibold text-relay-text mb-4 uppercase tracking-wide">
                 Select Size
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
                 {dsSizes.map((sizeData) => (
                   <button
                     key={getSizeVariantKey(sizeData)}
                     onClick={() => setSelectedVariantId(getSizeVariantKey(sizeData))}
                     disabled={sizeData.quantity === 0}
-                    className={`inline-flex min-h-[64px] flex-col items-center justify-center rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`inline-flex min-h-[56px] sm:min-h-[64px] flex-col items-center justify-center rounded-xl px-2 sm:px-3 py-2.5 sm:py-3 text-sm font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${
                       selectedVariantId === getSizeVariantKey(sizeData)
                         ? "border-2 border-relay-accent bg-relay-accent/20 text-relay-accent ring-1 ring-relay-accent/25"
                         : "border border-white/10 bg-white/5 text-white hover:bg-white/10 hover:border-white/20"
                     }`}
                   >
-                    <span>Size {sizeData.size}</span>
-                    <span className="mt-1 text-[11px] uppercase tracking-[0.16em] text-white/55">
+                    <span>{sizeData.size}</span>
+                    <span className="mt-0.5 text-[10px] sm:text-[11px] uppercase tracking-[0.12em] sm:tracking-[0.16em] text-white/55">
                       New / DS
                     </span>
                   </button>
@@ -653,68 +916,12 @@ export default function ListingDetailPage({
             </div>
           )}
 
-          {hasUsedInventory && inventoryTab === "used" && (
-            <div className="space-y-4">
-              {listing.usedItems.map((usedItem) => (
-                <div key={usedItem.id} className="relay-card p-4">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="sm:w-28 sm:flex-shrink-0">
-                      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] aspect-square">
-                        <img
-                          src={usedItem.conditionPhotoUrl}
-                          alt={`${listing.brand} ${listing.model} condition photo`}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 rounded-lg bg-black/60 px-2 py-1 text-[11px] font-medium text-white inline-flex items-center gap-1">
-                          <Camera size={12} />
-                          Photo
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-relay-text font-semibold">Size {usedItem.size}</p>
-                          <p className="text-sm text-relay-subtle mt-1">
-                            {getUsedConditionLabel(usedItem.condition)}
-                          </p>
-                        </div>
-                        <p className="text-2xl font-bold text-relay-text">${usedItem.price}</p>
-                      </div>
-                      <div className="mt-4 flex flex-col gap-2">
-                        <button
-                          onClick={() => {
-                            if (!currentUser) {
-                              router.push("/auth/login");
-                              return;
-                            }
-                            router.push(`/checkout?listing=${params.id}&usedItem=${encodeURIComponent(usedItem.id)}`);
-                          }}
-                          disabled={isPreviewListing || sellerOnVacation}
-                          className="relay-button-accent w-full sm:w-auto py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          <ShoppingCart size={18} />
-                          {isPreviewListing ? "Preview Only" : sellerOnVacation ? "Seller Unavailable" : "Buy Now"}
-                        </button>
-                        <p className="text-xs text-relay-subtle">
-                          This is an individual used pair with its own condition photo.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {hasDsInventory && inventoryTab === "new" && (
-            <div className="relay-card p-6">
-              <div className="text-3xl font-bold text-relay-text mb-2">{displayPrice}</div>
-              <p className="text-xs text-relay-subtle">
-                {isPreviewListing ? "Preview listing for staging test mode" : "1% platform fee included"}
-              </p>
-            </div>
-          )}
+          <div className="relay-card p-5 sm:p-6">
+            <div className="text-3xl font-bold text-relay-text mb-2">{displayPrice}</div>
+            <p className="text-xs text-relay-subtle">
+              {isPreviewListing ? "Preview listing for staging test mode" : "1% platform fee included"}
+            </p>
+          </div>
 
           {sellerOnVacation && (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
@@ -724,25 +931,23 @@ export default function ListingDetailPage({
           )}
 
           <div className="flex flex-col gap-2">
-            {hasDsInventory && inventoryTab === "new" && (
-              <button
-                onClick={() => {
-                  if (!currentUser) {
-                    router.push("/auth/login");
-                    return;
-                  }
-                  const variantParam = selectedSizeData?.id
-                    ? `&variant=${encodeURIComponent(selectedSizeData.id)}`
-                    : "";
-                  router.push(`/checkout?listing=${params.id}&size=${encodeURIComponent(selectedSizeData?.size || "")}${variantParam}`);
-                }}
-                disabled={!selectedSizeData || isPreviewListing || sellerOnVacation}
-                className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <ShoppingCart size={20} />
-                {isPreviewListing ? "Preview Only" : sellerOnVacation ? "Seller Unavailable" : "Buy Now"}
-              </button>
-            )}
+            <button
+              onClick={() => {
+                if (!currentUser) {
+                  router.push("/auth/login");
+                  return;
+                }
+                const variantParam = selectedSizeData?.id
+                  ? `&variant=${encodeURIComponent(selectedSizeData.id)}`
+                  : "";
+                router.push(`/checkout?listing=${params.id}&size=${encodeURIComponent(selectedSizeData?.size || "")}${variantParam}`);
+              }}
+              disabled={!selectedSizeData || isPreviewListing || sellerOnVacation}
+              className="relay-button-accent w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={20} />
+              {isPreviewListing ? "Preview Only" : sellerOnVacation ? "Seller Unavailable" : "Buy Now"}
+            </button>
 
             <button
               onClick={handleMessageSeller}
@@ -770,89 +975,25 @@ export default function ListingDetailPage({
             )}
           </div>
 
-          {isPreviewListing ? (
-            <div className="relay-subcard p-4 border border-white/10">
-              <div className="flex items-center gap-3 mb-4">
-                <img
-                  src={listing.seller.avatar}
-                  alt={listing.seller.displayName}
-                  className="w-12 h-12 rounded-full border border-white/10"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-relay-text">{listing.seller.displayName}</p>
-                    {listing.seller.isVerified && (
-                      <BadgeCheck size={16} className="text-relay-accent flex-shrink-0" />
-                    )}
-                  </div>
-                  <p className="text-sm text-relay-subtle">@{listing.seller.username}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/10">
+          {/* Only show "used pairs available" hint on DS tab when used inventory exists */}
+          {hasUsedInventory && !showInventoryTabs && (
+            <button
+              onClick={() => setInventoryTab("used")}
+              className="relay-card-soft p-4 text-left hover:bg-white/[0.05] transition-colors cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-relay-subtle text-xs">Sales</p>
-                  <p className="text-relay-text font-semibold text-sm mt-1">
-                    {listing.seller.totalSales.toLocaleString()}
+                  <p className="text-sm font-semibold text-relay-text">Used pairs available</p>
+                  <p className="text-xs text-relay-subtle mt-0.5">
+                    {listing.usedItems.length} pre-owned pair{listing.usedItems.length !== 1 ? "s" : ""} from {"$"}{usedPriceRange?.low}
                   </p>
                 </div>
-                <div>
-                  <p className="text-relay-subtle text-xs">Rating</p>
-                  <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.rating}</p>
-                </div>
-                <div>
-                  <p className="text-relay-subtle text-xs">Joined</p>
-                  <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.joinedDate}</p>
-                </div>
+                <ChevronRight size={16} className="text-relay-accent" />
               </div>
-
-              <div className="w-full mt-4 relay-button-secondary text-sm text-center opacity-70">
-                Preview Seller Card
-              </div>
-            </div>
-          ) : (
-            <Link href={`/profile/${listing.seller.username}`}>
-              <div className="relay-subcard p-4 hover:border-white/20 transition-colors cursor-pointer">
-                <div className="flex items-center gap-3 mb-4">
-                  <img
-                    src={listing.seller.avatar}
-                    alt={listing.seller.displayName}
-                    className="w-12 h-12 rounded-full border border-white/10"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-relay-text">{listing.seller.displayName}</p>
-                      {listing.seller.isVerified && (
-                        <BadgeCheck size={16} className="text-relay-accent flex-shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-sm text-relay-subtle">@{listing.seller.username}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-white/10">
-                  <div>
-                    <p className="text-relay-subtle text-xs">Sales</p>
-                    <p className="text-relay-text font-semibold text-sm mt-1">
-                      {listing.seller.totalSales.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-relay-subtle text-xs">Rating</p>
-                    <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.rating}</p>
-                  </div>
-                  <div>
-                    <p className="text-relay-subtle text-xs">Joined</p>
-                    <p className="text-relay-text font-semibold text-sm mt-1">{listing.seller.joinedDate}</p>
-                  </div>
-                </div>
-
-                <button className="w-full mt-4 relay-button-secondary text-sm">
-                  View Profile
-                </button>
-              </div>
-            </Link>
+            </button>
           )}
+
+          <SellerCard />
         </div>
       </div>
     </div>

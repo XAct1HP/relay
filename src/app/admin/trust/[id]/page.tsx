@@ -318,9 +318,9 @@ export default function AdminSellerTrustDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-6">
-          <div className="relay-card p-5">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        <div className="xl:col-span-2 space-y-4 sm:space-y-6">
+          <div className="relay-card p-4 sm:p-5">
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <span className="px-3 py-1 rounded-full bg-[#5f8fff]/15 text-[#7ca6ff] text-sm font-semibold">
                 Current {formatTier(seller.seller_tier)}
@@ -348,27 +348,27 @@ export default function AdminSellerTrustDetailPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Trust Score</p>
-                <p className="text-[#f5f7fb] text-2xl font-semibold">{seller.trust_score || 0}</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Trust Score</p>
+                <p className="text-[#f5f7fb] text-xl sm:text-2xl font-semibold">{seller.trust_score || 0}</p>
               </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Lifetime GMV</p>
-                <p className="text-[#f5f7fb] text-2xl font-semibold">{formatMoney(seller.lifetime_gmv_cents || 0)}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Lifetime GMV</p>
+                <p className="text-[#f5f7fb] text-xl sm:text-2xl font-semibold">{formatMoney(seller.lifetime_gmv_cents || 0)}</p>
               </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Completed Orders</p>
-                <p className="text-[#f5f7fb] text-2xl font-semibold">{seller.completed_order_count || 0}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Completed</p>
+                <p className="text-[#f5f7fb] text-xl sm:text-2xl font-semibold">{seller.completed_order_count || 0}</p>
               </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Buyer Completion</p>
-                <p className="text-[#f5f7fb] text-2xl font-semibold">{formatPercent(seller.buyer_completion_rate_bps)}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Buyer Completion</p>
+                <p className="text-[#f5f7fb] text-xl sm:text-2xl font-semibold">{formatPercent(seller.buyer_completion_rate_bps)}</p>
               </div>
             </div>
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Shield className="w-5 h-5 text-[#7ca6ff]" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Trust Score Breakdown</h2>
@@ -378,7 +378,7 @@ export default function AdminSellerTrustDetailPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries((latestEvaluation.breakdown as Record<string, number>) || {}).map(([key, value]) => (
                   <div key={key} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                    <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">
+                    <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-1">
                       {key.replace(/([A-Z])/g, " $1")}
                     </p>
                     <p className="text-[#f5f7fb] text-xl font-semibold">{value}</p>
@@ -390,24 +390,24 @@ export default function AdminSellerTrustDetailPage() {
             )}
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Archive className="w-5 h-5 text-emerald-300" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Reserve Balance</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Balance</p>
-                <p className="text-[#f5f7fb] text-xl font-semibold">{formatMoney(reserveAccount?.balance_cents || 0)}</p>
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-5">
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Balance</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(reserveAccount?.balance_cents || 0)}</p>
               </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Reserve Rate</p>
-                <p className="text-[#f5f7fb] text-xl font-semibold">{formatPercent(reserveAccount?.reserve_percentage_bps || 0)}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Rate</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatPercent(reserveAccount?.reserve_percentage_bps || 0)}</p>
               </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.16em] mb-1">Minimum Balance</p>
-                <p className="text-[#f5f7fb] text-xl font-semibold">{formatMoney(reserveAccount?.minimum_balance_cents || 0)}</p>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Minimum</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(reserveAccount?.minimum_balance_cents || 0)}</p>
               </div>
             </div>
 
@@ -425,7 +425,7 @@ export default function AdminSellerTrustDetailPage() {
             </div>
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Flag className="w-5 h-5 text-red-300" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Violations</h2>
@@ -476,8 +476,8 @@ export default function AdminSellerTrustDetailPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="relay-card p-5">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="relay-card p-4 sm:p-5">
             <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Manual Controls</h2>
             <div className="space-y-3">
               <select
@@ -521,7 +521,7 @@ export default function AdminSellerTrustDetailPage() {
             </div>
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Tag className="w-5 h-5 text-amber-300" />
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Tag Inventory</h2>
@@ -544,7 +544,7 @@ export default function AdminSellerTrustDetailPage() {
             </div>
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Recent Order Payouts</h2>
             <div className="space-y-3">
               {recentOrders.map((order) => (
@@ -628,7 +628,7 @@ export default function AdminSellerTrustDetailPage() {
             </div>
           </div>
 
-          <div className="relay-card p-5">
+          <div className="relay-card p-4 sm:p-5">
             <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Orders Requiring Review</h2>
             <div className="space-y-2">
               {reviewOrders.map((order) => (
@@ -647,8 +647,8 @@ export default function AdminSellerTrustDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="relay-card p-5">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+        <div className="relay-card p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Tier History</h2>
           <div className="space-y-2">
             {tierHistory.map((entry) => (
@@ -669,7 +669,7 @@ export default function AdminSellerTrustDetailPage() {
           </div>
         </div>
 
-        <div className="relay-card p-5">
+        <div className="relay-card p-4 sm:p-5">
           <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Recent Evaluations</h2>
           <div className="space-y-2">
             {evaluations.map((evaluation) => (
