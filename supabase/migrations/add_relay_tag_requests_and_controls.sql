@@ -3,15 +3,24 @@
 -- Additional workflow support for tag inventory management.
 -- ============================================================================
 
-ALTER TABLE relay_tags ADD COLUMN IF NOT EXISTS assigned_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
-ALTER TABLE relay_tags ADD COLUMN IF NOT EXISTS voided_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
-ALTER TABLE relay_tags ADD COLUMN IF NOT EXISTS void_reason TEXT;
-ALTER TABLE relay_tags ADD COLUMN IF NOT EXISTS source_batch_label TEXT;
-ALTER TABLE relay_tags ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+-- `relay_tags` is introduced in the seller trust foundation migration, but some
+-- environments may apply this file earlier because our migration files are
+-- ordered lexicographically instead of timestamped. Guard the admin metadata
+-- changes so fresh installs do not fail before `relay_tags` exists.
+ALTER TABLE IF EXISTS relay_tags ADD COLUMN IF NOT EXISTS assigned_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS relay_tags ADD COLUMN IF NOT EXISTS voided_by_admin_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS relay_tags ADD COLUMN IF NOT EXISTS void_reason TEXT;
+ALTER TABLE IF EXISTS relay_tags ADD COLUMN IF NOT EXISTS source_batch_label TEXT;
+ALTER TABLE IF EXISTS relay_tags ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
 
-CREATE INDEX IF NOT EXISTS idx_relay_tags_assigned_by_admin_id ON relay_tags(assigned_by_admin_id);
-CREATE INDEX IF NOT EXISTS idx_relay_tags_voided_by_admin_id ON relay_tags(voided_by_admin_id);
-CREATE INDEX IF NOT EXISTS idx_relay_tags_source_batch_label ON relay_tags(source_batch_label);
+DO $$
+BEGIN
+  IF to_regclass('public.relay_tags') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_relay_tags_assigned_by_admin_id ON relay_tags(assigned_by_admin_id);
+    CREATE INDEX IF NOT EXISTS idx_relay_tags_voided_by_admin_id ON relay_tags(voided_by_admin_id);
+    CREATE INDEX IF NOT EXISTS idx_relay_tags_source_batch_label ON relay_tags(source_batch_label);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS seller_tag_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
