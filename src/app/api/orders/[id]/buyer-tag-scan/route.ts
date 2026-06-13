@@ -24,14 +24,14 @@ export async function POST(
       assertStorageObjectRefForOrder(body.buyerTagPhotoUrl, {
         bucket: "order-photos",
         orderId,
-        allowedPrefixes: ["buyer-evidence/", "buyer-custody/"],
+        allowedPrefixes: ["buyer-custody/"],
       });
     }
     if (typeof body?.buyerPairPhotoUrl === "string") {
       assertStorageObjectRefForOrder(body.buyerPairPhotoUrl, {
         bucket: "order-photos",
         orderId,
-        allowedPrefixes: ["buyer-evidence/", "buyer-custody/"],
+        allowedPrefixes: ["buyer-custody/"],
       });
     }
 

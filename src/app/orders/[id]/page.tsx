@@ -20,7 +20,6 @@ import {
   Star,
   Upload,
   X,
-  Eye,
   Shield,
   MapPin,
   User,
@@ -68,6 +67,7 @@ interface OrderData {
   trackingNumber?: string
   shippingLabelUrl?: string
   authPhotos?: string[]
+  payoutLastError?: string
   checkcheckCertificateUrl?: string
   challengeCode?: string
   disputeReason?: string
@@ -99,6 +99,10 @@ interface OrderData {
   custodyVerificationStatus?: string
   custodyAdminReviewRequired?: boolean
   sellerScannedTagValue?: string
+  sellerTagPhotoUrl?: string
+  sellerPairPhotoUrl?: string
+  sellerBoxPhotoUrl?: string
+  sellerSealedPackagePhotoUrl?: string
   buyerScannedTagValue?: string
   buyerTagPhotoUrl?: string
   buyerPairPhotoUrl?: string
@@ -155,8 +159,6 @@ const statusConfig: Record<OrderStatus, { label: string; icon: React.ReactNode; 
 }
 
 const AUTH_EXEMPT_BRANDS = new Set(["Individual Brand", "Custom"])
-
-const AUTH_ANGLES = ["Front", "Back", "Medial Side", "Lateral Side", "Sole", "Size Tag", "With Challenge Code", "Packed Shipment"]
 
 function formatDisputeCategoryLabel(category?: string | null) {
   if (!category) return "Dispute"
@@ -485,18 +487,130 @@ const DisputeForm = ({
 interface BuyerCompletionSubmission {
   rating: number
   comment: string
-  scannedValue: string
-  tagPhotoFile: File | null
-  pairPhotoFile: File | null
 }
 
 interface BuyerDisputeSubmission {
   category: string
   description: string
   evidenceFiles: File[]
-  scannedValue: string
-  tagPhotoFile: File | null
-  pairPhotoFile: File | null
+}
+
+const BuyerRelayCapturePanel = ({
+  mobileCaptureUrl,
+  expectedTagValue,
+  existingScannedValue,
+  existingTagPhotoUrl,
+  existingPairPhotoUrl,
+  isMobileDevice,
+  onRefreshEvidence,
+  refreshingEvidence,
+}: {
+  mobileCaptureUrl: string
+  expectedTagValue?: string
+  existingScannedValue?: string
+  existingTagPhotoUrl?: string
+  existingPairPhotoUrl?: string
+  isMobileDevice: boolean
+  onRefreshEvidence: () => void
+  refreshingEvidence: boolean
+}) => {
+  const captureQrUrl = mobileCaptureUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileCaptureUrl)}`
+    : ""
+  const captureComplete =
+    Boolean(existingScannedValue?.trim()) && Boolean(existingTagPhotoUrl) && Boolean(existingPairPhotoUrl)
+
+  return (
+    <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-[#f5f7fb] mb-1">Buyer Relay verification</p>
+        <p className="text-xs text-white/50">
+          Relay compares the buyer tag scan and live camera photos to the seller-bound order tag.
+          {expectedTagValue && (
+            <> Expected tag: <span className="font-mono text-[#7ca6ff]">{expectedTagValue}</span></>
+          )}
+        </p>
+      </div>
+
+      {captureComplete ? (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+          <p className="text-sm text-emerald-300">
+            Live buyer verification is on file.
+          </p>
+          <p className="text-xs text-white/50 mt-1">
+            Recorded tag: <span className="font-mono text-[#7ca6ff]">{existingScannedValue}</span>
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-sm text-amber-300">
+            Live buyer verification is still required before you can continue.
+          </p>
+          <p className="text-xs text-white/50 mt-1">
+            Desktop uploads are disabled for tag verification.
+          </p>
+        </div>
+      )}
+
+      {isMobileDevice ? (
+        <a
+          href={mobileCaptureUrl}
+          className="relay-button-primary w-full flex items-center justify-center gap-2"
+        >
+          <QrCode className="w-4 h-4" />
+          Open Live Camera Capture
+        </a>
+      ) : (
+        <div className="rounded-lg border border-white/10 bg-[#06070a] p-4 text-center">
+          <p className="text-sm font-semibold text-[#f5f7fb] mb-2">Scan with your phone</p>
+          <p className="text-xs text-white/50 mb-4">
+            Use your phone to capture the Relay tag and pair photos live. Desktop uploads are disabled for this step.
+          </p>
+          {captureQrUrl && (
+            <img
+              src={captureQrUrl}
+              alt="QR code for buyer Relay verification"
+              className="mx-auto rounded-lg"
+              width={220}
+              height={220}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-white/50">TAG ATTACHED TO SHOES</p>
+          {existingTagPhotoUrl ? (
+            <img src={existingTagPhotoUrl} alt="Buyer tag evidence" className="w-full h-40 object-cover rounded-lg" />
+          ) : (
+            <div className="h-40 rounded-lg border border-dashed border-white/10 bg-white/5 flex items-center justify-center text-xs text-white/35">
+              Awaiting live capture
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-white/50">PAIR PHOTO</p>
+          {existingPairPhotoUrl ? (
+            <img src={existingPairPhotoUrl} alt="Buyer pair evidence" className="w-full h-40 object-cover rounded-lg" />
+          ) : (
+            <div className="h-40 rounded-lg border border-dashed border-white/10 bg-white/5 flex items-center justify-center text-xs text-white/35">
+              Awaiting live capture
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onRefreshEvidence}
+        disabled={refreshingEvidence}
+        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-[#f5f7fb] hover:bg-white/10 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        {refreshingEvidence && <Loader2 className="w-4 h-4 animate-spin" />}
+        Refresh Verification Status
+      </button>
+    </div>
+  )
 }
 
 const BuyerCompletionModal = ({
@@ -505,6 +619,10 @@ const BuyerCompletionModal = ({
   existingScannedValue,
   existingTagPhotoUrl,
   existingPairPhotoUrl,
+  mobileCaptureUrl,
+  isMobileDevice,
+  onRefreshEvidence,
+  refreshingEvidence,
   onSubmit,
   onClose,
   submitting,
@@ -514,6 +632,10 @@ const BuyerCompletionModal = ({
   existingScannedValue?: string
   existingTagPhotoUrl?: string
   existingPairPhotoUrl?: string
+  mobileCaptureUrl: string
+  isMobileDevice: boolean
+  onRefreshEvidence: () => void
+  refreshingEvidence: boolean
   onSubmit: (payload: BuyerCompletionSubmission) => void
   onClose: () => void
   submitting: boolean
@@ -521,19 +643,14 @@ const BuyerCompletionModal = ({
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState("")
   const [hoveredRating, setHoveredRating] = useState(0)
-  const [scannedValue, setScannedValue] = useState(existingScannedValue || "")
-  const [tagPhotoFile, setTagPhotoFile] = useState<File | null>(null)
-  const [pairPhotoFile, setPairPhotoFile] = useState<File | null>(null)
-  const [tagPhotoPreview, setTagPhotoPreview] = useState(existingTagPhotoUrl || "")
-  const [pairPhotoPreview, setPairPhotoPreview] = useState(existingPairPhotoUrl || "")
 
   if (typeof document === "undefined") return null
 
   const custodyReady =
     !requiresRelayCustody ||
-    (!!scannedValue.trim() &&
-      (!!tagPhotoFile || !!existingTagPhotoUrl) &&
-      (!!pairPhotoFile || !!existingPairPhotoUrl))
+    (!!existingScannedValue?.trim() &&
+      !!existingTagPhotoUrl &&
+      !!existingPairPhotoUrl)
 
   return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999]">
@@ -546,62 +663,17 @@ const BuyerCompletionModal = ({
         </div>
 
         {requiresRelayCustody && (
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4 mb-6 space-y-4">
-            <div>
-              <p className="text-sm font-semibold text-[#f5f7fb] mb-1">Buyer Relay verification</p>
-              <p className="text-xs text-white/50">
-                Enter the Relay tag serial or barcode and upload your delivery photos before completion.
-                {expectedTagValue && (
-                  <> Expected tag: <span className="font-mono text-[#7ca6ff]">{expectedTagValue}</span></>
-                )}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Relay tag serial or barcode</label>
-              <input
-                value={scannedValue}
-                onChange={(e) => setScannedValue(e.target.value)}
-                placeholder="Enter the Relay tag serial or barcode"
-                className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-[#f5f7fb] placeholder-white/40 text-sm focus:outline-none focus:border-[#5f8fff]"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Tag attached to shoes</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    setTagPhotoFile(file)
-                    if (file) setTagPhotoPreview(URL.createObjectURL(file))
-                  }}
-                  className="block w-full text-sm text-[#7ca6ff]"
-                />
-                {tagPhotoPreview && (
-                  <img src={tagPhotoPreview} alt="Buyer tag preview" className="mt-3 w-full h-40 object-cover rounded-lg" />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Photo of the pair</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    setPairPhotoFile(file)
-                    if (file) setPairPhotoPreview(URL.createObjectURL(file))
-                  }}
-                  className="block w-full text-sm text-[#7ca6ff]"
-                />
-                {pairPhotoPreview && (
-                  <img src={pairPhotoPreview} alt="Buyer pair preview" className="mt-3 w-full h-40 object-cover rounded-lg" />
-                )}
-              </div>
-            </div>
+          <div className="mb-6">
+            <BuyerRelayCapturePanel
+              mobileCaptureUrl={mobileCaptureUrl}
+              expectedTagValue={expectedTagValue}
+              existingScannedValue={existingScannedValue}
+              existingTagPhotoUrl={existingTagPhotoUrl}
+              existingPairPhotoUrl={existingPairPhotoUrl}
+              isMobileDevice={isMobileDevice}
+              onRefreshEvidence={onRefreshEvidence}
+              refreshingEvidence={refreshingEvidence}
+            />
           </div>
         )}
 
@@ -642,9 +714,6 @@ const BuyerCompletionModal = ({
               onSubmit({
                 rating,
                 comment,
-                scannedValue,
-                tagPhotoFile,
-                pairPhotoFile,
               })
             }
             disabled={rating === 0 || submitting || !custodyReady}
@@ -666,6 +735,10 @@ const BuyerDisputeForm = ({
   existingScannedValue,
   existingTagPhotoUrl,
   existingPairPhotoUrl,
+  mobileCaptureUrl,
+  isMobileDevice,
+  onRefreshEvidence,
+  refreshingEvidence,
   onSubmit,
   onCancel,
   submitting,
@@ -675,6 +748,10 @@ const BuyerDisputeForm = ({
   existingScannedValue?: string
   existingTagPhotoUrl?: string
   existingPairPhotoUrl?: string
+  mobileCaptureUrl: string
+  isMobileDevice: boolean
+  onRefreshEvidence: () => void
+  refreshingEvidence: boolean
   onSubmit: (payload: BuyerDisputeSubmission) => void
   onCancel: () => void
   submitting: boolean
@@ -684,11 +761,6 @@ const BuyerDisputeForm = ({
   const [showDropdown, setShowDropdown] = useState(false)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const [evidencePreviews, setEvidencePreviews] = useState<string[]>([])
-  const [scannedValue, setScannedValue] = useState(existingScannedValue || "")
-  const [tagPhotoFile, setTagPhotoFile] = useState<File | null>(null)
-  const [pairPhotoFile, setPairPhotoFile] = useState<File | null>(null)
-  const [tagPhotoPreview, setTagPhotoPreview] = useState(existingTagPhotoUrl || "")
-  const [pairPhotoPreview, setPairPhotoPreview] = useState(existingPairPhotoUrl || "")
   const evidenceInputRef = useRef<HTMLInputElement>(null)
 
   const rule = category
@@ -702,9 +774,9 @@ const BuyerDisputeForm = ({
       !existingPairPhotoUrl)
   const missingAuthenticityCustody =
     category === "authenticity" &&
-    (!scannedValue.trim() ||
-      !(tagPhotoFile || existingTagPhotoUrl) ||
-      !(pairPhotoFile || existingPairPhotoUrl))
+    (!existingScannedValue?.trim() ||
+      !existingTagPhotoUrl ||
+      !existingPairPhotoUrl)
 
   const handleAddEvidence = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -776,63 +848,16 @@ const BuyerDisputeForm = ({
         </div>
 
         {showCustodySection && (
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-4">
-            <div>
-              <p className="text-sm font-semibold text-[#f5f7fb] mb-1">Buyer Relay verification</p>
-              <p className="text-xs text-white/50">
-                Relay compares this scan and these photos to the seller-bound order tag.
-                {expectedTagValue && (
-                  <> Expected tag: <span className="font-mono text-[#7ca6ff]">{expectedTagValue}</span></>
-                )}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Relay tag serial or barcode</label>
-              <input
-                value={scannedValue}
-                onChange={(e) => setScannedValue(e.target.value)}
-                placeholder="Enter the Relay tag serial or barcode"
-                className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-[#f5f7fb] placeholder-white/40 text-sm focus:outline-none focus:border-[#5f8fff]"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Relay tag photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    setTagPhotoFile(file)
-                    if (file) setTagPhotoPreview(URL.createObjectURL(file))
-                  }}
-                  className="block w-full text-sm text-[#7ca6ff]"
-                />
-                {tagPhotoPreview && (
-                  <img src={tagPhotoPreview} alt="Relay tag preview" className="mt-3 w-full h-36 object-cover rounded-lg" />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#f5f7fb] mb-2">Pair photo</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    setPairPhotoFile(file)
-                    if (file) setPairPhotoPreview(URL.createObjectURL(file))
-                  }}
-                  className="block w-full text-sm text-[#7ca6ff]"
-                />
-                {pairPhotoPreview && (
-                  <img src={pairPhotoPreview} alt="Pair preview" className="mt-3 w-full h-36 object-cover rounded-lg" />
-                )}
-              </div>
-            </div>
-          </div>
+          <BuyerRelayCapturePanel
+            mobileCaptureUrl={mobileCaptureUrl}
+            expectedTagValue={expectedTagValue}
+            existingScannedValue={existingScannedValue}
+            existingTagPhotoUrl={existingTagPhotoUrl}
+            existingPairPhotoUrl={existingPairPhotoUrl}
+            isMobileDevice={isMobileDevice}
+            onRefreshEvidence={onRefreshEvidence}
+            refreshingEvidence={refreshingEvidence}
+          />
         )}
 
         <div>
@@ -878,9 +903,6 @@ const BuyerDisputeForm = ({
               category,
               description,
               evidenceFiles,
-              scannedValue,
-              tagPhotoFile,
-              pairPhotoFile,
             })
           }
           disabled={!category || !description || submitting || missingAuthenticityCustody}
@@ -915,6 +937,8 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   const [showDisputeForm, setShowDisputeForm] = useState(false)
   const [showQrCode, setShowQrCode] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isMobileDevice, setIsMobileDevice] = useState(false)
+  const [refreshingBuyerCustody, setRefreshingBuyerCustody] = useState(false)
 
   // Action loading states
   const [generatingLabel, setGeneratingLabel] = useState(false)
@@ -984,6 +1008,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       trackingNumber: data.tracking_number || undefined,
       shippingLabelUrl: data.shipping_label_url || undefined,
       authPhotos: data.auth_photos || undefined,
+      payoutLastError: data.payout_last_error || undefined,
       checkcheckCertificateUrl: data.checkcheck_certificate_url || undefined,
       challengeCode: data.challenge_code || undefined,
       disputeReason: activeDispute?.category || data.dispute_reason || undefined,
@@ -1019,6 +1044,10 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       custodyVerificationStatus: custody?.verification_status || undefined,
       custodyAdminReviewRequired: Boolean(custody?.admin_review_required),
       sellerScannedTagValue: custody?.seller_scanned_tag_value || undefined,
+      sellerTagPhotoUrl: custody?.seller_tag_photo_url || undefined,
+      sellerPairPhotoUrl: custody?.seller_pair_photo_url || undefined,
+      sellerBoxPhotoUrl: custody?.seller_box_photo_url || undefined,
+      sellerSealedPackagePhotoUrl: custody?.seller_sealed_package_photo_url || undefined,
       buyerScannedTagValue: custody?.buyer_scanned_tag_value || undefined,
       buyerTagPhotoUrl: custody?.buyer_tag_photo_url || undefined,
       buyerPairPhotoUrl: custody?.buyer_pair_photo_url || undefined,
@@ -1054,9 +1083,52 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     void loadFulfillmentStatus()
   }, [order?.id, order?.isAuthExempt, order?.legacyAuthFlow, currentUser?.id])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const updateMobileState = () => {
+      setIsMobileDevice(
+        window.matchMedia("(max-width: 768px), (pointer: coarse)").matches
+      )
+    }
+
+    updateMobileState()
+    window.addEventListener("resize", updateMobileState)
+
+    return () => {
+      window.removeEventListener("resize", updateMobileState)
+    }
+  }, [])
+
   // ── Helpers ──
   const currentStatus = statusOverride || order?.status || "paid"
   const isAuthExemptOrder = Boolean(order?.isAuthExempt && order?.legacyAuthFlow)
+  const sellerCustodyEvidence = [
+    order?.sellerTagPhotoUrl
+      ? { label: "Tag Through Both Shoes", url: order.sellerTagPhotoUrl }
+      : null,
+    order?.sellerPairPhotoUrl
+      ? { label: "Pair Photo", url: order.sellerPairPhotoUrl }
+      : null,
+    order?.sellerBoxPhotoUrl
+      ? { label: "Pair In Box", url: order.sellerBoxPhotoUrl }
+      : null,
+    order?.sellerSealedPackagePhotoUrl
+      ? { label: "Sealed Package / Label", url: order.sellerSealedPackagePhotoUrl }
+      : null,
+  ].filter((item): item is { label: string; url: string } => Boolean(item))
+  const mobileBuyerReviewUrl = order
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/mobile-order-review/${order.id}`
+    : ""
+
+  const refreshBuyerCustodyEvidence = async () => {
+    setRefreshingBuyerCustody(true)
+    try {
+      await loadOrder()
+    } finally {
+      setRefreshingBuyerCustody(false)
+    }
+  }
 
   const handleCopyTracking = () => {
     if (order?.trackingNumber) {
@@ -1095,57 +1167,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
     const payload = await res.json()
     return (payload.storageRef || payload.url) as string
-  }
-
-  const submitBuyerCustodyEvidence = async (input: {
-    scannedValue: string
-    tagPhotoFile: File | null
-    pairPhotoFile: File | null
-    requireFreshInput: boolean
-  }) => {
-    if (!order || !order.relayTagRequired || order.legacyAuthFlow) {
-      return
-    }
-
-    const hasExistingEvidence =
-      !!order.buyerScannedTagValue && !!order.buyerTagPhotoUrl && !!order.buyerPairPhotoUrl
-
-    if (!input.requireFreshInput && hasExistingEvidence) {
-      return
-    }
-
-    const scannedValue = input.scannedValue.trim()
-    if (!scannedValue) {
-      throw new Error("Relay tag serial or barcode is required")
-    }
-
-    const buyerTagPhotoUrl = input.tagPhotoFile
-      ? await uploadEvidenceFile(input.tagPhotoFile, `buyer-tag-${Date.now()}.jpg`)
-      : order.buyerTagPhotoUrl
-    const buyerPairPhotoUrl = input.pairPhotoFile
-      ? await uploadEvidenceFile(input.pairPhotoFile, `buyer-pair-${Date.now()}.jpg`)
-      : order.buyerPairPhotoUrl
-
-    if (!buyerTagPhotoUrl || !buyerPairPhotoUrl) {
-      throw new Error("Buyer tag photo and pair photo are required")
-    }
-
-    const res = await fetch(`/api/orders/${order.id}/buyer-tag-scan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scannedValue,
-        buyerTagPhotoUrl,
-        buyerPairPhotoUrl,
-      }),
-    })
-
-    const payload = await res.json()
-    if (!res.ok) {
-      throw new Error(payload.error || "Failed to submit buyer Relay tag scan")
-    }
-
-    await loadOrder()
   }
 
   // ── Generate shipping label ──
@@ -1267,12 +1288,13 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     setError(null)
 
     try {
-      await submitBuyerCustodyEvidence({
-        scannedValue: payload.scannedValue,
-        tagPhotoFile: payload.tagPhotoFile,
-        pairPhotoFile: payload.pairPhotoFile,
-        requireFreshInput: Boolean(order.relayTagRequired && !order.legacyAuthFlow),
-      })
+      if (
+        order.relayTagRequired &&
+        !order.legacyAuthFlow &&
+        (!order.buyerScannedTagValue || !order.buyerTagPhotoUrl || !order.buyerPairPhotoUrl)
+      ) {
+        throw new Error("Complete live Relay tag verification on your phone before finishing this order")
+      }
 
       const res = await fetch(`/api/orders/${order.id}/complete`, {
         method: "POST",
@@ -1313,23 +1335,18 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
     setError(null)
 
     try {
-      const shouldSubmitCustody =
+      const buyerCustodyRequired =
         Boolean(order.relayTagRequired && !order.legacyAuthFlow) &&
-        (!!payload.scannedValue.trim() ||
-          !!payload.tagPhotoFile ||
-          !!payload.pairPhotoFile ||
-          payload.category === "authenticity" ||
+        (payload.category === "authenticity" ||
           !order.buyerScannedTagValue ||
           !order.buyerTagPhotoUrl ||
           !order.buyerPairPhotoUrl)
 
-      if (shouldSubmitCustody) {
-        await submitBuyerCustodyEvidence({
-          scannedValue: payload.scannedValue || order.buyerScannedTagValue || "",
-          tagPhotoFile: payload.tagPhotoFile,
-          pairPhotoFile: payload.pairPhotoFile,
-          requireFreshInput: true,
-        })
+      if (
+        buyerCustodyRequired &&
+        (!order.buyerScannedTagValue || !order.buyerTagPhotoUrl || !order.buyerPairPhotoUrl)
+      ) {
+        throw new Error("Complete live Relay tag verification on your phone before submitting this dispute")
       }
 
       const evidenceUrls: string[] = []
@@ -1882,26 +1899,37 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
             )}
           </button>
 
-          <h3 className="text-sm font-semibold text-[#f5f7fb] mb-3">Your Submitted Photos</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {order.authPhotos && order.authPhotos.length > 0
-              ? order.authPhotos.map((url, idx) => (
+          {sellerCustodyEvidence.length > 0 && (
+            <>
+              <h3 className="text-sm font-semibold text-[#f5f7fb] mb-3">Submitted Custody Evidence</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {sellerCustodyEvidence.map((item) => (
+                  <div key={item.label} className="space-y-2">
+                    <div className="aspect-square bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                      <img src={item.url} alt={item.label} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-xs text-white/55">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {order.authPhotos && order.authPhotos.length > 0 && (
+            <>
+              <h3 className="text-sm font-semibold text-[#f5f7fb] mb-3">Legacy Authentication Photos</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {order.authPhotos.map((url, idx) => (
                   <div
                     key={idx}
                     className="aspect-square bg-white/5 border border-white/10 rounded-lg overflow-hidden"
                   >
-                    <img src={url} alt={`Auth photo ${idx + 1}`} className="w-full h-full object-cover" />
-                  </div>
-                ))
-              : AUTH_ANGLES.map((angle) => (
-                  <div
-                    key={angle}
-                    className="aspect-square bg-white/5 border border-white/10 rounded-lg flex items-center justify-center text-[#7ca6ff] text-xs"
-                  >
-                    <Eye className="w-5 h-5" />
+                    <img src={url} alt={`Legacy auth photo ${idx + 1}`} className="w-full h-full object-cover" />
                   </div>
                 ))}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1922,6 +1950,32 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       {/* ════════════════════════════════ */}
       {/* STATUS: LABEL_CREATED           */}
       {/* ════════════════════════════════ */}
+      {currentStatus === "payout_failed" && (
+        <div className="relay-card p-6 mb-6 border border-red-500/30 bg-red-500/5">
+          <h2 className="text-lg font-bold text-red-300 mb-3 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            Payout Failed
+          </h2>
+          {order.userRole === "seller" ? (
+            <>
+              <p className="text-[#7ca6ff] text-sm mb-3">
+                Relay attempted to release your payout, but Stripe rejected the transfer.
+              </p>
+              <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <p className="text-xs font-semibold text-white/50 mb-1">RECORDED ERROR</p>
+                <p className="text-sm text-red-200">
+                  {order.payoutLastError || "No payout error details were recorded on this order."}
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-[#7ca6ff] text-sm">
+              A seller payout issue was recorded for this order. Buyer-facing fulfillment and dispute history remain intact while Relay resolves the seller transfer.
+            </p>
+          )}
+        </div>
+      )}
+
       {currentStatus === "label_created" && (
         <div className="relay-card p-6 mb-6">
           <h2 className="text-lg font-bold text-[#f5f7fb] mb-4">Shipping Label Ready</h2>
@@ -2064,7 +2118,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                   ) : (
                     <>
                       <p className="text-sm text-[#f5f7fb]">
-                        Required before completion: scan the Relay tag, upload a tag photo, and upload a pair photo.
+                        Required before completion: scan the Relay tag and capture live tag and pair photos on your phone.
                       </p>
                       <p className="text-sm text-[#f5f7fb]">
                         Tag status:{" "}
@@ -2120,6 +2174,12 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               existingScannedValue={order.buyerScannedTagValue}
               existingTagPhotoUrl={order.buyerTagPhotoUrl}
               existingPairPhotoUrl={order.buyerPairPhotoUrl}
+              mobileCaptureUrl={mobileBuyerReviewUrl}
+              isMobileDevice={isMobileDevice}
+              onRefreshEvidence={() => {
+                void refreshBuyerCustodyEvidence()
+              }}
+              refreshingEvidence={refreshingBuyerCustody}
               onSubmit={handleDisputeSubmit}
               onCancel={() => setShowDisputeForm(false)}
               submitting={submittingDispute}
@@ -2412,6 +2472,12 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           existingScannedValue={order.buyerScannedTagValue}
           existingTagPhotoUrl={order.buyerTagPhotoUrl}
           existingPairPhotoUrl={order.buyerPairPhotoUrl}
+          mobileCaptureUrl={mobileBuyerReviewUrl}
+          isMobileDevice={isMobileDevice}
+          onRefreshEvidence={() => {
+            void refreshBuyerCustodyEvidence()
+          }}
+          refreshingEvidence={refreshingBuyerCustody}
           onSubmit={handleRatingSubmit}
           onClose={() => setShowRatingModal(false)}
           submitting={submittingReview}

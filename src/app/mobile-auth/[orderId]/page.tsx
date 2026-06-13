@@ -3,16 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 
-const AUTH_STEPS = [
-  { id: "front", label: "Front", instruction: "Take a clear photo of the front of the shoe.", tip: "Make sure the entire front is visible and well-lit." },
-  { id: "back", label: "Back", instruction: "Take a clear photo of the back/heel of the shoe.", tip: "Show the heel tab and any branding clearly." },
-  { id: "medial", label: "Medial Side", instruction: "Take a photo of the inside (medial) side.", tip: "Capture the full profile from the inner side." },
-  { id: "lateral", label: "Lateral Side", instruction: "Take a photo of the outside (lateral) side.", tip: "Capture the full profile from the outer side." },
-  { id: "sole", label: "Sole", instruction: "Take a clear photo of the bottom sole.", tip: "Show the entire sole pattern and any wear." },
-  { id: "size-tag", label: "Size Tag", instruction: "Take a close-up of the size tag inside the shoe.", tip: "Make sure the text is legible." },
-  { id: "challenge-code", label: "With Challenge Code", instruction: "Place the challenge code next to the shoe and photograph both.", tip: "Write the code on paper and place it beside the shoe." },
-  { id: "packed-shipment", label: "Packed Shipment", instruction: "Show the shoes packed in the box with any required paperwork visible inside.", tip: "Make sure the pair is clearly packed for shipment." },
-]
+const AUTH_STEPS: Array<{
+  id: string
+  label: string
+  instruction: string
+  tip: string
+}> = []
 
 const CUSTODY_UPLOADS = [
   {
@@ -140,7 +136,7 @@ export default function MobileAuthPage() {
   const completedCount = Object.keys(capturedPhotos).length
   const relayTagRequired = Boolean(order?.relayTagRequired)
   const checkcheckRequired = Boolean(order?.checkcheckRequired)
-  const allPhotosTaken = completedCount >= totalSteps
+  const allPhotosTaken = totalSteps === 0 || completedCount >= totalSteps
   const allCustodyFilesPresent = !relayTagRequired || CUSTODY_UPLOADS.every((upload) => custodyFiles[upload.id])
 
   useEffect(() => {
@@ -334,11 +330,6 @@ export default function MobileAuthPage() {
   const handleSubmit = async () => {
     if (!order) return
 
-    if (!allPhotosTaken) {
-      setError("Please finish the authentication photo set before submitting.")
-      return
-    }
-
     if (relayTagRequired) {
       if (!relayTagScanValue.trim()) {
         setError("Enter the Relay tag serial before submitting.")
@@ -527,7 +518,7 @@ export default function MobileAuthPage() {
           <div style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 28, color: GREEN }}>{"✓"}</div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginBottom: 12 }}>Authentication Submitted!</h1>
           <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6 }}>
-            Your authentication set has been uploaded successfully. Return to your computer to continue. If Relay tag or CheckCheck review is required, shipping label generation will unlock after that review clears.
+            Your authentication evidence has been uploaded successfully. Return to your computer to continue. If Relay tag or CheckCheck review is required, shipping label generation will unlock after that review clears.
           </p>
         </div>
       </div>
@@ -545,18 +536,15 @@ export default function MobileAuthPage() {
             <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{listing ? listing.brand + " " + listing.model : "Order #" + orderId.slice(0, 8).toUpperCase()}</p>
           </div>
           <div style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: "0 0 14px" }}>{"You'll take " + totalSteps + " authentication photos:"}</h2>
-            {AUTH_STEPS.map((step, index) => (
-              <div key={step.id} style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: index < totalSteps - 1 ? 10 : 0 }}>
-                <span style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(95,143,255,0.1)", color: ACCENT, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{index + 1}</span>
-                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.75)" }}>{step.label}</span>
-              </div>
-            ))}
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: "0 0 10px" }}>Seller evidence has been simplified</h2>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 1.7, margin: 0 }}>
+              Relay no longer requires the older 8-angle photo set here. Submit the Relay tag scan and custody photos below, plus a CheckCheck certificate only when this order requires it.
+            </p>
           </div>
           <div style={{ backgroundColor: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 16, padding: 16, marginBottom: 20 }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: "#fcd34d", margin: "0 0 8px" }}>Before you start</p>
             <p style={{ fontSize: 12, color: "rgba(252,211,77,0.6)", lineHeight: 1.7, margin: 0 }}>
-              Live camera photos are required. Have the challenge code written on paper nearby.
+              Have the challenge code written on paper nearby.
               {relayTagRequired ? " Keep an unused Relay security tag ready for scanning and follow-up evidence photos." : ""}
               {checkcheckRequired ? " Keep your CheckCheck certificate ready to upload before submission." : ""}
             </p>
@@ -599,10 +587,10 @@ export default function MobileAuthPage() {
             </div>
           )}
           <button
-            onClick={() => { setCurrentStepIndex(0); setPageState("capturing") }}
+            onClick={() => setPageState("certificate")}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: 16, borderRadius: 16, border: "none", backgroundColor: "#ffffff", color: "#000000", fontSize: 16, fontWeight: 600, fontFamily: "system-ui, -apple-system, sans-serif", cursor: "pointer", WebkitAppearance: "none" }}
           >
-            Start Taking Photos
+            Continue to Evidence Uploads
           </button>
         </div>
       </div>
@@ -686,7 +674,13 @@ export default function MobileAuthPage() {
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 22, color: GREEN }}>{"✓"}</div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: TEXT, margin: "0 0 6px" }}>Review & Submit</h1>
-            <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{allPhotosTaken ? "Authentication photos captured." : completedCount + "/" + totalSteps + " authentication photos taken"}</p>
+            <p style={{ fontSize: 14, color: DIM, margin: 0 }}>
+              {totalSteps === 0
+                ? "Legacy 8-angle photos are no longer required for this flow."
+                : allPhotosTaken
+                  ? "Authentication photos captured."
+                  : completedCount + "/" + totalSteps + " authentication photos taken"}
+            </p>
           </div>
 
           {error && (
@@ -836,8 +830,8 @@ export default function MobileAuthPage() {
 
           <button
             onClick={() => void handleSubmit()}
-            disabled={pageState === "submitting" || !allPhotosTaken || (relayTagRequired && (!relayTagScanValue.trim() || !allCustodyFilesPresent)) || (checkcheckRequired && !certificateFile)}
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: 16, borderRadius: 16, border: "none", backgroundColor: pageState === "submitting" || !allPhotosTaken || (relayTagRequired && (!relayTagScanValue.trim() || !allCustodyFilesPresent)) || (checkcheckRequired && !certificateFile) ? "rgba(95,143,255,0.3)" : ACCENT, color: "#ffffff", fontSize: 16, fontWeight: 600, fontFamily: "system-ui, sans-serif", cursor: pageState === "submitting" ? "default" : "pointer", WebkitAppearance: "none" }}
+            disabled={pageState === "submitting" || (relayTagRequired && (!relayTagScanValue.trim() || !allCustodyFilesPresent)) || (checkcheckRequired && !certificateFile)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: 16, borderRadius: 16, border: "none", backgroundColor: pageState === "submitting" || (relayTagRequired && (!relayTagScanValue.trim() || !allCustodyFilesPresent)) || (checkcheckRequired && !certificateFile) ? "rgba(95,143,255,0.3)" : ACCENT, color: "#ffffff", fontSize: 16, fontWeight: 600, fontFamily: "system-ui, sans-serif", cursor: pageState === "submitting" ? "default" : "pointer", WebkitAppearance: "none" }}
           >
             {pageState === "submitting" ? "Uploading... " + uploadProgress + "%" : "Submit Authentication"}
           </button>

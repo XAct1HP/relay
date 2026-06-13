@@ -23,14 +23,10 @@ export async function POST(
       sellerBoxPhotoUrl,
       sellerSealedPackagePhotoUrl,
     } = await request.json()
+    const normalizedAuthPhotos = Array.isArray(authPhotos) ? authPhotos : []
 
-    // Validate inputs
-    if (!authPhotos || !Array.isArray(authPhotos) || authPhotos.length < 8) {
-      return NextResponse.json(
-        { error: 'At least 8 authentication photos are required' },
-        { status: 400 }
-      )
-    }
+    // Legacy angle-based authentication photos are optional. Chain-of-custody
+    // evidence and CheckCheck are now the primary seller submission gates.
 
     // Determine authentication method:
     // 1. Challenge code (mobile flow — no login required)
@@ -67,7 +63,7 @@ export async function POST(
 
       isAuthorized = true
 
-      authPhotos.forEach((photoUrl: string) => {
+      normalizedAuthPhotos.forEach((photoUrl: string) => {
         assertStorageObjectRefForOrder(photoUrl, {
           bucket: 'order-photos',
           orderId,
@@ -142,7 +138,7 @@ export async function POST(
       const { data: updatedOrder, error: updateError } = await serviceClient
         .from('orders')
         .update({
-          auth_photos: authPhotos,
+          auth_photos: normalizedAuthPhotos,
           checkcheck_certificate_url: checkcheckCertificateUrl || null,
           checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
           checkcheck_reviewed_at: null,
@@ -168,7 +164,7 @@ export async function POST(
         sellerId: order.seller_id,
         eventType: 'order.auth_submitted',
         metadata: {
-          authPhotoCount: authPhotos.length,
+          authPhotoCount: normalizedAuthPhotos.length,
           checkcheckSubmitted: Boolean(checkcheckCertificateUrl),
           relayTagRequired: Boolean(order.relay_tag_required),
         },
@@ -231,7 +227,7 @@ export async function POST(
         )
       }
 
-      authPhotos.forEach((photoUrl: string) => {
+      normalizedAuthPhotos.forEach((photoUrl: string) => {
         assertStorageObjectRefForOrder(photoUrl, {
           bucket: 'order-photos',
           orderId,
@@ -309,7 +305,7 @@ export async function POST(
       const { data: updatedOrder, error: updateError } = await supabase
         .from('orders')
         .update({
-          auth_photos: authPhotos,
+          auth_photos: normalizedAuthPhotos,
           checkcheck_certificate_url: checkcheckCertificateUrl || null,
           checkcheck_status: order.checkcheck_required ? 'submitted' : 'not_required',
           checkcheck_reviewed_at: null,
@@ -339,7 +335,7 @@ export async function POST(
         sellerId: order.seller_id,
         eventType: 'order.auth_submitted',
         metadata: {
-          authPhotoCount: authPhotos.length,
+          authPhotoCount: normalizedAuthPhotos.length,
           checkcheckSubmitted: Boolean(checkcheckCertificateUrl),
           relayTagRequired: Boolean(order.relay_tag_required),
         },
