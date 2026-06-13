@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { fetchWithCurrentProtectionBypass } from "@/lib/public-preview-access"
+import {
+  buildPublicFlowDebugInfo,
+  PublicFlowDiagnostics,
+  readFailedResponseBody,
+  type PublicFlowDebugInfo,
+} from "@/components/mobile/PublicFlowDiagnostics"
 
 type PageState = "loading" | "verify" | "ready" | "capturing" | "review" | "submitting" | "done" | "error"
 
@@ -76,6 +82,7 @@ export default function MobileOrderReviewPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [capturedPhotos, setCapturedPhotos] = useState<Record<string, Blob>>({})
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+  const [debugInfo, setDebugInfo] = useState<PublicFlowDebugInfo | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -92,34 +99,83 @@ export default function MobileOrderReviewPage() {
 
     async function load() {
       try {
-        const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-review-public-info`)
+        const requestUrl = `/api/orders/${orderId}/buyer-review-public-info`
+        const response = await fetchWithCurrentProtectionBypass(requestUrl)
         const data = await response.json()
 
         if (cancelled) return
 
         if (!response.ok || !data?.id) {
           setError(data?.error || "Order not found.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-order-review",
+              stage: "load-order",
+              orderId,
+              requestUrl,
+              status: response.status,
+              statusText: response.statusText,
+              responseBody: JSON.stringify(data),
+            })
+          )
           setPageState("error")
           return
         }
 
         if (!data.relayTagRequired || data.legacyAuthFlow) {
           setError("This order does not require buyer Relay verification.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-order-review",
+              stage: "load-order-validation",
+              orderId,
+              requestUrl,
+              status: response.status,
+              statusText: response.statusText,
+              responseBody: JSON.stringify({
+                relayTagRequired: data.relayTagRequired,
+                legacyAuthFlow: data.legacyAuthFlow,
+                status: data.status,
+              }),
+            })
+          )
           setPageState("error")
           return
         }
 
         if (!["delivered", "review_window", "disputed"].includes(data.status)) {
           setError("Buyer verification is only available after delivery.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-order-review",
+              stage: "delivery-status-validation",
+              orderId,
+              requestUrl,
+              status: response.status,
+              statusText: response.statusText,
+              responseBody: JSON.stringify({ status: data.status }),
+            })
+          )
           setPageState("error")
           return
         }
 
         setOrder(data)
+        setDebugInfo(null)
         setPageState("verify")
-      } catch {
+      } catch (loadError: any) {
         if (!cancelled) {
           setError("Could not load the buyer verification page. Please try again.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-order-review",
+              stage: "load-order-exception",
+              orderId,
+              errorMessage: loadError?.message || "Unknown error",
+              errorName: loadError?.name,
+              stack: loadError?.stack,
+            })
+          )
           setPageState("error")
         }
       }
@@ -142,7 +198,8 @@ export default function MobileOrderReviewPage() {
     setCodeError(null)
 
     try {
-      const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-review-verify-code`, {
+      const requestUrl = `/api/orders/${orderId}/buyer-review-verify-code`
+      const response = await fetchWithCurrentProtectionBypass(requestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeCode: codeInput.trim() }),
@@ -151,12 +208,34 @@ export default function MobileOrderReviewPage() {
 
       if (!response.ok) {
         setCodeError(data.error || "Incorrect challenge code.")
+        setDebugInfo(
+          buildPublicFlowDebugInfo({
+            route: "mobile-order-review",
+            stage: "verify-code",
+            orderId,
+            requestUrl,
+            status: response.status,
+            statusText: response.statusText,
+            responseBody: JSON.stringify(data),
+          })
+        )
         return
       }
 
+      setDebugInfo(null)
       setPageState("ready")
-    } catch {
+    } catch (verifyError: any) {
       setCodeError("Something went wrong. Please try again.")
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-order-review",
+          stage: "verify-code-exception",
+          orderId,
+          errorMessage: verifyError?.message || "Unknown error",
+          errorName: verifyError?.name,
+          stack: verifyError?.stack,
+        })
+      )
     } finally {
       setVerifying(false)
     }
@@ -185,8 +264,18 @@ export default function MobileOrderReviewPage() {
           setCameraReady(true)
         }
       }
-    } catch {
+    } catch (cameraError: any) {
       setError("Could not access camera. Please allow camera permissions.")
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-order-review",
+          stage: "camera-start",
+          orderId,
+          errorMessage: cameraError?.message || "Could not access camera",
+          errorName: cameraError?.name,
+          stack: cameraError?.stack,
+        })
+      )
       setPageState("error")
     }
   }, [facingMode])
@@ -288,13 +377,25 @@ export default function MobileOrderReviewPage() {
     formData.append("challengeCode", codeInput.trim())
     formData.append("fileName", fileName)
 
-    const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/upload-photo`, {
+    const requestUrl = `/api/orders/${orderId}/upload-photo`
+    const response = await fetchWithCurrentProtectionBypass(requestUrl, {
       method: "POST",
       body: formData,
     })
     const payload = await response.json()
 
     if (!response.ok) {
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-order-review",
+          stage: `upload-${fileName}`,
+          orderId,
+          requestUrl,
+          status: response.status,
+          statusText: response.statusText,
+          responseBody: JSON.stringify(payload),
+        })
+      )
       throw new Error(payload.error || "Failed to upload buyer custody evidence")
     }
 
@@ -325,7 +426,8 @@ export default function MobileOrderReviewPage() {
       const buyerPairPhotoUrl = await uploadCapture(capturedPhotos.buyerPairPhoto, "buyer-pair-live.jpg")
       setUploadProgress(90)
 
-      const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-tag-scan-public`, {
+      const requestUrl = `/api/orders/${orderId}/buyer-tag-scan-public`
+      const response = await fetchWithCurrentProtectionBypass(requestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -338,13 +440,37 @@ export default function MobileOrderReviewPage() {
       const payload = await response.json()
 
       if (!response.ok) {
+        setDebugInfo(
+          buildPublicFlowDebugInfo({
+            route: "mobile-order-review",
+            stage: "submit-buyer-tag-scan",
+            orderId,
+            requestUrl,
+            status: response.status,
+            statusText: response.statusText,
+            responseBody: JSON.stringify(payload),
+          })
+        )
         throw new Error(payload.error || "Failed to save buyer verification")
       }
 
       setUploadProgress(100)
+      setDebugInfo(null)
       setPageState("done")
     } catch (submitError: any) {
       setError(submitError.message || "Failed to submit buyer verification.")
+      if (!debugInfo) {
+        setDebugInfo(
+          buildPublicFlowDebugInfo({
+            route: "mobile-order-review",
+            stage: "submit-exception",
+            orderId,
+            errorMessage: submitError?.message || "Unknown error",
+            errorName: submitError?.name,
+            stack: submitError?.stack,
+          })
+        )
+      }
       setPageState("ready")
     }
   }
@@ -364,6 +490,7 @@ export default function MobileOrderReviewPage() {
           <div style={{ width: 56, height: 56, borderRadius: "50%", backgroundColor: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", color: RED, fontSize: 24 }}>!</div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px" }}>Cannot start buyer verification</h1>
           <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6 }}>{error}</p>
+          <PublicFlowDiagnostics debug={debugInfo} />
         </div>
       </div>
     )
@@ -410,6 +537,7 @@ export default function MobileOrderReviewPage() {
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", textAlign: "center", marginTop: 24, lineHeight: 1.5 }}>
             Find the code on the order page on your computer.
           </p>
+          <PublicFlowDiagnostics debug={debugInfo} />
         </div>
       </div>
     )
@@ -519,6 +647,7 @@ export default function MobileOrderReviewPage() {
             <p style={{ fontSize: 13, color: RED, margin: 0 }}>{error}</p>
           </div>
         )}
+        <PublicFlowDiagnostics debug={debugInfo} />
 
         <div style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 18, marginBottom: 20 }}>
           <p style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: "0 0 8px" }}>Live camera required</p>

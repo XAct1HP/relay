@@ -3,13 +3,16 @@
  * deployments protected by deployment protection.
  *
  * We only append the automation bypass secret on preview deployments and only
- * for the generated public mobile links. The `x-vercel-set-bypass-cookie`
- * flag lets the phone browser keep accessing follow-up API requests after the
- * initial page load.
+ * for the generated public mobile links.
+ *
+ * We intentionally do not ask Vercel to set the bypass cookie on the initial
+ * QR-opened request. Some mobile scanner / in-app browser flows handle that
+ * redirect poorly and can render a blank page. Instead, the public mobile
+ * pages keep the bypass secret in the URL and forward it to their follow-up
+ * API calls directly.
  */
 
 const VERCEL_PROTECTION_BYPASS_PARAM = "x-vercel-protection-bypass";
-const VERCEL_SET_BYPASS_COOKIE_PARAM = "x-vercel-set-bypass-cookie";
 
 export function buildPublicMobileFlowUrl(requestUrl: string | URL, path: string) {
   const baseUrl = typeof requestUrl === "string" ? new URL(requestUrl) : requestUrl;
@@ -18,7 +21,6 @@ export function buildPublicMobileFlowUrl(requestUrl: string | URL, path: string)
 
   if (process.env.VERCEL_ENV === "preview" && bypassSecret) {
     publicUrl.searchParams.set(VERCEL_PROTECTION_BYPASS_PARAM, bypassSecret);
-    publicUrl.searchParams.set(VERCEL_SET_BYPASS_COOKIE_PARAM, "true");
   }
 
   return publicUrl.toString();
@@ -32,14 +34,9 @@ export function appendCurrentProtectionBypass(path: string) {
   const url = new URL(path, window.location.origin);
   const currentParams = new URLSearchParams(window.location.search);
   const bypassSecret = currentParams.get(VERCEL_PROTECTION_BYPASS_PARAM);
-  const setBypassCookie = currentParams.get(VERCEL_SET_BYPASS_COOKIE_PARAM);
 
   if (bypassSecret && !url.searchParams.has(VERCEL_PROTECTION_BYPASS_PARAM)) {
     url.searchParams.set(VERCEL_PROTECTION_BYPASS_PARAM, bypassSecret);
-  }
-
-  if (setBypassCookie && !url.searchParams.has(VERCEL_SET_BYPASS_COOKIE_PARAM)) {
-    url.searchParams.set(VERCEL_SET_BYPASS_COOKIE_PARAM, setBypassCookie);
   }
 
   if (url.origin === window.location.origin) {

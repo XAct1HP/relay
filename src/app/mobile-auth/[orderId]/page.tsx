@@ -3,6 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { fetchWithCurrentProtectionBypass } from "@/lib/public-preview-access"
+import {
+  buildPublicFlowDebugInfo,
+  PublicFlowDiagnostics,
+  type PublicFlowDebugInfo,
+} from "@/components/mobile/PublicFlowDiagnostics"
 
 const AUTH_STEPS: Array<{
   id: string
@@ -109,6 +114,7 @@ export default function MobileAuthPage() {
     sellerSealedPackagePhoto: null,
   })
   const [certificateFile, setCertificateFile] = useState<File | null>(null)
+  const [debugInfo, setDebugInfo] = useState<PublicFlowDebugInfo | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -146,24 +152,58 @@ export default function MobileAuthPage() {
 
     async function load() {
       try {
-        const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/public-info")
+        const requestUrl = "/api/orders/" + orderId + "/public-info"
+        const res = await fetchWithCurrentProtectionBypass(requestUrl)
         if (cancelled) return
         const data = await res.json()
         if (!res.ok || !data.id) {
           setError("Order not found. Please check the link and try again.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-auth",
+              stage: "load-order",
+              orderId,
+              requestUrl,
+              status: res.status,
+              statusText: res.statusText,
+              responseBody: JSON.stringify(data),
+            })
+          )
           setPageState("error")
           return
         }
         if (data.status !== "paid" && data.status !== "auth_submitted") {
           setError("This order is not awaiting authentication.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-auth",
+              stage: "load-order-validation",
+              orderId,
+              requestUrl,
+              status: res.status,
+              statusText: res.statusText,
+              responseBody: JSON.stringify({ status: data.status }),
+            })
+          )
           setPageState("error")
           return
         }
         setOrder(data)
+        setDebugInfo(null)
         setPageState("verify")
-      } catch {
+      } catch (loadError: any) {
         if (!cancelled) {
           setError("Could not load order. Check your connection and try again.")
+          setDebugInfo(
+            buildPublicFlowDebugInfo({
+              route: "mobile-auth",
+              stage: "load-order-exception",
+              orderId,
+              errorMessage: loadError?.message || "Unknown error",
+              errorName: loadError?.name,
+              stack: loadError?.stack,
+            })
+          )
           setPageState("error")
         }
       }
@@ -183,7 +223,8 @@ export default function MobileAuthPage() {
     setVerifying(true)
     setCodeError(null)
     try {
-      const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/verify-code", {
+      const requestUrl = "/api/orders/" + orderId + "/verify-code"
+      const res = await fetchWithCurrentProtectionBypass(requestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeCode: codeInput.trim() }),
@@ -191,11 +232,33 @@ export default function MobileAuthPage() {
       const data = await res.json()
       if (!res.ok) {
         setCodeError(data.error || "Invalid challenge code.")
+        setDebugInfo(
+          buildPublicFlowDebugInfo({
+            route: "mobile-auth",
+            stage: "verify-code",
+            orderId,
+            requestUrl,
+            status: res.status,
+            statusText: res.statusText,
+            responseBody: JSON.stringify(data),
+          })
+        )
         return
       }
+      setDebugInfo(null)
       setPageState("ready")
-    } catch {
+    } catch (verifyError: any) {
       setCodeError("Something went wrong. Please try again.")
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-auth",
+          stage: "verify-code-exception",
+          orderId,
+          errorMessage: verifyError?.message || "Unknown error",
+          errorName: verifyError?.name,
+          stack: verifyError?.stack,
+        })
+      )
     } finally {
       setVerifying(false)
     }
@@ -220,8 +283,18 @@ export default function MobileAuthPage() {
           setCameraReady(true)
         }
       }
-    } catch {
+    } catch (cameraError: any) {
       setError("Could not access camera. Please allow camera permissions.")
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-auth",
+          stage: "camera-start",
+          orderId,
+          errorMessage: cameraError?.message || "Could not access camera",
+          errorName: cameraError?.name,
+          stack: cameraError?.stack,
+        })
+      )
     }
   }, [facingMode])
 
@@ -322,12 +395,26 @@ export default function MobileAuthPage() {
     fd.append("file", file)
     fd.append("challengeCode", codeInput.trim())
     fd.append("fileName", fileName)
-    const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/upload-photo", {
+    const requestUrl = "/api/orders/" + orderId + "/upload-photo"
+    const res = await fetchWithCurrentProtectionBypass(requestUrl, {
       method: "POST",
       body: fd,
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || "Upload failed")
+    if (!res.ok) {
+      setDebugInfo(
+        buildPublicFlowDebugInfo({
+          route: "mobile-auth",
+          stage: `upload-${fileName}`,
+          orderId,
+          requestUrl,
+          status: res.status,
+          statusText: res.statusText,
+          responseBody: JSON.stringify(data),
+        })
+      )
+      throw new Error(data.error || "Upload failed")
+    }
     return data.storageRef || data.url
   }
 
@@ -404,7 +491,8 @@ export default function MobileAuthPage() {
         bumpProgress()
       }
 
-      const res = await fetchWithCurrentProtectionBypass("/api/orders/" + order.id + "/auth-submit", {
+      const requestUrl = "/api/orders/" + order.id + "/auth-submit"
+      const res = await fetchWithCurrentProtectionBypass(requestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -422,12 +510,35 @@ export default function MobileAuthPage() {
 
       if (!res.ok) {
         const payload = await res.json()
+        setDebugInfo(
+          buildPublicFlowDebugInfo({
+            route: "mobile-auth",
+            stage: "submit-auth",
+            orderId,
+            requestUrl,
+            status: res.status,
+            statusText: res.statusText,
+            responseBody: JSON.stringify(payload),
+          })
+        )
         throw new Error(payload.error || "Submit failed")
       }
 
+      setDebugInfo(null)
       setPageState("done")
     } catch (err: any) {
       setError(err.message || "Failed to submit authentication.")
+      setDebugInfo((prev) =>
+        prev ||
+        buildPublicFlowDebugInfo({
+          route: "mobile-auth",
+          stage: "submit-exception",
+          orderId,
+          errorMessage: err?.message || "Unknown error",
+          errorName: err?.name,
+          stack: err?.stack,
+        })
+      )
       setPageState("certificate")
     }
   }
@@ -466,6 +577,7 @@ export default function MobileAuthPage() {
           <div style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 22, color: RED }}>{"!"}</div>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: TEXT, marginBottom: 12 }}>Something went wrong</h1>
           <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6 }}>{error}</p>
+          <PublicFlowDiagnostics debug={debugInfo} />
         </div>
       </div>
     )
@@ -510,6 +622,7 @@ export default function MobileAuthPage() {
             {verifying ? "Verifying..." : "Continue"}
           </button>
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", textAlign: "center", marginTop: 24, lineHeight: 1.5 }}>Find the code on the order page on your computer.</p>
+          <PublicFlowDiagnostics debug={debugInfo} />
         </div>
       </div>
     )
@@ -694,6 +807,7 @@ export default function MobileAuthPage() {
             </div>
           )}
 
+          <PublicFlowDiagnostics debug={debugInfo} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
             {AUTH_STEPS.map((step, index) => {
               const url = photoUrls[step.id]
