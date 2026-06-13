@@ -497,6 +497,7 @@ interface BuyerDisputeSubmission {
 
 const BuyerRelayCapturePanel = ({
   mobileCaptureUrl,
+  challengeCode,
   expectedTagValue,
   existingScannedValue,
   existingTagPhotoUrl,
@@ -506,6 +507,7 @@ const BuyerRelayCapturePanel = ({
   refreshingEvidence,
 }: {
   mobileCaptureUrl: string
+  challengeCode?: string
   expectedTagValue?: string
   existingScannedValue?: string
   existingTagPhotoUrl?: string
@@ -531,6 +533,16 @@ const BuyerRelayCapturePanel = ({
           )}
         </p>
       </div>
+
+      {challengeCode && (
+        <div className="rounded-lg border border-white/10 bg-[#06070a] p-3">
+          <p className="text-xs font-semibold text-white/50 mb-1">CHALLENGE CODE</p>
+          <p className="text-lg font-mono font-bold text-[#f5f7fb]">{challengeCode}</p>
+          <p className="text-xs text-white/40 mt-1">
+            Enter this code on your phone after scanning the QR code.
+          </p>
+        </div>
+      )}
 
       {captureComplete ? (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
@@ -620,6 +632,7 @@ const BuyerCompletionModal = ({
   existingTagPhotoUrl,
   existingPairPhotoUrl,
   mobileCaptureUrl,
+  challengeCode,
   isMobileDevice,
   onRefreshEvidence,
   refreshingEvidence,
@@ -633,6 +646,7 @@ const BuyerCompletionModal = ({
   existingTagPhotoUrl?: string
   existingPairPhotoUrl?: string
   mobileCaptureUrl: string
+  challengeCode?: string
   isMobileDevice: boolean
   onRefreshEvidence: () => void
   refreshingEvidence: boolean
@@ -666,6 +680,7 @@ const BuyerCompletionModal = ({
           <div className="mb-6">
             <BuyerRelayCapturePanel
               mobileCaptureUrl={mobileCaptureUrl}
+              challengeCode={challengeCode}
               expectedTagValue={expectedTagValue}
               existingScannedValue={existingScannedValue}
               existingTagPhotoUrl={existingTagPhotoUrl}
@@ -736,6 +751,7 @@ const BuyerDisputeForm = ({
   existingTagPhotoUrl,
   existingPairPhotoUrl,
   mobileCaptureUrl,
+  challengeCode,
   isMobileDevice,
   onRefreshEvidence,
   refreshingEvidence,
@@ -749,6 +765,7 @@ const BuyerDisputeForm = ({
   existingTagPhotoUrl?: string
   existingPairPhotoUrl?: string
   mobileCaptureUrl: string
+  challengeCode?: string
   isMobileDevice: boolean
   onRefreshEvidence: () => void
   refreshingEvidence: boolean
@@ -850,6 +867,7 @@ const BuyerDisputeForm = ({
         {showCustodySection && (
           <BuyerRelayCapturePanel
             mobileCaptureUrl={mobileCaptureUrl}
+            challengeCode={challengeCode}
             expectedTagValue={expectedTagValue}
             existingScannedValue={existingScannedValue}
             existingTagPhotoUrl={existingTagPhotoUrl}
@@ -2133,6 +2151,11 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                           Expected Relay tag: <span className="font-mono text-[#7ca6ff]">{order.expectedRelayTagValue}</span>
                         </p>
                       )}
+                      {order.challengeCode && (
+                        <p className="text-xs text-white/50">
+                          Buyer challenge code: <span className="font-mono text-[#7ca6ff]">{order.challengeCode}</span>
+                        </p>
+                      )}
                       {order.custodyAdminReviewRequired && (
                         <p className="text-sm text-amber-300">
                           Chain-of-custody evidence is currently flagged for admin review.
@@ -2175,6 +2198,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               existingTagPhotoUrl={order.buyerTagPhotoUrl}
               existingPairPhotoUrl={order.buyerPairPhotoUrl}
               mobileCaptureUrl={mobileBuyerReviewUrl}
+              challengeCode={order.challengeCode}
               isMobileDevice={isMobileDevice}
               onRefreshEvidence={() => {
                 void refreshBuyerCustodyEvidence()
@@ -2473,6 +2497,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           existingTagPhotoUrl={order.buyerTagPhotoUrl}
           existingPairPhotoUrl={order.buyerPairPhotoUrl}
           mobileCaptureUrl={mobileBuyerReviewUrl}
+          challengeCode={order.challengeCode}
           isMobileDevice={isMobileDevice}
           onRefreshEvidence={() => {
             void refreshBuyerCustodyEvidence()

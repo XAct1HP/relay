@@ -1,9 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 
-type PageState = "loading" | "ready" | "capturing" | "review" | "submitting" | "done" | "error"
+type PageState = "loading" | "verify" | "ready" | "capturing" | "review" | "submitting" | "done" | "error"
 
 type CaptureStep = {
   id: "buyerTagPhoto" | "buyerPairPhoto"
@@ -11,6 +11,18 @@ type CaptureStep = {
   instruction: string
   tip: string
   fileName: string
+}
+
+type PublicBuyerOrder = {
+  id: string
+  status: string
+  relayTagRequired: boolean
+  legacyAuthFlow: boolean
+  expectedRelayTagValue?: string | null
+  listing?: {
+    brand?: string
+    model?: string
+  } | null
 }
 
 const CAPTURE_STEPS: CaptureStep[] = [
@@ -30,19 +42,6 @@ const CAPTURE_STEPS: CaptureStep[] = [
   },
 ]
 
-type OrderContext = {
-  id: string
-  status: string
-  relayTagRequired: boolean
-  legacyAuthFlow: boolean
-  expectedRelayTagValue?: string
-  buyerScannedTagValue?: string
-  buyerTagPhotoUrl?: string
-  buyerPairPhotoUrl?: string
-  brand: string
-  model: string
-}
-
 const BG = "#0a0a0f"
 const TEXT = "#f5f7fb"
 const DIM = "rgba(255,255,255,0.45)"
@@ -55,16 +54,20 @@ const pageBase: React.CSSProperties = {
   backgroundColor: BG,
   fontFamily: "system-ui, -apple-system, sans-serif",
   color: TEXT,
+  margin: 0,
+  padding: 0,
 }
 
 export default function MobileOrderReviewPage() {
   const params = useParams()
-  const router = useRouter()
   const orderId = params.orderId as string
 
   const [pageState, setPageState] = useState<PageState>("loading")
   const [error, setError] = useState<string | null>(null)
-  const [order, setOrder] = useState<OrderContext | null>(null)
+  const [order, setOrder] = useState<PublicBuyerOrder | null>(null)
+  const [codeInput, setCodeInput] = useState("")
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState(false)
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [cameraReady, setCameraReady] = useState(false)
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment")
@@ -88,18 +91,10 @@ export default function MobileOrderReviewPage() {
 
     async function load() {
       try {
-        const response = await fetch(`/api/orders/${orderId}/buyer-review-context`, {
-          cache: "no-store",
-        })
+        const response = await fetch(`/api/orders/${orderId}/buyer-review-public-info`)
         const data = await response.json()
 
         if (cancelled) return
-
-        if (response.status === 401) {
-          setError("Sign in to Relay on your phone to complete buyer verification.")
-          setPageState("error")
-          return
-        }
 
         if (!response.ok || !data?.id) {
           setError(data?.error || "Order not found.")
@@ -107,37 +102,23 @@ export default function MobileOrderReviewPage() {
           return
         }
 
-        const nextOrder: OrderContext = {
-          id: data.id,
-          status: data.status,
-          relayTagRequired: Boolean(data.relayTagRequired),
-          legacyAuthFlow: Boolean(data.legacyAuthFlow),
-          expectedRelayTagValue: data.expectedRelayTagValue || undefined,
-          buyerScannedTagValue: data.buyerScannedTagValue || undefined,
-          buyerTagPhotoUrl: data.buyerTagPhotoUrl || undefined,
-          buyerPairPhotoUrl: data.buyerPairPhotoUrl || undefined,
-          brand: data.brand || "Unknown",
-          model: data.model || "Pair",
-        }
-
-        if (!nextOrder.relayTagRequired || nextOrder.legacyAuthFlow) {
-          setError("This order does not require buyer Relay tag verification.")
+        if (!data.relayTagRequired || data.legacyAuthFlow) {
+          setError("This order does not require buyer Relay verification.")
           setPageState("error")
           return
         }
 
-        if (!["delivered", "review_window", "disputed"].includes(nextOrder.status)) {
-          setError("Buyer Relay verification is only available after delivery.")
+        if (!["delivered", "review_window", "disputed"].includes(data.status)) {
+          setError("Buyer verification is only available after delivery.")
           setPageState("error")
           return
         }
 
-        setOrder(nextOrder)
-        setScannedValue(nextOrder.buyerScannedTagValue || "")
-        setPageState("ready")
+        setOrder(data)
+        setPageState("verify")
       } catch {
         if (!cancelled) {
-          setError("Could not load the order. Please try again.")
+          setError("Could not load the buyer verification page. Please try again.")
           setPageState("error")
         }
       }
@@ -149,6 +130,36 @@ export default function MobileOrderReviewPage() {
       cancelled = true
     }
   }, [orderId])
+
+  const handleVerifyCode = async () => {
+    if (!codeInput.trim()) {
+      setCodeError("Please enter the challenge code.")
+      return
+    }
+
+    setVerifying(true)
+    setCodeError(null)
+
+    try {
+      const response = await fetch(`/api/orders/${orderId}/buyer-review-verify-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeCode: codeInput.trim() }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setCodeError(data.error || "Incorrect challenge code.")
+        return
+      }
+
+      setPageState("ready")
+    } catch {
+      setCodeError("Something went wrong. Please try again.")
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   const startCamera = useCallback(async () => {
     try {
@@ -174,7 +185,7 @@ export default function MobileOrderReviewPage() {
         }
       }
     } catch {
-      setError("Could not access the camera. Allow camera permissions and try again.")
+      setError("Could not access camera. Please allow camera permissions.")
       setPageState("error")
     }
   }, [facingMode])
@@ -242,6 +253,7 @@ export default function MobileOrderReviewPage() {
 
   const retakeCurrentPhoto = () => {
     if (!currentStep) return
+
     setCapturedPhotos((prev) => {
       const next = { ...prev }
       delete next[currentStep.id]
@@ -272,13 +284,15 @@ export default function MobileOrderReviewPage() {
   const uploadCapture = async (file: Blob, fileName: string) => {
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("challengeCode", codeInput.trim())
     formData.append("fileName", fileName)
 
-    const response = await fetch(`/api/orders/${orderId}/upload-buyer-custody`, {
+    const response = await fetch(`/api/orders/${orderId}/upload-photo`, {
       method: "POST",
       body: formData,
     })
     const payload = await response.json()
+
     if (!response.ok) {
       throw new Error(payload.error || "Failed to upload buyer custody evidence")
     }
@@ -304,29 +318,24 @@ export default function MobileOrderReviewPage() {
     setError(null)
 
     try {
-      const buyerTagPhotoUrl = await uploadCapture(
-        capturedPhotos.buyerTagPhoto,
-        "buyer-tag-live.jpg"
-      )
+      const buyerTagPhotoUrl = await uploadCapture(capturedPhotos.buyerTagPhoto, "buyer-tag-live.jpg")
       setUploadProgress(50)
 
-      const buyerPairPhotoUrl = await uploadCapture(
-        capturedPhotos.buyerPairPhoto,
-        "buyer-pair-live.jpg"
-      )
+      const buyerPairPhotoUrl = await uploadCapture(capturedPhotos.buyerPairPhoto, "buyer-pair-live.jpg")
       setUploadProgress(90)
 
-      const response = await fetch(`/api/orders/${orderId}/buyer-tag-scan`, {
+      const response = await fetch(`/api/orders/${orderId}/buyer-tag-scan-public`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          challengeCode: codeInput.trim(),
           scannedValue: scannedValue.trim(),
           buyerTagPhotoUrl,
           buyerPairPhotoUrl,
         }),
       })
-
       const payload = await response.json()
+
       if (!response.ok) {
         throw new Error(payload.error || "Failed to save buyer verification")
       }
@@ -342,7 +351,7 @@ export default function MobileOrderReviewPage() {
   if (pageState === "loading") {
     return (
       <div style={{ ...pageBase, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: DIM, fontSize: 16 }}>Loading buyer verification...</p>
+        <p style={{ color: DIM, fontSize: 16 }}>Loading...</p>
       </div>
     )
   }
@@ -353,13 +362,53 @@ export default function MobileOrderReviewPage() {
         <div style={{ maxWidth: 360, margin: "0 auto", textAlign: "center" }}>
           <div style={{ width: 56, height: 56, borderRadius: "50%", backgroundColor: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", color: RED, fontSize: 24 }}>!</div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px" }}>Cannot start buyer verification</h1>
-          <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6, marginBottom: 24 }}>{error}</p>
+          <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6 }}>{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (pageState === "verify") {
+    const listing = order?.listing
+    return (
+      <div style={{ ...pageBase, padding: "60px 24px 32px" }}>
+        <div style={{ maxWidth: 340, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(95,143,255,0.1)", border: "1px solid rgba(95,143,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 20, color: ACCENT }}>{"*"}</div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT, margin: "0 0 8px" }}>Buyer Relay Verification</h1>
+            {listing && <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{listing.brand} {listing.model}</p>}
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 10, textAlign: "center" }}>Enter Challenge Code</label>
+            <input
+              type="text"
+              inputMode="text"
+              value={codeInput}
+              onChange={(event) => { setCodeInput(event.target.value.toUpperCase()); setCodeError(null) }}
+              placeholder="ABC123"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              style={{ display: "block", width: "100%", textAlign: "center", fontSize: 26, fontFamily: "ui-monospace, monospace", fontWeight: 700, letterSpacing: "0.25em", padding: "16px", borderRadius: 14, border: "2px solid rgba(255,255,255,0.3)", backgroundColor: "rgba(255,255,255,0.1)", color: "#ffffff", outline: "none", WebkitAppearance: "none", boxSizing: "border-box" }}
+              onKeyDown={(event) => { if (event.key === "Enter") void handleVerifyCode() }}
+            />
+          </div>
+          {codeError && (
+            <div style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 14, color: RED, margin: 0 }}>{codeError}</p>
+            </div>
+          )}
           <button
-            onClick={() => router.push(`/orders/${orderId}`)}
-            style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", backgroundColor: "#ffffff", color: "#000000", fontSize: 16, fontWeight: 600, cursor: "pointer" }}
+            onClick={() => void handleVerifyCode()}
+            disabled={verifying || !codeInput.trim()}
+            style={{ display: "block", width: "100%", padding: "16px", borderRadius: 14, border: "none", backgroundColor: verifying || !codeInput.trim() ? "rgba(255,255,255,0.15)" : "#ffffff", color: verifying || !codeInput.trim() ? "rgba(255,255,255,0.4)" : "#000000", fontSize: 16, fontWeight: 600, fontFamily: "system-ui, -apple-system, sans-serif", textAlign: "center", WebkitAppearance: "none", cursor: verifying || !codeInput.trim() ? "default" : "pointer" }}
           >
-            Return to Order
+            {verifying ? "Verifying..." : "Continue"}
           </button>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", textAlign: "center", marginTop: 24, lineHeight: 1.5 }}>
+            Find the code on the order page on your computer.
+          </p>
         </div>
       </div>
     )
@@ -376,7 +425,7 @@ export default function MobileOrderReviewPage() {
             }}
             style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 18, cursor: "pointer", padding: 8 }}
           >
-            ×
+            x
           </button>
           <div style={{ textAlign: "center" }}>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", margin: 0 }}>
@@ -401,7 +450,7 @@ export default function MobileOrderReviewPage() {
         </div>
         <div style={{ backgroundColor: "#000", padding: 24, display: "flex", alignItems: "center", justifyContent: "center", gap: 32 }}>
           <button onClick={() => setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))} style={{ width: 44, height: 44, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>
-            ↻
+            o
           </button>
           <button onClick={capturePhoto} disabled={!cameraReady} style={{ width: 72, height: 72, borderRadius: "50%", border: "4px solid white", backgroundColor: "transparent", cursor: cameraReady ? "pointer" : "default", opacity: cameraReady ? 1 : 0.35, padding: 0 }}>
             <div style={{ width: 56, height: 56, borderRadius: "50%", backgroundColor: "#fff", margin: "0 auto" }} />
@@ -443,17 +492,11 @@ export default function MobileOrderReviewPage() {
     return (
       <div style={{ ...pageBase, padding: "72px 24px 32px" }}>
         <div style={{ maxWidth: 360, margin: "0 auto", textAlign: "center" }}>
-          <div style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", color: GREEN, fontSize: 28 }}>✓</div>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", color: GREEN, fontSize: 28 }}>ok</div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px" }}>Buyer verification saved</h1>
-          <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6, marginBottom: 24 }}>
-            Your live Relay tag verification is now attached to this order. Return to the order page and refresh if it is still open on another device.
+          <p style={{ fontSize: 14, color: DIM, lineHeight: 1.6 }}>
+            Your live Relay tag verification is now attached to this order. Return to your computer and refresh the order page if it is still open there.
           </p>
-          <button
-            onClick={() => router.push(`/orders/${orderId}`)}
-            style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", backgroundColor: "#ffffff", color: "#000000", fontSize: 16, fontWeight: 600, cursor: "pointer" }}
-          >
-            Return to Order
-          </button>
         </div>
       </div>
     )
@@ -463,10 +506,10 @@ export default function MobileOrderReviewPage() {
     <div style={{ ...pageBase, padding: "36px 20px 40px" }}>
       <div style={{ maxWidth: 380, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: "rgba(95,143,255,0.1)", border: "1px solid rgba(95,143,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", color: ACCENT, fontSize: 24 }}>⌁</div>
+          <div style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: "rgba(95,143,255,0.1)", border: "1px solid rgba(95,143,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", color: ACCENT, fontSize: 24 }}>*</div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Buyer Relay Verification</h1>
           <p style={{ fontSize: 14, color: DIM, margin: 0 }}>
-            {order ? `${order.brand} ${order.model}` : `Order ${orderId.slice(0, 8).toUpperCase()}`}
+            {order?.listing ? `${order.listing.brand} ${order.listing.model}` : `Order ${orderId.slice(0, 8).toUpperCase()}`}
           </p>
         </div>
 
@@ -479,7 +522,7 @@ export default function MobileOrderReviewPage() {
         <div style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 18, marginBottom: 20 }}>
           <p style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: "0 0 8px" }}>Live camera required</p>
           <p style={{ fontSize: 12, color: DIM, lineHeight: 1.7, margin: 0 }}>
-            Buyer tag verification must be captured live on your phone. File uploads are disabled for this step.
+            Buyer tag verification must be captured live on your phone after you enter the challenge code from your desktop order page.
           </p>
         </div>
 
@@ -501,7 +544,7 @@ export default function MobileOrderReviewPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 20 }}>
           {CAPTURE_STEPS.map((step, index) => {
-            const previewUrl = photoUrls[step.id] || (step.id === "buyerTagPhoto" ? order?.buyerTagPhotoUrl : order?.buyerPairPhotoUrl) || ""
+            const previewUrl = photoUrls[step.id] || ""
             const complete = Boolean(capturedPhotos[step.id]) || Boolean(previewUrl)
             return (
               <button

@@ -19,6 +19,8 @@ const ALLOWED_FILE_NAMES = new Set([
   'seller-pair.jpg',
   'seller-box.jpg',
   'sealed-package.jpg',
+  'buyer-tag-live.jpg',
+  'buyer-pair-live.jpg',
 ])
 
 /**
@@ -72,20 +74,28 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid challenge code' }, { status: 403 })
     }
 
-    if (order.status !== 'paid' && order.status !== 'auth_submitted') {
-      return NextResponse.json(
-        { error: 'Order is not awaiting authentication' },
-        { status: 400 }
-      )
-    }
-
     const normalizedFileName = sanitizeUploadedFileName(fileName)
     const isCertificate = normalizedFileName.startsWith('checkcheck-certificate.')
     const isAllowedNamedUpload = ALLOWED_FILE_NAMES.has(normalizedFileName)
+    const isBuyerCustodyUpload = ['buyer-tag-live.jpg', 'buyer-pair-live.jpg'].includes(normalizedFileName)
 
     if (!isCertificate && !isAllowedNamedUpload) {
       return NextResponse.json(
         { error: 'Unsupported upload file name' },
+        { status: 400 }
+      )
+    }
+
+    if (isBuyerCustodyUpload) {
+      if (!['delivered', 'review_window', 'disputed'].includes(order.status)) {
+        return NextResponse.json(
+          { error: 'Order is not ready for buyer verification' },
+          { status: 400 }
+        )
+      }
+    } else if (order.status !== 'paid' && order.status !== 'auth_submitted') {
+      return NextResponse.json(
+        { error: 'Order is not awaiting authentication' },
         { status: 400 }
       )
     }
@@ -138,6 +148,8 @@ export async function POST(
       'seller-pair.jpg': 'seller_pair_photo',
       'seller-box.jpg': 'seller_box_photo',
       'sealed-package.jpg': 'seller_sealed_package_photo',
+      'buyer-tag-live.jpg': 'buyer_tag_photo',
+      'buyer-pair-live.jpg': 'buyer_pair_photo',
     }
 
     const uploadType = uploadTypeMap[fileName.toLowerCase()]
