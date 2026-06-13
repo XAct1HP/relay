@@ -196,6 +196,7 @@ export interface Order {
   seller_amount_frozen_cents?: number;
   seller_amount_refunded_cents?: number;
   status: 'pending_payment' | 'paid' | 'auth_submitted' | 'label_created' | 'shipped' | 'delivered' | 'review_window' | 'completed' | 'disputed' | 'cancelled' | 'refund_pending' | 'refunded' | 'payout_failed' | 'return_pending' | 'return_shipped' | 'return_delivered';
+  stripe_checkout_session_id?: string | null;
   stripe_payment_intent_id: string | null;
   shipping_label_url: string | null;
   tracking_number: string | null;
