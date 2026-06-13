@@ -9,18 +9,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
-  // Mobile-auth is a fully public route - skip auth loading entirely
-  const isMobileAuth = pathname.startsWith("/mobile-auth");
+  // Mobile capture routes manage their own auth/bootstrap flow so they should
+  // never be blocked behind the app shell loading screen.
+  const isMobileCaptureRoute =
+    pathname.startsWith("/mobile-auth") || pathname.startsWith("/mobile-order-review");
 
   useEffect(() => {
     setMounted(true);
-    if (!isMobileAuth) {
+    if (!isMobileCaptureRoute) {
       fetchUser();
     }
-  }, [fetchUser, isMobileAuth]);
+  }, [fetchUser, isMobileCaptureRoute]);
 
-  // Never block rendering for mobile-auth routes
-  if (isMobileAuth) {
+  // Never block rendering for mobile capture routes
+  if (isMobileCaptureRoute) {
     return <>{children}</>;
   }
 
