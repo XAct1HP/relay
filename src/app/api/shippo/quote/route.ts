@@ -1,10 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { toShippoAddress } from '@/lib/shipping-addresses'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
 
 export async function POST(request: NextRequest) {
   try {
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Handle SSR context
+            }
+          },
+        },
+      }
+    )
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     const { sellerAddress, buyerAddress, approxSizing } = await request.json()
     const normalizedSellerAddress = toShippoAddress(sellerAddress)
     const normalizedBuyerAddress = toShippoAddress(buyerAddress)
@@ -18,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (
       !normalizedSellerAddress.street1 ||
+      !(normalizedSellerAddress.email || user?.email) ||
       !normalizedSellerAddress.city ||
       !normalizedSellerAddress.state ||
       !normalizedSellerAddress.zip ||
@@ -40,8 +69,14 @@ export async function POST(request: NextRequest) {
         Authorization: `ShippoToken ${SHIPPO_API_KEY}`,
       },
       body: JSON.stringify({
-        address_from: normalizedSellerAddress,
-        address_to: normalizedBuyerAddress,
+        address_from: {
+          ...normalizedSellerAddress,
+          email: normalizedSellerAddress.email || user?.email || undefined,
+        },
+        address_to: {
+          ...normalizedBuyerAddress,
+          email: normalizedBuyerAddress.email || user?.email || undefined,
+        },
         parcels: [
           {
             length: '10',

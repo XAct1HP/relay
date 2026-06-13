@@ -296,6 +296,7 @@ export interface ShippingAddress {
   street: string;
   street1?: string;
   street2?: string;
+  email?: string;
   city: string;
   state: string;
   zip: string;

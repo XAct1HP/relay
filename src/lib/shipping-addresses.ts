@@ -4,6 +4,7 @@ type AddressLike = Partial<ShippingAddress> & {
   street1?: string | null;
   line1?: string | null;
   line2?: string | null;
+  email?: string | null;
 };
 
 function readString(value: unknown) {
@@ -31,6 +32,7 @@ export function normalizeShippingAddress(value: unknown): ShippingAddress | null
     name: firstNonEmpty(address.name),
     street: firstNonEmpty(address.street, address.street1, address.line1),
     street2: firstNonEmpty(address.street2, address.line2) || undefined,
+    email: firstNonEmpty(address.email) || undefined,
     city: firstNonEmpty(address.city),
     state: firstNonEmpty(address.state),
     zip: firstNonEmpty(address.zip),
@@ -55,6 +57,7 @@ export function toShippoAddress(value: unknown) {
 
   return {
     name: address.name,
+    email: address.email || undefined,
     street1: address.street,
     street2: address.street2 || "",
     city: address.city,

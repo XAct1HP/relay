@@ -227,11 +227,15 @@ function normalizeDisputeRecord(order: any) {
   return buildLegacyDisputeRecord(order);
 }
 
-async function createReturnLabel(buyerAddress: any) {
-  const shippoBuyerAddress = toShippoAddress(buyerAddress);
+async function createReturnLabel(buyerAddress: any, fallbackEmail?: string | null) {
+  const shippoBuyerAddress = toShippoAddress({
+    ...(buyerAddress || {}),
+    email: buyerAddress?.email || fallbackEmail || undefined,
+  });
 
   if (
     !shippoBuyerAddress?.street1 ||
+    !shippoBuyerAddress.email ||
     !shippoBuyerAddress.city ||
     !shippoBuyerAddress.state ||
     !shippoBuyerAddress.zip
@@ -248,6 +252,7 @@ async function createReturnLabel(buyerAddress: any) {
     body: JSON.stringify({
       address_from: {
         name: shippoBuyerAddress.name,
+        email: shippoBuyerAddress.email,
         street1: shippoBuyerAddress.street1,
         street2: shippoBuyerAddress.street2 || "",
         city: shippoBuyerAddress.city,
@@ -804,7 +809,11 @@ export async function runAdminDisputeAction(
       throw new Error("Buyer shipping address not found on order. Cannot create return label.");
     }
 
-    const returnLabel = await createReturnLabel(order.buyer_shipping_address);
+    const buyerProfile = Array.isArray(order.buyer) ? order.buyer[0] : order.buyer;
+    const returnLabel = await createReturnLabel(
+      order.buyer_shipping_address,
+      buyerProfile?.email || null
+    );
     await adminClient
       .from("orders")
       .update({

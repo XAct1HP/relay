@@ -14,6 +14,7 @@ interface BuyerAddress {
   name: string;
   street1: string;
   street2: string;
+  email?: string;
   city: string;
   state: string;
   zip: string;
@@ -139,7 +140,10 @@ export default function CheckoutPage() {
             setError(getVacationModeNotice());
           }
           if (data.seller?.ship_from_address) {
-            setSellerAddress(data.seller.ship_from_address);
+            setSellerAddress({
+              ...data.seller.ship_from_address,
+              email: data.seller.email || data.seller.ship_from_address.email || undefined,
+            });
           }
 
           let resolvedVariantRow: ResolvedVariant | null = null;
@@ -302,7 +306,11 @@ export default function CheckoutPage() {
   // Pre-fill buyer name from profile
   useEffect(() => {
     if (currentUser?.full_name && !buyerAddress.name) {
-      setBuyerAddress((prev) => ({ ...prev, name: currentUser.full_name }));
+      setBuyerAddress((prev) => ({
+        ...prev,
+        name: currentUser.full_name,
+        email: currentUser.email || prev.email,
+      }));
     }
   }, [currentUser]);
 
@@ -334,6 +342,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           sellerAddress: {
             name: sellerAddress.name,
+            email: sellerAddress.email || currentUser?.email || undefined,
             street1: sellerAddress.street || sellerAddress.street1,
             city: sellerAddress.city,
             state: sellerAddress.state,
@@ -342,6 +351,7 @@ export default function CheckoutPage() {
           },
           buyerAddress: {
             name: buyerAddress.name,
+            email: buyerAddress.email || currentUser?.email || undefined,
             street1: buyerAddress.street1,
             city: buyerAddress.city,
             state: buyerAddress.state,
@@ -398,6 +408,7 @@ export default function CheckoutPage() {
           shippingCost: parseFloat(shippingRate.amount),
           buyerAddress: {
             name: buyerAddress.name,
+            email: buyerAddress.email || currentUser?.email || undefined,
             street1: buyerAddress.street1,
             street2: buyerAddress.street2 || undefined,
             city: buyerAddress.city,

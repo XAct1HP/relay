@@ -37,6 +37,7 @@ interface ShippingAddress {
   name: string
   street: string
   street2?: string
+  email?: string
   city: string
   state: string
   zip: string
@@ -966,11 +967,17 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       stripeFee: data.stripe_fee || 0,
       sellerEarnings: data.seller_earnings || 0,
       totalPrice: (data.price || 0) + (data.shipping_cost || 0),
-      buyerShippingAddress: normalizeShippingAddress(data.buyer_shipping_address),
+      buyerShippingAddress: normalizeShippingAddress({
+        ...(data.buyer_shipping_address || {}),
+        email: data.buyer?.email || data.buyer_shipping_address?.email || undefined,
+      }),
       sellerFundsFrozen: Boolean(data.seller_funds_frozen),
       sellerName: sellerProfile?.full_name || sellerProfile?.display_name || sellerProfile?.username || "Unknown Seller",
       sellerProfileUrl: `/profile/${sellerProfile?.username || ""}`,
-      sellerShipFromAddress: normalizeShippingAddress(sellerProfile?.ship_from_address),
+      sellerShipFromAddress: normalizeShippingAddress({
+        ...(sellerProfile?.ship_from_address || {}),
+        email: sellerProfile?.email || sellerProfile?.ship_from_address?.email || undefined,
+      }),
       trackingNumber: data.tracking_number || undefined,
       shippingLabelUrl: data.shipping_label_url || undefined,
       authPhotos: data.auth_photos || undefined,
