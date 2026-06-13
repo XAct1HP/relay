@@ -15,6 +15,7 @@ interface BuyerAddress {
   street1: string;
   street2: string;
   email?: string;
+  phone?: string;
   city: string;
   state: string;
   zip: string;
@@ -143,6 +144,7 @@ export default function CheckoutPage() {
             setSellerAddress({
               ...data.seller.ship_from_address,
               email: data.seller.email || data.seller.ship_from_address.email || undefined,
+              phone: data.seller.ship_from_address.phone || undefined,
             });
           }
 
@@ -343,6 +345,7 @@ export default function CheckoutPage() {
           sellerAddress: {
             name: sellerAddress.name,
             email: sellerAddress.email || currentUser?.email || undefined,
+            phone: sellerAddress.phone || undefined,
             street1: sellerAddress.street || sellerAddress.street1,
             city: sellerAddress.city,
             state: sellerAddress.state,
@@ -352,6 +355,7 @@ export default function CheckoutPage() {
           buyerAddress: {
             name: buyerAddress.name,
             email: buyerAddress.email || currentUser?.email || undefined,
+            phone: buyerAddress.phone || undefined,
             street1: buyerAddress.street1,
             city: buyerAddress.city,
             state: buyerAddress.state,
@@ -409,6 +413,7 @@ export default function CheckoutPage() {
           buyerAddress: {
             name: buyerAddress.name,
             email: buyerAddress.email || currentUser?.email || undefined,
+            phone: buyerAddress.phone || undefined,
             street1: buyerAddress.street1,
             street2: buyerAddress.street2 || undefined,
             city: buyerAddress.city,

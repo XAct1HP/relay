@@ -236,6 +236,7 @@ async function createReturnLabel(buyerAddress: any, fallbackEmail?: string | nul
   if (
     !shippoBuyerAddress?.street1 ||
     !shippoBuyerAddress.email ||
+    !shippoBuyerAddress.phone ||
     !shippoBuyerAddress.city ||
     !shippoBuyerAddress.state ||
     !shippoBuyerAddress.zip
@@ -253,6 +254,7 @@ async function createReturnLabel(buyerAddress: any, fallbackEmail?: string | nul
       address_from: {
         name: shippoBuyerAddress.name,
         email: shippoBuyerAddress.email,
+        phone: shippoBuyerAddress.phone,
         street1: shippoBuyerAddress.street1,
         street2: shippoBuyerAddress.street2 || "",
         city: shippoBuyerAddress.city,

@@ -38,6 +38,7 @@ interface ShippingAddress {
   street: string
   street2?: string
   email?: string
+  phone?: string
   city: string
   state: string
   zip: string
@@ -970,6 +971,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       buyerShippingAddress: normalizeShippingAddress({
         ...(data.buyer_shipping_address || {}),
         email: data.buyer?.email || data.buyer_shipping_address?.email || undefined,
+        phone: data.buyer_shipping_address?.phone || undefined,
       }),
       sellerFundsFrozen: Boolean(data.seller_funds_frozen),
       sellerName: sellerProfile?.full_name || sellerProfile?.display_name || sellerProfile?.username || "Unknown Seller",
@@ -977,6 +979,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       sellerShipFromAddress: normalizeShippingAddress({
         ...(sellerProfile?.ship_from_address || {}),
         email: sellerProfile?.email || sellerProfile?.ship_from_address?.email || undefined,
+        phone: sellerProfile?.ship_from_address?.phone || undefined,
       }),
       trackingNumber: data.tracking_number || undefined,
       shippingLabelUrl: data.shipping_label_url || undefined,

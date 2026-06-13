@@ -297,6 +297,7 @@ export interface ShippingAddress {
   street1?: string;
   street2?: string;
   email?: string;
+  phone?: string;
   city: string;
   state: string;
   zip: string;

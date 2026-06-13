@@ -5,7 +5,10 @@ type AddressLike = Partial<ShippingAddress> & {
   line1?: string | null;
   line2?: string | null;
   email?: string | null;
+  phone?: string | null;
 };
+
+const DEFAULT_SHIPPO_PHONE = process.env.SHIPPO_DEFAULT_PHONE || "+14155550123";
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -33,6 +36,7 @@ export function normalizeShippingAddress(value: unknown): ShippingAddress | null
     street: firstNonEmpty(address.street, address.street1, address.line1),
     street2: firstNonEmpty(address.street2, address.line2) || undefined,
     email: firstNonEmpty(address.email) || undefined,
+    phone: firstNonEmpty(address.phone) || undefined,
     city: firstNonEmpty(address.city),
     state: firstNonEmpty(address.state),
     zip: firstNonEmpty(address.zip),
@@ -58,6 +62,7 @@ export function toShippoAddress(value: unknown) {
   return {
     name: address.name,
     email: address.email || undefined,
+    phone: address.phone || DEFAULT_SHIPPO_PHONE,
     street1: address.street,
     street2: address.street2 || "",
     city: address.city,

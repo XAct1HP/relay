@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     if (
       !normalizedSellerAddress.street1 ||
       !(normalizedSellerAddress.email || user?.email) ||
+      !normalizedSellerAddress.phone ||
       !normalizedSellerAddress.city ||
       !normalizedSellerAddress.state ||
       !normalizedSellerAddress.zip ||
@@ -72,10 +73,12 @@ export async function POST(request: NextRequest) {
         address_from: {
           ...normalizedSellerAddress,
           email: normalizedSellerAddress.email || user?.email || undefined,
+          phone: normalizedSellerAddress.phone,
         },
         address_to: {
           ...normalizedBuyerAddress,
           email: normalizedBuyerAddress.email || user?.email || undefined,
+          phone: normalizedBuyerAddress.phone,
         },
         parcels: [
           {
