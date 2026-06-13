@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
+import { fetchWithCurrentProtectionBypass } from "@/lib/public-preview-access"
 
 const AUTH_STEPS: Array<{
   id: string
@@ -145,7 +146,7 @@ export default function MobileAuthPage() {
 
     async function load() {
       try {
-        const res = await fetch("/api/orders/" + orderId + "/public-info")
+        const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/public-info")
         if (cancelled) return
         const data = await res.json()
         if (!res.ok || !data.id) {
@@ -182,7 +183,7 @@ export default function MobileAuthPage() {
     setVerifying(true)
     setCodeError(null)
     try {
-      const res = await fetch("/api/orders/" + orderId + "/verify-code", {
+      const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeCode: codeInput.trim() }),
@@ -321,7 +322,10 @@ export default function MobileAuthPage() {
     fd.append("file", file)
     fd.append("challengeCode", codeInput.trim())
     fd.append("fileName", fileName)
-    const res = await fetch("/api/orders/" + orderId + "/upload-photo", { method: "POST", body: fd })
+    const res = await fetchWithCurrentProtectionBypass("/api/orders/" + orderId + "/upload-photo", {
+      method: "POST",
+      body: fd,
+    })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || "Upload failed")
     return data.storageRef || data.url
@@ -400,7 +404,7 @@ export default function MobileAuthPage() {
         bumpProgress()
       }
 
-      const res = await fetch("/api/orders/" + order.id + "/auth-submit", {
+      const res = await fetchWithCurrentProtectionBypass("/api/orders/" + order.id + "/auth-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

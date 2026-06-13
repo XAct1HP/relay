@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
+import { buildPublicMobileFlowUrl } from "@/lib/public-preview-access";
 
 export async function GET(
   request: Request,
@@ -99,6 +100,8 @@ export async function GET(
       dispute_evidence_seller: await resolveSignedMediaList(adminClient, order.dispute_evidence_seller),
       order_chain_of_custody: signedCustodyRows,
       order_disputes: signedDisputeRows,
+      mobile_auth_url: buildPublicMobileFlowUrl(request.url, `/mobile-auth/${order.id}`),
+      mobile_buyer_review_url: buildPublicMobileFlowUrl(request.url, `/mobile-order-review/${order.id}`),
     });
   } catch (error) {
     return NextResponse.json(

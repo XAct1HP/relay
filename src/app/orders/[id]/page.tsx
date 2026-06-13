@@ -108,6 +108,8 @@ interface OrderData {
   buyerPairPhotoUrl?: string
   expectedRelayTagValue?: string
   expectedRelayBarcodeValue?: string
+  mobileAuthUrl?: string
+  mobileBuyerReviewUrl?: string
 }
 
 interface FulfillmentStatusData {
@@ -1071,6 +1073,8 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       buyerPairPhotoUrl: custody?.buyer_pair_photo_url || undefined,
       expectedRelayTagValue: relayTag?.tag_serial_number || undefined,
       expectedRelayBarcodeValue: relayTag?.barcode_value || undefined,
+      mobileAuthUrl: data.mobile_auth_url || undefined,
+      mobileBuyerReviewUrl: data.mobile_buyer_review_url || undefined,
     }
 
     setOrder(orderData)
@@ -1135,9 +1139,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       ? { label: "Sealed Package / Label", url: order.sellerSealedPackagePhotoUrl }
       : null,
   ].filter((item): item is { label: string; url: string } => Boolean(item))
-  const mobileBuyerReviewUrl = order
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/mobile-order-review/${order.id}`
-    : ""
+  const mobileBuyerReviewUrl = order?.mobileBuyerReviewUrl || ""
 
   const refreshBuyerCustodyEvidence = async () => {
     setRefreshingBuyerCustody(true)
@@ -1476,9 +1478,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   }
 
   // ── QR code URL ──
-  const mobileAuthUrl = order
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/mobile-auth/${order.id}`
-    : ""
+  const mobileAuthUrl = order?.mobileAuthUrl || ""
   const qrUrl = order
     ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileAuthUrl)}`
     : ""

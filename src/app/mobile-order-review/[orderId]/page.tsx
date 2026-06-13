@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
+import { fetchWithCurrentProtectionBypass } from "@/lib/public-preview-access"
 
 type PageState = "loading" | "verify" | "ready" | "capturing" | "review" | "submitting" | "done" | "error"
 
@@ -91,7 +92,7 @@ export default function MobileOrderReviewPage() {
 
     async function load() {
       try {
-        const response = await fetch(`/api/orders/${orderId}/buyer-review-public-info`)
+        const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-review-public-info`)
         const data = await response.json()
 
         if (cancelled) return
@@ -141,7 +142,7 @@ export default function MobileOrderReviewPage() {
     setCodeError(null)
 
     try {
-      const response = await fetch(`/api/orders/${orderId}/buyer-review-verify-code`, {
+      const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-review-verify-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeCode: codeInput.trim() }),
@@ -287,7 +288,7 @@ export default function MobileOrderReviewPage() {
     formData.append("challengeCode", codeInput.trim())
     formData.append("fileName", fileName)
 
-    const response = await fetch(`/api/orders/${orderId}/upload-photo`, {
+    const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/upload-photo`, {
       method: "POST",
       body: formData,
     })
@@ -324,7 +325,7 @@ export default function MobileOrderReviewPage() {
       const buyerPairPhotoUrl = await uploadCapture(capturedPhotos.buyerPairPhoto, "buyer-pair-live.jpg")
       setUploadProgress(90)
 
-      const response = await fetch(`/api/orders/${orderId}/buyer-tag-scan-public`, {
+      const response = await fetchWithCurrentProtectionBypass(`/api/orders/${orderId}/buyer-tag-scan-public`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

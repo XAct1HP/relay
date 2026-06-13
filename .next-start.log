@@ -1,0 +1,9 @@
+
+> relay-app@0.1.0 start
+> next start --port 3010
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3010
+
+ ✓ Starting...
+ ✓ Ready in 301ms
