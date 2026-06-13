@@ -1,14 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { toShippoAddress } from '@/lib/shipping-addresses'
 
 const SHIPPO_API_KEY = process.env.SHIPPO_API_KEY!
 
 export async function POST(request: NextRequest) {
   try {
     const { sellerAddress, buyerAddress, approxSizing } = await request.json()
+    const normalizedSellerAddress = toShippoAddress(sellerAddress)
+    const normalizedBuyerAddress = toShippoAddress(buyerAddress)
 
-    if (!sellerAddress || !buyerAddress) {
+    if (!normalizedSellerAddress || !normalizedBuyerAddress) {
       return NextResponse.json(
         { error: 'Missing seller or buyer address' },
+        { status: 400 }
+      )
+    }
+
+    if (
+      !normalizedSellerAddress.street1 ||
+      !normalizedSellerAddress.city ||
+      !normalizedSellerAddress.state ||
+      !normalizedSellerAddress.zip ||
+      !normalizedBuyerAddress.street1 ||
+      !normalizedBuyerAddress.city ||
+      !normalizedBuyerAddress.state ||
+      !normalizedBuyerAddress.zip
+    ) {
+      return NextResponse.json(
+        { error: 'Shipping address information is incomplete' },
         { status: 400 }
       )
     }
@@ -21,8 +40,8 @@ export async function POST(request: NextRequest) {
         Authorization: `ShippoToken ${SHIPPO_API_KEY}`,
       },
       body: JSON.stringify({
-        address_from: sellerAddress,
-        address_to: buyerAddress,
+        address_from: normalizedSellerAddress,
+        address_to: normalizedBuyerAddress,
         parcels: [
           {
             length: '10',

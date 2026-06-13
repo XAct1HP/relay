@@ -28,6 +28,7 @@ import {
   QrCode,
   Loader2,
 } from "lucide-react"
+import { normalizeShippingAddress, toShippoAddress } from "@/lib/shipping-addresses"
 
 type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refund_pending" | "refunded" | "payout_failed" | "return_pending" | "return_shipped" | "return_delivered"
 type UserRole = "buyer" | "seller"
@@ -965,11 +966,11 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       stripeFee: data.stripe_fee || 0,
       sellerEarnings: data.seller_earnings || 0,
       totalPrice: (data.price || 0) + (data.shipping_cost || 0),
-      buyerShippingAddress: data.buyer_shipping_address || null,
+      buyerShippingAddress: normalizeShippingAddress(data.buyer_shipping_address),
       sellerFundsFrozen: Boolean(data.seller_funds_frozen),
       sellerName: sellerProfile?.full_name || sellerProfile?.display_name || sellerProfile?.username || "Unknown Seller",
       sellerProfileUrl: `/profile/${sellerProfile?.username || ""}`,
-      sellerShipFromAddress: sellerProfile?.ship_from_address || null,
+      sellerShipFromAddress: normalizeShippingAddress(sellerProfile?.ship_from_address),
       trackingNumber: data.tracking_number || undefined,
       shippingLabelUrl: data.shipping_label_url || undefined,
       authPhotos: data.auth_photos || undefined,
@@ -1145,12 +1146,19 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
     try {
       // Step 1: Get a shipping quote to obtain rateId
+      const sellerAddress = toShippoAddress(order.sellerShipFromAddress)
+      const buyerAddress = toShippoAddress(order.buyerShippingAddress)
+
+      if (!sellerAddress || !buyerAddress) {
+        throw new Error("Shipping address information is incomplete")
+      }
+
       const quoteRes = await fetch("/api/shippo/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sellerAddress: order.sellerShipFromAddress,
-          buyerAddress: order.buyerShippingAddress,
+          sellerAddress,
+          buyerAddress,
           approxSizing: order.size,
         }),
       })

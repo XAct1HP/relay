@@ -12,6 +12,7 @@ import {
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
 import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
+import { toShippoAddress } from "@/lib/shipping-addresses";
 import type { DisputeCategory, RelayAuditEvent, SellerTier } from "@/types";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
@@ -227,6 +228,17 @@ function normalizeDisputeRecord(order: any) {
 }
 
 async function createReturnLabel(buyerAddress: any) {
+  const shippoBuyerAddress = toShippoAddress(buyerAddress);
+
+  if (
+    !shippoBuyerAddress?.street1 ||
+    !shippoBuyerAddress.city ||
+    !shippoBuyerAddress.state ||
+    !shippoBuyerAddress.zip
+  ) {
+    throw new Error("Buyer shipping address information is incomplete. Cannot create return label.");
+  }
+
   const shipmentRes = await fetch("https://api.goshippo.com/shipments/", {
     method: "POST",
     headers: {
@@ -235,13 +247,13 @@ async function createReturnLabel(buyerAddress: any) {
     },
     body: JSON.stringify({
       address_from: {
-        name: buyerAddress.name,
-        street1: buyerAddress.street,
-        street2: buyerAddress.street2 || "",
-        city: buyerAddress.city,
-        state: buyerAddress.state,
-        zip: buyerAddress.zip,
-        country: buyerAddress.country || "US",
+        name: shippoBuyerAddress.name,
+        street1: shippoBuyerAddress.street1,
+        street2: shippoBuyerAddress.street2 || "",
+        city: shippoBuyerAddress.city,
+        state: shippoBuyerAddress.state,
+        zip: shippoBuyerAddress.zip,
+        country: shippoBuyerAddress.country || "US",
       },
       address_to: RETURN_ADDRESS,
       parcels: [
