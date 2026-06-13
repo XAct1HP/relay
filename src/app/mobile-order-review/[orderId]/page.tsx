@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useAuth } from "@/hooks/useAuth"
 
 type PageState = "loading" | "ready" | "capturing" | "review" | "submitting" | "done" | "error"
 
@@ -34,7 +33,6 @@ const CAPTURE_STEPS: CaptureStep[] = [
 type OrderContext = {
   id: string
   status: string
-  userRole: "buyer" | "seller"
   relayTagRequired: boolean
   legacyAuthFlow: boolean
   expectedRelayTagValue?: string
@@ -62,12 +60,10 @@ const pageBase: React.CSSProperties = {
 export default function MobileOrderReviewPage() {
   const params = useParams()
   const router = useRouter()
-  const { currentUser, fetchUser } = useAuth()
   const orderId = params.orderId as string
 
   const [pageState, setPageState] = useState<PageState>("loading")
   const [error, setError] = useState<string | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)
   const [order, setOrder] = useState<OrderContext | null>(null)
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [cameraReady, setCameraReady] = useState(false)
@@ -86,40 +82,15 @@ export default function MobileOrderReviewPage() {
   const allPhotosCaptured = CAPTURE_STEPS.every((step) => Boolean(capturedPhotos[step.id]))
 
   useEffect(() => {
-    let cancelled = false
-
-    async function ensureAuth() {
-      if (!currentUser) {
-        await fetchUser()
-      }
-
-      if (!cancelled) {
-        setAuthChecked(true)
-      }
-    }
-
-    void ensureAuth()
-
-    return () => {
-      cancelled = true
-    }
-  }, [currentUser, fetchUser])
-
-  useEffect(() => {
-    if (authChecked && !currentUser) {
-      setError("Sign in to Relay on your phone to complete buyer verification.")
-      setPageState("error")
-    }
-  }, [authChecked, currentUser])
-
-  useEffect(() => {
-    if (!orderId || !currentUser?.id || !authChecked) return
+    if (!orderId) return
 
     let cancelled = false
 
     async function load() {
       try {
-        const response = await fetch(`/api/orders/${orderId}`, { cache: "no-store" })
+        const response = await fetch(`/api/orders/${orderId}/buyer-review-context`, {
+          cache: "no-store",
+        })
         const data = await response.json()
 
         if (cancelled) return
@@ -136,36 +107,17 @@ export default function MobileOrderReviewPage() {
           return
         }
 
-        const currentUserId = currentUser!.id
-        const custody = Array.isArray(data.order_chain_of_custody)
-          ? data.order_chain_of_custody[0]
-          : data.order_chain_of_custody
-        const relayTag = Array.isArray(data.relay_tag) ? data.relay_tag[0] : data.relay_tag
-        const derivedUserRole =
-          data.buyer_id === currentUserId
-            ? "buyer"
-            : data.seller_id === currentUserId
-              ? "seller"
-              : "buyer"
-
         const nextOrder: OrderContext = {
           id: data.id,
           status: data.status,
-          userRole: derivedUserRole,
-          relayTagRequired: Boolean(data.relay_tag_required),
-          legacyAuthFlow: !data.auth_requirements_evaluated_at,
-          expectedRelayTagValue: relayTag?.tag_serial_number || undefined,
-          buyerScannedTagValue: custody?.buyer_scanned_tag_value || undefined,
-          buyerTagPhotoUrl: custody?.buyer_tag_photo_url || undefined,
-          buyerPairPhotoUrl: custody?.buyer_pair_photo_url || undefined,
-          brand: data.listings?.brand || "Unknown",
-          model: data.listings?.model || "Pair",
-        }
-
-        if (derivedUserRole !== "buyer") {
-          setError("Only the buyer can use this verification flow.")
-          setPageState("error")
-          return
+          relayTagRequired: Boolean(data.relayTagRequired),
+          legacyAuthFlow: Boolean(data.legacyAuthFlow),
+          expectedRelayTagValue: data.expectedRelayTagValue || undefined,
+          buyerScannedTagValue: data.buyerScannedTagValue || undefined,
+          buyerTagPhotoUrl: data.buyerTagPhotoUrl || undefined,
+          buyerPairPhotoUrl: data.buyerPairPhotoUrl || undefined,
+          brand: data.brand || "Unknown",
+          model: data.model || "Pair",
         }
 
         if (!nextOrder.relayTagRequired || nextOrder.legacyAuthFlow) {
@@ -196,7 +148,7 @@ export default function MobileOrderReviewPage() {
     return () => {
       cancelled = true
     }
-  }, [orderId, currentUser?.id, authChecked])
+  }, [orderId])
 
   const startCamera = useCallback(async () => {
     try {
