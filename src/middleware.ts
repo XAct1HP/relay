@@ -2,31 +2,20 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Middleware to disable the Vercel toolbar on mobile capture routes.
+ * Middleware for mobile capture routes.
  *
- * Vercel injects a parser-blocking <script> from vercel.live into preview
- * deployments. This script sits before the inline RSC payload scripts in
- * the HTML. If the script fails to load on mobile (content blockers, slow
- * DNS, unreliable connectivity to vercel.live), the browser never parses
- * the inline scripts, React never hydrates, and the page is stuck on the
- * SSR "Loading..." state forever.
+ * On Vercel preview deployments, deployment protection blocks ALL requests
+ * (including JS chunks, CSS, images) unless they carry a bypass cookie or
+ * the bypass query param. The QR code URL now sets the bypass cookie via
+ * x-vercel-set-bypass-cookie=samesitenone, which handles this.
  *
- * Setting x-vercel-skip-toolbar tells Vercel's edge not to inject that
- * script, so the mobile pages hydrate reliably on any device.
+ * This middleware also sets x-vercel-skip-toolbar to prevent Vercel from
+ * injecting its parser-blocking toolbar script into mobile pages.
  */
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  if (
-    pathname.startsWith("/mobile-auth") ||
-    pathname.startsWith("/mobile-order-review")
-  ) {
-    const response = NextResponse.next();
-    response.headers.set("x-vercel-skip-toolbar", "1");
-    return response;
-  }
-
-  return NextResponse.next();
+  const response = NextResponse.next();
+  response.headers.set("x-vercel-skip-toolbar", "1");
+  return response;
 }
 
 export const config = {
