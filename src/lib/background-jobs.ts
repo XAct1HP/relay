@@ -93,7 +93,8 @@ export async function handleShippoTrackingWebhookEvent(
       seller_funds_frozen,
       payout_status,
       seller_tier_snapshot,
-      relay_tag_id
+      relay_tag_id,
+      buyer_challenge_code
     `)
     .eq("tracking_number", input.trackingNumber)
     .maybeSingle();
