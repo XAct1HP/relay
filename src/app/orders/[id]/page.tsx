@@ -70,6 +70,7 @@ interface OrderData {
   payoutLastError?: string
   checkcheckCertificateUrl?: string
   challengeCode?: string
+  buyerChallengeCode?: string
   disputeReason?: string
   disputeCategory?: string
   disputeStatus?: string
@@ -1031,6 +1032,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       payoutLastError: data.payout_last_error || undefined,
       checkcheckCertificateUrl: data.checkcheck_certificate_url || undefined,
       challengeCode: data.challenge_code || undefined,
+      buyerChallengeCode: data.buyer_challenge_code || undefined,
       disputeReason: activeDispute?.category || data.dispute_reason || undefined,
       disputeCategory: activeDispute?.category || undefined,
       disputeStatus: activeDispute?.status || undefined,
@@ -2151,9 +2153,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                           Expected Relay tag: <span className="font-mono text-[#7ca6ff]">{order.expectedRelayTagValue}</span>
                         </p>
                       )}
-                      {order.challengeCode && (
+                      {order.buyerChallengeCode && (
                         <p className="text-xs text-white/50">
-                          Buyer challenge code: <span className="font-mono text-[#7ca6ff]">{order.challengeCode}</span>
+                          Buyer challenge code: <span className="font-mono text-[#7ca6ff]">{order.buyerChallengeCode}</span>
                         </p>
                       )}
                       {order.custodyAdminReviewRequired && (
@@ -2198,7 +2200,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               existingTagPhotoUrl={order.buyerTagPhotoUrl}
               existingPairPhotoUrl={order.buyerPairPhotoUrl}
               mobileCaptureUrl={mobileBuyerReviewUrl}
-              challengeCode={order.challengeCode}
+              challengeCode={order.buyerChallengeCode}
               isMobileDevice={isMobileDevice}
               onRefreshEvidence={() => {
                 void refreshBuyerCustodyEvidence()
@@ -2497,7 +2499,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           existingTagPhotoUrl={order.buyerTagPhotoUrl}
           existingPairPhotoUrl={order.buyerPairPhotoUrl}
           mobileCaptureUrl={mobileBuyerReviewUrl}
-          challengeCode={order.challengeCode}
+          challengeCode={order.buyerChallengeCode}
           isMobileDevice={isMobileDevice}
           onRefreshEvidence={() => {
             void refreshBuyerCustodyEvidence()

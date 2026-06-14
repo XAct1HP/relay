@@ -62,7 +62,7 @@ export async function POST(
     // Verify challenge code
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, challenge_code, status, seller_id, buyer_id')
+      .select('id, challenge_code, buyer_challenge_code, status, seller_id, buyer_id')
       .eq('id', orderId)
       .single()
 
@@ -70,11 +70,16 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    if (order.challenge_code?.toUpperCase() !== challengeCode?.toUpperCase()) {
+    const normalizedFileName = sanitizeUploadedFileName(fileName)
+    const normalizedInput = challengeCode?.toUpperCase()
+    const isBuyerUpload = ['buyer-tag-live.jpg', 'buyer-pair-live.jpg'].includes(normalizedFileName)
+    const expectedCode = isBuyerUpload
+      ? order.buyer_challenge_code?.toUpperCase()
+      : order.challenge_code?.toUpperCase()
+
+    if (!expectedCode || expectedCode !== normalizedInput) {
       return NextResponse.json({ error: 'Invalid challenge code' }, { status: 403 })
     }
-
-    const normalizedFileName = sanitizeUploadedFileName(fileName)
     const isCertificate = normalizedFileName.startsWith('checkcheck-certificate.')
     const isAllowedNamedUpload = ALLOWED_FILE_NAMES.has(normalizedFileName)
     const isBuyerCustodyUpload = ['buyer-tag-live.jpg', 'buyer-pair-live.jpg'].includes(normalizedFileName)

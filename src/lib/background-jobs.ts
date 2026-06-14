@@ -9,6 +9,7 @@ import { getOrderFulfillmentGateStatus } from "@/lib/order-auth";
 import { releaseEligibleReserveEntries, processOrderPayoutTrigger } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { evaluateAllSellerTrust } from "@/lib/seller-trust-admin";
+import { generateChallengeCode } from "@/lib/utils";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
 
@@ -196,13 +197,17 @@ export async function handleShippoTrackingWebhookEvent(
       order.status === "shipped" || order.status === "label_created";
 
     if (transitionedToDelivered || !order.review_deadline || !order.delivered_at) {
+      const updatePayload: Record<string, any> = {
+        status: transitionedToDelivered ? "delivered" : order.status,
+        delivered_at: order.delivered_at || nowIso,
+        review_deadline: nextReviewDeadline,
+      };
+      if (transitionedToDelivered && !order.buyer_challenge_code) {
+        updatePayload.buyer_challenge_code = generateChallengeCode();
+      }
       await adminClient
         .from("orders")
-        .update({
-          status: transitionedToDelivered ? "delivered" : order.status,
-          delivered_at: order.delivered_at || nowIso,
-          review_deadline: nextReviewDeadline,
-        })
+        .update(updatePayload)
         .eq("id", order.id);
     }
 

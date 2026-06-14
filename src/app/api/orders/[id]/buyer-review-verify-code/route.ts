@@ -20,7 +20,7 @@ export async function POST(
 
     const { data: order, error } = await supabase
       .from('orders')
-      .select('id, challenge_code, status, relay_tag_required, auth_requirements_evaluated_at')
+      .select('id, buyer_challenge_code, status, relay_tag_required, auth_requirements_evaluated_at')
       .eq('id', orderId)
       .single()
 
@@ -42,7 +42,14 @@ export async function POST(
       )
     }
 
-    if (order.challenge_code?.toUpperCase() !== challengeCode.toUpperCase()) {
+    if (!order.buyer_challenge_code) {
+      return NextResponse.json(
+        { error: 'Buyer verification code has not been generated yet.' },
+        { status: 400 }
+      )
+    }
+
+    if (order.buyer_challenge_code.toUpperCase() !== challengeCode.toUpperCase()) {
       return NextResponse.json({ error: 'Incorrect challenge code.' }, { status: 403 })
     }
 

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { processOrderPayoutTrigger } from '@/lib/payouts'
 import { logRelayAuditEvent } from '@/lib/relay-audit'
+import { generateChallengeCode } from '@/lib/utils'
 
 export async function POST(
   request: NextRequest,
@@ -69,12 +70,15 @@ export async function POST(
     const reviewDeadline = new Date()
     reviewDeadline.setHours(reviewDeadline.getHours() + 48)
 
+    const buyerChallengeCode = generateChallengeCode()
+
     const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
       .update({
         status: 'delivered',
         delivered_at: new Date().toISOString(),
         review_deadline: reviewDeadline.toISOString(),
+        buyer_challenge_code: buyerChallengeCode,
       })
       .eq('id', orderId)
       .select()

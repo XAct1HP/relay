@@ -223,6 +223,7 @@ export interface Order {
   order_payouts?: import("./trust").OrderPayoutRecord[] | null;
   purchased_condition_photo_url?: string | null;
   challenge_code: string | null;
+  buyer_challenge_code: string | null;
   buyer_shipping_address: ShippingAddress | null;
   dispute_reason: string | null;
   dispute_evidence_buyer: string[];
