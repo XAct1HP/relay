@@ -63,6 +63,9 @@ const pageBase: React.CSSProperties = {
   color: TEXT,
   margin: 0,
   padding: 0,
+  position: "relative",
+  zIndex: 1,
+  WebkitTextSizeAdjust: "100%",
 }
 
 export default function MobileOrderReviewPage() {

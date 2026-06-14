@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/components/layout/AuthProvider";
+import { RootShell } from "@/components/layout/RootShell";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -188,8 +188,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} min-h-screen overflow-x-clip`}>
-        <div className="relay-site-bg" />
-        <AuthProvider>{children}</AuthProvider>
+        <RootShell>{children}</RootShell>
       </body>
     </html>
   );
