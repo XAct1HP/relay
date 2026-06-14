@@ -564,8 +564,46 @@ export default function MobileAuthPage() {
 
   if (pageState === "loading") {
     return (
-      <div style={{ ...pageBase, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...pageBase, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
         <p style={{ color: DIM, fontSize: 16 }}>Loading...</p>
+        <div id="__mobile_diag" style={{ display: "none", color: DIM, fontSize: 11, fontFamily: "monospace", maxWidth: 340, wordBreak: "break-all", textAlign: "left", padding: 16 }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+              var d=document.getElementById('__mobile_diag');
+              if(!d)return;
+              var info=[];
+              info.push('UA: '+navigator.userAgent);
+              info.push('URL search: '+(location.search||'(none)'));
+              info.push('Time: '+new Date().toISOString());
+              setTimeout(function(){
+                d.style.display='block';
+                d.innerHTML='<b>Page stuck - diagnostics:</b><br>'+info.join('<br>');
+                var bp=new URLSearchParams(location.search).get('x-vercel-protection-bypass');
+                var apiUrl='/api/orders/${orderId}/public-info'+(bp?'?x-vercel-protection-bypass='+bp:'');
+                d.innerHTML+='<br>Fetching API...';
+                fetch(apiUrl).then(function(r){
+                  d.innerHTML+='<br>API status: '+r.status;
+                  return r.text();
+                }).then(function(t){
+                  try{var j=JSON.parse(t);d.innerHTML+='<br>API OK: order='+j.id+' status='+j.status;}
+                  catch(e){d.innerHTML+='<br>API body (not JSON): '+t.substring(0,200);}
+                }).catch(function(e){d.innerHTML+='<br>Fetch error: '+e.message;});
+                var scripts=document.querySelectorAll('script[src]');
+                var loaded=0,failed=0;
+                scripts.forEach(function(s){
+                  fetch(s.src,{method:'HEAD'}).then(function(r){
+                    if(r.ok)loaded++;else failed++;
+                    d.innerHTML+='<br>Scripts: '+loaded+' ok, '+failed+' failed';
+                  }).catch(function(){
+                    failed++;
+                    d.innerHTML+='<br>Scripts: '+loaded+' ok, '+failed+' failed ('+s.src.split('/').pop()+')';
+                  });
+                });
+              },4000);
+            })();`,
+          }}
+        />
       </div>
     )
   }
