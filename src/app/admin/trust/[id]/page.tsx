@@ -32,6 +32,13 @@ import type {
 
 interface SellerTrustDetailResponse {
   seller: User;
+  relayBalance?: {
+    totalBalanceCents: number;
+    pendingBalanceCents: number;
+    availableBalanceCents: number;
+    exposureCents: number;
+    withdrawableBalanceCents: number;
+  } | null;
   reserveAccount: SellerReserveAccount | null;
   reserveEntries: SellerReserveEntry[];
   identityProfile: SellerIdentityProfile | null;
@@ -295,7 +302,6 @@ export default function AdminSellerTrustDetailPage() {
 
   const {
     seller,
-    reserveAccount,
     reserveEntries,
     identityProfile,
     tierHistory,
@@ -445,25 +451,36 @@ export default function AdminSellerTrustDetailPage() {
           <div className="relay-card p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <Archive className="w-5 h-5 text-emerald-300" />
-              <h2 className="text-lg font-semibold text-[#f5f7fb]">Reserve Balance</h2>
+              <h2 className="text-lg font-semibold text-[#f5f7fb]">Relay Balance Snapshot</h2>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-5">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-5">
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
-                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Balance</p>
-                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(reserveAccount?.balance_cents || 0)}</p>
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Total</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.totalBalanceCents || 0)}</p>
               </div>
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
-                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Rate</p>
-                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatPercent(reserveAccount?.reserve_percentage_bps || 0)}</p>
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Pending</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.pendingBalanceCents || 0)}</p>
               </div>
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
-                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Minimum</p>
-                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(reserveAccount?.minimum_balance_cents || 0)}</p>
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Available</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.availableBalanceCents || 0)}</p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Current Exposure</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.exposureCents || 0)}</p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Withdrawable</p>
+                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.withdrawableBalanceCents || 0)}</p>
               </div>
             </div>
 
             <div className="space-y-2">
+              <p className="text-white/45 text-sm">
+                Tier V2 removes fixed reserve percentages and minimum platform balance requirements. Legacy reserve rows remain below only for historical context on older orders.
+              </p>
               {reserveEntries.slice(0, 8).map((entry) => (
                 <div key={entry.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 flex items-center justify-between">
                   <div>
@@ -473,7 +490,7 @@ export default function AdminSellerTrustDetailPage() {
                   <p className="text-[#f5f7fb] font-semibold">{formatMoney(entry.amount_cents)}</p>
                 </div>
               ))}
-              {reserveEntries.length === 0 && <p className="text-white/45">No reserve entries yet.</p>}
+              {reserveEntries.length === 0 && <p className="text-white/45">No legacy reserve entries recorded.</p>}
             </div>
           </div>
 
@@ -690,7 +707,7 @@ export default function AdminSellerTrustDetailPage() {
           </div>
 
           <div className="relay-card p-4 sm:p-5">
-            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Recent Order Payouts</h2>
+            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Recent Order Money Status</h2>
             <div className="space-y-3">
               {recentOrders.map((order) => (
                 <div key={order.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 space-y-3">
@@ -715,7 +732,7 @@ export default function AdminSellerTrustDetailPage() {
                       <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.seller_amount_paid_cents || 0)}</p>
                     </div>
                     <div>
-                      <p className="text-white/40">Held in reserve</p>
+                      <p className="text-white/40">Legacy reserve carryover</p>
                       <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.heldReserveCents || order.seller_amount_held_in_reserve_cents || 0)}</p>
                     </div>
                     <div>
@@ -723,7 +740,7 @@ export default function AdminSellerTrustDetailPage() {
                       <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.seller_amount_frozen_cents || order.frozenReserveCents || 0)}</p>
                     </div>
                     <div>
-                      <p className="text-white/40">Consumed reserve</p>
+                      <p className="text-white/40">Legacy reserve consumed</p>
                       <p className="text-[#f5f7fb] font-semibold">{formatMoney(order.consumedReserveCents || 0)}</p>
                     </div>
                   </div>
@@ -731,7 +748,7 @@ export default function AdminSellerTrustDetailPage() {
                   <div className="text-xs text-white/45 space-y-1">
                     <p>Last trigger: {order.payout_last_trigger || "none"}</p>
                     <p>
-                      Reserve release date:{" "}
+                      Legacy reserve release date:{" "}
                       {order.nextReserveReleaseAt
                         ? new Date(order.nextReserveReleaseAt).toLocaleString()
                         : "indefinite / none"}
@@ -751,7 +768,7 @@ export default function AdminSellerTrustDetailPage() {
                           </div>
                           <div className="mt-1 flex items-center justify-between gap-3">
                             <span>Paid {formatMoney(row.net_paid_cents)}</span>
-                            <span>Reserve {formatMoney(row.reserve_withheld_cents + row.minimum_balance_top_up_cents)}</span>
+                            <span>Legacy reserve {formatMoney(row.reserve_withheld_cents + row.minimum_balance_top_up_cents)}</span>
                           </div>
                         </div>
                       ))}

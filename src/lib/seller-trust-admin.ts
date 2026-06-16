@@ -329,7 +329,7 @@ export async function evaluateSellerTrustById(
 
   if (adminApprovalRequired) {
     appliedTier = hardThresholds.tier_2.satisfied ? "tier_2" : "tier_1";
-    changeReasons.push("Tier 3 requires admin approval unless seller is founding/trusted");
+    changeReasons.push("Tier 3 requires admin approval");
   }
 
   const isBanned = profile.authenticity_violation_count >= 2;

@@ -99,13 +99,11 @@ export interface ChainOfCustodyResult {
 
 export const SELLER_TIER_THRESHOLDS = {
   tier_1: {
-    trustScoreFloor: 0,
     completedOrders: 0,
     lifetimeGmvCents: 0,
     accountAgeDays: 0,
   },
   tier_2: {
-    trustScoreFloor: 60,
     completedOrders: 20,
     lifetimeGmvCents: 750_000,
     accountAgeDays: 60,
@@ -113,12 +111,11 @@ export const SELLER_TIER_THRESHOLDS = {
     maxAuthenticityViolations: 0,
   },
   tier_3: {
-    trustScoreFloor: 90,
     completedOrders: 100,
     lifetimeGmvCents: 5_000_000,
     accountAgeDays: 180,
     maxDisputeRateBps: 199,
-    noAuthenticityViolationLookbackDays: 180,
+    maxAuthenticityViolations: 0,
   },
 } as const;
 
@@ -257,8 +254,8 @@ export function calculateSellerTrustScoreBreakdown(snapshot: SellerTrustSnapshot
 }
 
 /**
- * Promotions only occur when the seller clears both the trust score floor and
- * the tier-specific hard thresholds.
+ * Trust score remains useful for ranking and admin review, but Tier V2
+ * promotions are driven by the explicit marketplace thresholds below.
  */
 export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): SellerTierEligibilityResult {
   const {
@@ -267,12 +264,8 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
     disputeRateBps,
     accountAgeDays,
   } = calculateSellerTrustScoreBreakdown(snapshot);
-  const scoreMappedTier = mapTrustScoreToTier(trustScore);
 
   const tier2Reasons: string[] = [];
-  if (trustScore < SELLER_TIER_THRESHOLDS.tier_2.trustScoreFloor) {
-    tier2Reasons.push("trust score below Tier 2 floor");
-  }
   if (snapshot.completedOrderCount < SELLER_TIER_THRESHOLDS.tier_2.completedOrders) {
     tier2Reasons.push("completed orders below Tier 2 minimum");
   }
@@ -290,9 +283,6 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
   }
 
   const tier3Reasons: string[] = [];
-  if (trustScore < SELLER_TIER_THRESHOLDS.tier_3.trustScoreFloor) {
-    tier3Reasons.push("trust score below Tier 3 floor");
-  }
   if (snapshot.completedOrderCount < SELLER_TIER_THRESHOLDS.tier_3.completedOrders) {
     tier3Reasons.push("completed orders below Tier 3 minimum");
   }
@@ -305,13 +295,8 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
   if (disputeRateBps > SELLER_TIER_THRESHOLDS.tier_3.maxDisputeRateBps) {
     tier3Reasons.push("dispute rate too high for Tier 3");
   }
-  if (
-    hasRecentAuthenticityViolation(
-      snapshot,
-      SELLER_TIER_THRESHOLDS.tier_3.noAuthenticityViolationLookbackDays
-    )
-  ) {
-    tier3Reasons.push("recent authenticity violation blocks Tier 3 promotion");
+  if (snapshot.authenticityViolationCount > SELLER_TIER_THRESHOLDS.tier_3.maxAuthenticityViolations) {
+    tier3Reasons.push("authenticity violations block Tier 3 promotion");
   }
 
   const hardThresholds = {
@@ -332,19 +317,19 @@ export function determineSellerTierEligibility(snapshot: SellerTrustSnapshot): S
     };
   }
 
-  if (scoreMappedTier === "tier_3" && hardThresholds.tier_3.satisfied) {
+  if (hardThresholds.tier_3.satisfied) {
     return {
       trustScore,
       eligibleTier: "tier_3",
       manualOverrideApplied: false,
-      adminApprovalRequired: !snapshot.isFoundingSeller && !snapshot.tier3ApprovedAt,
+      adminApprovalRequired: !snapshot.tier3ApprovedAt,
       reasons: [],
       breakdown,
       hardThresholds,
     };
   }
 
-  if ((scoreMappedTier === "tier_2" || scoreMappedTier === "tier_3") && hardThresholds.tier_2.satisfied) {
+  if (hardThresholds.tier_2.satisfied) {
     return {
       trustScore,
       eligibleTier: "tier_2",
@@ -426,32 +411,17 @@ export function determineCheckCheckRequirement(
 }
 
 export function determineReservePolicyForTier(sellerTier: SellerTier): ReservePolicy {
-  if (sellerTier === "tier_3") {
-    return {
-      sellerTier,
-      reservePercentageBps: 200,
-      holdDurationDays: null,
-      minimumReserveBalanceCents: 50_000,
-      releasePolicy: "indefinite",
-    };
-  }
-
-  if (sellerTier === "tier_2") {
-    return {
-      sellerTier,
-      reservePercentageBps: 500,
-      holdDurationDays: 30,
-      minimumReserveBalanceCents: 0,
-      releasePolicy: "delivery",
-    };
-  }
-
+  // Tier V2 removes fixed reserve percentages and the old minimum platform
+  // balance requirement. Relay Balance + exposure holds now handle risk.
   return {
     sellerTier,
-    reservePercentageBps: 1500,
-    holdDurationDays: 30,
+    reservePercentageBps: 0,
+    holdDurationDays: null,
     minimumReserveBalanceCents: 0,
-    releasePolicy: "buyer_confirmation_or_review_expiry",
+    releasePolicy:
+      sellerTier === "tier_1"
+        ? "buyer_confirmation_or_review_expiry"
+        : "delivery",
   };
 }
 

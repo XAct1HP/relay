@@ -7,7 +7,7 @@ export async function GET() {
 
     const [
       sellersResult,
-      reserveAccountsResult,
+      relayBalancesResult,
       disputesResult,
       legacyDisputedOrdersResult,
       custodyReviewResult,
@@ -42,8 +42,8 @@ export async function GET() {
         .eq("role", "seller")
         .order("trust_score", { ascending: false }),
       adminClient
-        .from("seller_reserve_accounts")
-        .select("seller_id, balance_cents, minimum_balance_cents, reserve_percentage_bps"),
+        .from("relay_balances")
+        .select("seller_id, pending_balance_cents, available_balance_cents, exposure_cents, withdrawable_balance_cents"),
       adminClient
         .from("order_disputes")
         .select("id, order_id, seller_id, category, status")
@@ -73,8 +73,8 @@ export async function GET() {
     }
 
     const sellers = sellersResult.data || [];
-    const reserveBySeller = new Map(
-      (reserveAccountsResult.data || []).map((entry) => [entry.seller_id, entry])
+    const relayBalanceBySeller = new Map(
+      (relayBalancesResult.data || []).map((entry) => [entry.seller_id, entry])
     );
     const openDisputes = disputesResult.data || [];
     const legacyDisputedOrders = legacyDisputedOrdersResult.data || [];
@@ -86,7 +86,7 @@ export async function GET() {
     const allTags = tagsResult.data || [];
 
     const sellersWithSummary = sellers.map((seller) => {
-      const reserve = reserveBySeller.get(seller.id);
+      const relayBalance = relayBalanceBySeller.get(seller.id);
       const disputes =
         openDisputes.filter((dispute) => dispute.seller_id === seller.id).length +
         legacyDisputedOrders.filter((order) => order.seller_id === seller.id).length;
@@ -100,9 +100,10 @@ export async function GET() {
 
       return {
         ...seller,
-        reserve_balance_cents: reserve?.balance_cents || 0,
-        reserve_percentage_bps: reserve?.reserve_percentage_bps || 0,
-        minimum_reserve_balance_cents: reserve?.minimum_balance_cents || 0,
+        pending_balance_cents: relayBalance?.pending_balance_cents || 0,
+        available_balance_cents: relayBalance?.available_balance_cents || 0,
+        exposure_cents: relayBalance?.exposure_cents || 0,
+        withdrawable_balance_cents: relayBalance?.withdrawable_balance_cents || 0,
         open_dispute_count: disputes,
         review_queue_count: reviewOrders,
         tag_inventory_count: allTags.filter((tag) => tag.assigned_seller_id === seller.id).length,
@@ -131,8 +132,20 @@ export async function GET() {
         custodyReviewCount: custodyReviewOrders.length,
         checkcheckReviewCount: checkcheckReviewOrders.length,
         tagReviewCount: tagReviewRows.length,
-        totalReserveBalanceCents: (reserveAccountsResult.data || []).reduce(
-          (sum, entry) => sum + (entry.balance_cents || 0),
+        totalPendingBalanceCents: (relayBalancesResult.data || []).reduce(
+          (sum, entry) => sum + (entry.pending_balance_cents || 0),
+          0
+        ),
+        totalAvailableBalanceCents: (relayBalancesResult.data || []).reduce(
+          (sum, entry) => sum + (entry.available_balance_cents || 0),
+          0
+        ),
+        totalExposureCents: (relayBalancesResult.data || []).reduce(
+          (sum, entry) => sum + (entry.exposure_cents || 0),
+          0
+        ),
+        totalWithdrawableBalanceCents: (relayBalancesResult.data || []).reduce(
+          (sum, entry) => sum + (entry.withdrawable_balance_cents || 0),
           0
         ),
         totalTagInventory: allTags.length,

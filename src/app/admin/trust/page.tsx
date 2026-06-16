@@ -26,8 +26,10 @@ interface SellerTrustDashboardSeller {
   tier_3_approved_at: string | null;
   is_banned: boolean;
   tier_last_evaluated_at: string | null;
-  reserve_balance_cents: number;
-  reserve_percentage_bps: number;
+  pending_balance_cents: number;
+  available_balance_cents: number;
+  exposure_cents: number;
+  withdrawable_balance_cents: number;
   open_dispute_count: number;
   review_queue_count: number;
   tag_inventory_count: number;
@@ -48,7 +50,10 @@ interface DashboardData {
     custodyReviewCount: number;
     checkcheckReviewCount: number;
     tagReviewCount: number;
-    totalReserveBalanceCents: number;
+    totalPendingBalanceCents: number;
+    totalAvailableBalanceCents: number;
+    totalExposureCents: number;
+    totalWithdrawableBalanceCents: number;
     totalTagInventory: number;
   };
 }
@@ -62,10 +67,6 @@ function formatMoney(cents: number) {
     style: "currency",
     currency: "USD",
   }).format((cents || 0) / 100);
-}
-
-function formatPercent(bps: number) {
-  return `${((bps || 0) / 100).toFixed(1)}%`;
 }
 
 function MetricCard({
@@ -179,7 +180,7 @@ export default function AdminTrustDashboardPage() {
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Seller Trust</h1>
           <p className="text-white/50 max-w-2xl">
-            Review automated trust scores, promotion gates, reserve balances, tag inventory, and sellers who need manual attention.
+            Review automated trust scores, promotion gates, Relay Balance exposure, tag inventory, and sellers who need manual attention.
           </p>
         </div>
 
@@ -208,7 +209,10 @@ export default function AdminTrustDashboardPage() {
             <MetricCard label="Banned Sellers" value={data.metrics.bannedSellerCount} tone="red" />
             <MetricCard label="Tier 1 / 2 / 3" value={`${data.metrics.tier1Count} / ${data.metrics.tier2Count} / ${data.metrics.tier3Count}`} />
             <MetricCard label="Orders Requiring Review" value={data.metrics.custodyReviewCount + data.metrics.checkcheckReviewCount + data.metrics.tagReviewCount} tone="amber" />
-            <MetricCard label="Total Reserve Balance" value={formatMoney(data.metrics.totalReserveBalanceCents)} tone="green" />
+            <MetricCard label="Total Pending Balance" value={formatMoney(data.metrics.totalPendingBalanceCents)} tone="blue" />
+            <MetricCard label="Total Available Balance" value={formatMoney(data.metrics.totalAvailableBalanceCents)} tone="green" />
+            <MetricCard label="Total Current Exposure" value={formatMoney(data.metrics.totalExposureCents)} tone="amber" />
+            <MetricCard label="Total Withdrawable" value={formatMoney(data.metrics.totalWithdrawableBalanceCents)} tone="green" />
             <MetricCard label="Assigned Tag Inventory" value={data.metrics.totalTagInventory} />
           </div>
 
@@ -216,7 +220,7 @@ export default function AdminTrustDashboardPage() {
             <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-[#f5f7fb]">Seller Queue</h2>
-                <p className="text-white/45 text-sm">Current tier, automated recommendation, violations, reserves, and review load.</p>
+                <p className="text-white/45 text-sm">Current tier, automated recommendation, Relay Balance status, and review load.</p>
               </div>
             </div>
 
@@ -264,7 +268,7 @@ export default function AdminTrustDashboardPage() {
                     </div>
 
                     {/* Desktop: grid layout / Mobile: compact inline stats */}
-                    <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-6 gap-3 xl:min-w-[780px]">
+                    <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-7 gap-3 xl:min-w-[920px]">
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                         <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Score</p>
                         <p className="text-[#f5f7fb] font-semibold">{seller.trust_score}</p>
@@ -279,11 +283,19 @@ export default function AdminTrustDashboardPage() {
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                         <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Buyer Completion</p>
-                        <p className="text-[#f5f7fb] font-semibold">{formatPercent(seller.buyer_completion_rate_bps)}</p>
+                        <p className="text-[#f5f7fb] font-semibold">{((seller.buyer_completion_rate_bps || 0) / 100).toFixed(1)}%</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Reserve</p>
-                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.reserve_balance_cents)}</p>
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Pending</p>
+                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.pending_balance_cents)}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Available</p>
+                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.available_balance_cents)}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Exposure</p>
+                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.exposure_cents)}</p>
                       </div>
                       <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                         <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Review Queue</p>
@@ -294,7 +306,8 @@ export default function AdminTrustDashboardPage() {
                       <span className="text-white/50">Score <span className="text-[#f5f7fb] font-semibold">{seller.trust_score}</span></span>
                       <span className="text-white/50">GMV <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.lifetime_gmv_cents)}</span></span>
                       <span className="text-white/50">Orders <span className="text-[#f5f7fb] font-semibold">{seller.completed_order_count}</span></span>
-                      <span className="text-white/50">Reserve <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.reserve_balance_cents)}</span></span>
+                      <span className="text-white/50">Pending <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.pending_balance_cents)}</span></span>
+                      <span className="text-white/50">Available <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.available_balance_cents)}</span></span>
                       {seller.review_queue_count > 0 && (
                         <span className="text-amber-300 font-semibold">{seller.review_queue_count} to review</span>
                       )}

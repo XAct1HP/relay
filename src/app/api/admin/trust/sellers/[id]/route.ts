@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin-access";
+import { getRelayBalanceSnapshot } from "@/lib/money-policy";
 
 export async function GET(
   request: Request,
@@ -19,6 +20,7 @@ export async function GET(
       violationsResult,
       tagsResult,
       reviewOrdersResult,
+      relayBalance,
     ] = await Promise.all([
       adminClient.from("profiles").select("*").eq("id", sellerId).single(),
       adminClient.from("seller_reserve_accounts").select("*").eq("seller_id", sellerId).maybeSingle(),
@@ -79,6 +81,7 @@ export async function GET(
         .eq("seller_id", sellerId)
         .order("created_at", { ascending: false })
         .limit(50),
+      getRelayBalanceSnapshot(sellerId, { adminClient }),
     ]);
 
     if (sellerResult.error || !sellerResult.data) {
@@ -177,6 +180,7 @@ export async function GET(
 
     return NextResponse.json({
       seller,
+      relayBalance,
       reserveAccount: reserveAccountResult.data || null,
       reserveEntries: reserveEntriesResult.data || [],
       identityProfile: identityProfileResult.data || null,
