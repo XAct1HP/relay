@@ -81,7 +81,11 @@ export function Sidebar() {
     { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
-    ...sellerLinks,
+    { href: "divider", label: "", icon: LayoutDashboard },
+    { href: "/marketplace", label: "Marketplace", icon: ShoppingBag },
+    { href: "/messages", label: "Messages", icon: MessageSquare },
+    { href: "/orders", label: "Orders", icon: Package },
+    { href: "/settings", label: "Settings", icon: Settings },
   ];
 
   const getNavLinks = () => {
@@ -138,6 +142,12 @@ export function Sidebar() {
       {/* Navigation Links */}
       <nav className="flex-1 px-3 py-6 overflow-y-auto space-y-1">
         {navLinks.map((link) => {
+          if (link.href === "divider") {
+            return (
+              <div key="divider" className="my-3 mx-2 border-t border-white/[0.06]" />
+            );
+          }
+
           const Icon = link.icon;
           const active = isActive(link.href);
           const showDot =
