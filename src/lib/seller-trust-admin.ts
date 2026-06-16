@@ -7,6 +7,7 @@ import {
 } from "@/lib/seller-trust";
 import { determineReservePolicyForTier } from "@/lib/seller-trust";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
+import { banSellerIdentity } from "@/lib/seller-identity";
 import type { SellerTier, SellerTrustSnapshot } from "@/types/trust";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
@@ -434,6 +435,13 @@ export async function evaluateSellerTrustById(
   }
 
   if (isBanned && !profile.is_banned) {
+    await banSellerIdentity(sellerId, {
+      adminClient,
+      actorUserId,
+      actorRole,
+      reason: "Second authenticity violation",
+    });
+
     await logRelayAuditEvent(adminClient, {
       actorUserId,
       actorRole,

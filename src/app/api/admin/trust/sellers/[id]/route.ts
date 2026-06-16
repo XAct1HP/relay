@@ -13,6 +13,7 @@ export async function GET(
       sellerResult,
       reserveAccountResult,
       reserveEntriesResult,
+      identityProfileResult,
       tierHistoryResult,
       evaluationsResult,
       violationsResult,
@@ -27,6 +28,11 @@ export async function GET(
         .eq("seller_id", sellerId)
         .order("created_at", { ascending: false })
         .limit(25),
+      adminClient
+        .from("seller_identity_profiles")
+        .select("*")
+        .eq("seller_id", sellerId)
+        .maybeSingle(),
       adminClient
         .from("seller_tier_history")
         .select("*")
@@ -173,6 +179,7 @@ export async function GET(
       seller,
       reserveAccount: reserveAccountResult.data || null,
       reserveEntries: reserveEntriesResult.data || [],
+      identityProfile: identityProfileResult.data || null,
       tierHistory: tierHistoryResult.data || [],
       evaluations: evaluationsResult.data || [],
       violations: violationsResult.data || [],

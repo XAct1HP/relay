@@ -31,6 +31,7 @@ export default function SettingsPage() {
     promotions: false,
   })
   const [stripeConnected, setStripeConnected] = useState(false)
+  const [stripeVerificationStatus, setStripeVerificationStatus] = useState<string>('unverified')
   const [stripeLoading, setStripeLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [instagramUrl, setInstagramUrl] = useState('')
@@ -78,7 +79,8 @@ export default function SettingsPage() {
         setOffersEnabled(!!data.offers_enabled)
         // Check if Stripe account is connected based on profile data
         if (data.stripe_account_id) {
-          setStripeConnected(true)
+          setStripeConnected(!!data.stripe_connect_onboarding_complete)
+          setStripeVerificationStatus(data.stripe_identity_verification_status || 'unverified')
         }
       }
 
@@ -88,6 +90,27 @@ export default function SettingsPage() {
 
     loadProfile()
   }, [currentUser?.id])
+
+  useEffect(() => {
+    async function syncStripeStatus() {
+      if (!currentUser?.id || !(currentUser.role === 'seller' || (sellerApplicationStatus && sellerApplicationStatus !== 'none'))) {
+        return
+      }
+
+      try {
+        const response = await fetch('/api/stripe/connect/status', { cache: 'no-store' })
+        const payload = await response.json()
+        if (!response.ok) return
+
+        setStripeConnected(!!payload.onboardingComplete)
+        setStripeVerificationStatus(payload.verificationStatus || 'unverified')
+      } catch {
+        // Ignore sync failures here and fall back to stored profile state.
+      }
+    }
+
+    syncStripeStatus()
+  }, [currentUser?.id, currentUser?.role, sellerApplicationStatus])
 
   useEffect(() => {
     async function loadApiKeys() {
@@ -757,7 +780,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-white font-medium">Stripe</p>
                     <p className="text-white/50 text-sm">
-                      {stripeConnected ? 'Connected' : 'Not connected'}
+                      {stripeConnected ? `Connected · ${stripeVerificationStatus.replaceAll('_', ' ')}` : 'Not connected'}
                     </p>
                   </div>
                 </div>

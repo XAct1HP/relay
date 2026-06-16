@@ -69,7 +69,11 @@ export async function POST(request: NextRequest) {
       // Save account ID to profile
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ stripe_account_id: accountId })
+        .update({
+          stripe_account_id: accountId,
+          stripe_connect_onboarding_complete: false,
+          stripe_identity_verification_status: 'unverified',
+        })
         .eq('id', user.id)
 
       if (updateError) {

@@ -23,6 +23,10 @@ interface ApprovedSellerProfile {
   id: string;
   role: string;
   seller_application_status: string;
+  stripe_connect_onboarding_complete?: boolean;
+  seller_identity_review_required?: boolean;
+  is_founding_seller?: boolean;
+  is_banned?: boolean;
 }
 
 export class SellerApiKeyError extends Error {
@@ -66,7 +70,7 @@ export async function requireApprovedSellerProfile(
 ): Promise<ApprovedSellerProfile> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, role, seller_application_status")
+    .select("id, role, seller_application_status, stripe_connect_onboarding_complete, seller_identity_review_required, is_founding_seller, is_banned")
     .eq("id", userId)
     .single();
 
@@ -78,6 +82,27 @@ export async function requireApprovedSellerProfile(
     throw new SellerApiKeyError(
       "seller_not_approved",
       "Only approved sellers can manage Relay API keys."
+    );
+  }
+
+  if (!data.stripe_connect_onboarding_complete) {
+    throw new SellerApiKeyError(
+      "stripe_not_complete",
+      "Complete Stripe Connect onboarding before managing Relay API keys."
+    );
+  }
+
+  if (data.is_banned) {
+    throw new SellerApiKeyError(
+      "identity_review_required",
+      "Seller account is not eligible for API access while identity review is pending."
+    );
+  }
+
+  if (data.seller_identity_review_required && !data.is_founding_seller) {
+    throw new SellerApiKeyError(
+      "identity_review_required",
+      "Seller account is not eligible for API access while identity review is pending."
     );
   }
 

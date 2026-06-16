@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   X,
   Wallet,
+  CircleDollarSign,
 } from "lucide-react";
 
 // Routes accessible without authentication
@@ -92,6 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/money", label: "Relay Balance", icon: CircleDollarSign },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
     { href: "/admin/withdrawals", label: "Withdrawals", icon: Wallet },

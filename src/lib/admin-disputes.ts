@@ -10,6 +10,7 @@ import {
   consumeSellerReserveForOrder,
 } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
+import { banSellerIdentity } from "@/lib/seller-identity";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
 import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
 import { toShippoAddress } from "@/lib/shipping-addresses";
@@ -544,13 +545,12 @@ async function applySellerBan(
     throw new Error("Seller can only be banned here after a second authenticity violation");
   }
 
-  await adminClient
-    .from("profiles")
-    .update({
-      is_banned: true,
-      ban_reason: input.reason || "Second authenticity violation",
-    })
-    .eq("id", input.sellerId);
+  await banSellerIdentity(input.sellerId, {
+    adminClient,
+    actorUserId: input.actorUserId,
+    actorRole: "admin",
+    reason: input.reason || "Second authenticity violation",
+  });
 
   await logRelayAuditEvent(adminClient, {
     actorUserId: input.actorUserId,

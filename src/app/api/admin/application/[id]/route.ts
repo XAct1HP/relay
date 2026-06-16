@@ -1,191 +1,216 @@
-import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/admin-access";
+import {
+  enforceSellerApprovalIdentityRequirements,
+  getSellerIdentityProfile,
+  syncSellerIdentityProfile,
+} from "@/lib/seller-identity";
+
+async function loadApplicationForAdmin(adminClient: Awaited<ReturnType<typeof requireAdminSession>>["adminClient"], applicationId: string) {
+  const { data: application, error: applicationError } = await adminClient
+    .from("seller_applications")
+    .select("*")
+    .eq("id", applicationId)
+    .single();
+
+  if (applicationError || !application) {
+    throw new Error(applicationError?.message || "Application not found");
+  }
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("*")
+    .eq("id", application.user_id)
+    .single();
+
+  if (profileError || !profile) {
+    throw new Error(profileError?.message || "Applicant profile not found");
+  }
+
+  return {
+    adminClient,
+    application,
+    profile,
+  };
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { user, adminClient } = await requireAdminSession();
+    const { id: applicationId } = await params;
+    const { application, profile } = await loadApplicationForAdmin(adminClient, applicationId);
+    let currentProfile = profile;
+
+    let identityProfile = await getSellerIdentityProfile(profile.id, adminClient);
+    let identitySyncError: string | null = null;
+
+    try {
+      const syncResult = await syncSellerIdentityProfile(profile.id, {
+        adminClient,
+        actorUserId: user.id,
+        actorRole: "admin",
+      });
+      identityProfile = syncResult.identityProfile;
+
+      const { data: refreshedProfile } = await adminClient
+        .from("profiles")
+        .select("*")
+        .eq("id", profile.id)
+        .single();
+
+      if (refreshedProfile) {
+        currentProfile = refreshedProfile;
+      }
+    } catch (error) {
+      identitySyncError =
+        error instanceof Error ? error.message : "Failed to sync seller identity profile.";
+    }
+
+    return NextResponse.json({
+      application,
+      profile: currentProfile,
+      identityProfile,
+      identitySyncError,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load application";
+    const status = message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 404;
+
+    return NextResponse.json({ error: message }, { status });
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: applicationId } = await params
+    const { user, adminClient } = await requireAdminSession();
+    const { id: applicationId } = await params;
+    const { application, profile } = await loadApplicationForAdmin(adminClient, applicationId);
+    const { action, adminNotes } = await request.json();
 
-    const cookieStore = await cookies()
+    if (!action || !["approve", "reject"].includes(action)) {
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
 
-    // Anon client — only used to verify the caller is an admin
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // Handle SSR context
-            }
-          },
-        },
+    if (action === "approve") {
+      let identityResult;
+
+      try {
+        identityResult = await enforceSellerApprovalIdentityRequirements(application.user_id, {
+          adminClient,
+          actorUserId: user.id,
+          actorRole: "admin",
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Seller is not eligible for approval yet.";
+        return NextResponse.json({ error: message }, { status: 400 });
       }
-    )
 
-    // Verify the caller is an authenticated admin
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: adminProfile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (adminProfile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    const { action, adminNotes } = await request.json()
-
-    if (!action || !['approve', 'reject'].includes(action)) {
-      return NextResponse.json(
-        { error: 'Invalid action' },
-        { status: 400 }
-      )
-    }
-
-    // Service role client — bypasses RLS so we can update another user's profile
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Get application with full data
-    const { data: application, error: fetchError } = await supabaseAdmin
-      .from('seller_applications')
-      .select('id, user_id, status, rejection_count, ship_from_address, questionnaire_responses')
-      .eq('id', applicationId)
-      .single()
-
-    if (fetchError || !application) {
-      console.error('Fetch error:', fetchError)
-      return NextResponse.json(
-        { error: 'Application not found' },
-        { status: 404 }
-      )
-    }
-
-    if (action === 'approve') {
-      // 1. Update application status
-      const { data: updatedApplication, error: updateError } = await supabaseAdmin
-        .from('seller_applications')
+      const { data: updatedApplication, error: updateError } = await adminClient
+        .from("seller_applications")
         .update({
-          status: 'approved',
+          status: "approved",
           admin_notes: adminNotes || null,
+          stripe_connected: identityResult.onboardingComplete,
         })
-        .eq('id', applicationId)
-        .select()
-        .single()
+        .eq("id", applicationId)
+        .select("*")
+        .single();
 
-      if (updateError) {
-        console.error('Application update error:', updateError)
+      if (updateError || !updatedApplication) {
         return NextResponse.json(
-          { error: 'Failed to update application: ' + updateError.message },
+          { error: `Failed to update application: ${updateError?.message || "unknown error"}` },
           { status: 500 }
-        )
+        );
       }
 
-      // 2. Get the user's current profile to check what needs initializing
-      const { data: existingProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('full_name, display_name, username, ship_from_address, instagram_url')
-        .eq('id', application.user_id)
-        .single()
-
-      // Build the profile update — initialize fields that are still empty
-      const profileUpdate: Record<string, any> = {
-        role: 'seller',
+      const questionnaire = application.questionnaire_responses as Record<string, string> | null;
+      const profileUpdate: Record<string, unknown> = {
+        role: "seller",
         is_verified_seller: true,
-        seller_application_status: 'approved',
+        seller_application_status: "approved",
+      };
+
+      if (!profile.display_name && profile.full_name) {
+        profileUpdate.display_name = profile.full_name;
       }
 
-      // Set display_name from full_name if not already set
-      if (!existingProfile?.display_name && existingProfile?.full_name) {
-        profileUpdate.display_name = existingProfile.full_name
+      if (!profile.ship_from_address && application.ship_from_address) {
+        profileUpdate.ship_from_address = application.ship_from_address;
       }
 
-      // Copy ship_from_address from application if profile doesn't have one
-      if (!existingProfile?.ship_from_address && application.ship_from_address) {
-        profileUpdate.ship_from_address = application.ship_from_address
+      if (!profile.instagram_url && questionnaire?.instagram_url) {
+        profileUpdate.instagram_url = questionnaire.instagram_url;
       }
 
-      // Copy instagram_url from application questionnaire if profile doesn't have one
-      const questionnaire = application.questionnaire_responses as Record<string, string> | null
-      if (!existingProfile?.instagram_url && questionnaire?.instagram_url) {
-        profileUpdate.instagram_url = questionnaire.instagram_url
-      }
-
-      const { error: updateUserError } = await supabaseAdmin
-        .from('profiles')
+      const { data: updatedProfile, error: updateUserError } = await adminClient
+        .from("profiles")
         .update(profileUpdate)
-        .eq('id', application.user_id)
+        .eq("id", application.user_id)
+        .select("*")
+        .single();
 
-      if (updateUserError) {
-        console.error('User profile update error:', updateUserError)
+      if (updateUserError || !updatedProfile) {
         return NextResponse.json(
-          { error: 'Application approved but failed to update user role: ' + updateUserError.message },
+          {
+            error: `Application approved but failed to update user role: ${
+              updateUserError?.message || "unknown error"
+            }`,
+          },
           { status: 500 }
-        )
+        );
       }
 
-      return NextResponse.json(updatedApplication)
-    } else if (action === 'reject') {
-      const rejectionCount = (application.rejection_count || 0) + 1
-
-      // 1. Update application status
-      const { data: updatedApplication, error: updateError } = await supabaseAdmin
-        .from('seller_applications')
-        .update({
-          status: 'rejected',
-          rejection_count: rejectionCount,
-          admin_notes: adminNotes || null,
-        })
-        .eq('id', applicationId)
-        .select()
-        .single()
-
-      if (updateError) {
-        console.error('Application update error:', updateError)
-        return NextResponse.json(
-          { error: 'Failed to update application: ' + updateError.message },
-          { status: 500 }
-        )
-      }
-
-      // 2. Update profile application status
-      const isFinalRejection = rejectionCount >= 2
-      await supabaseAdmin
-        .from('profiles')
-        .update({
-          seller_application_status: isFinalRejection ? 'rejected_final' : 'rejected',
-        })
-        .eq('id', application.user_id)
-
-      return NextResponse.json(updatedApplication)
+      return NextResponse.json({
+        application: updatedApplication,
+        profile: updatedProfile,
+        identityProfile: identityResult.identityProfile,
+      });
     }
+
+    const rejectionCount = (application.rejection_count || 0) + 1;
+    const { data: updatedApplication, error: updateError } = await adminClient
+      .from("seller_applications")
+      .update({
+        status: "rejected",
+        rejection_count: rejectionCount,
+        admin_notes: adminNotes || null,
+      })
+      .eq("id", applicationId)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedApplication) {
+      return NextResponse.json(
+        { error: `Failed to update application: ${updateError?.message || "unknown error"}` },
+        { status: 500 }
+      );
+    }
+
+    const isFinalRejection = rejectionCount >= 2;
+    const { data: updatedProfile } = await adminClient
+      .from("profiles")
+      .update({
+        seller_application_status: isFinalRejection ? "rejected_final" : "rejected",
+      })
+      .eq("id", application.user_id)
+      .select("*")
+      .single();
+
+    return NextResponse.json({
+      application: updatedApplication,
+      profile: updatedProfile || profile,
+    });
   } catch (error) {
-    console.error('Application review error:', error)
-    return NextResponse.json(
-      { error: 'Failed to review application' },
-      { status: 500 }
-    )
+    const message = error instanceof Error ? error.message : "Failed to review application";
+    const status = message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 500;
+
+    return NextResponse.json({ error: message }, { status });
   }
 }

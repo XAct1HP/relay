@@ -13,10 +13,19 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
 import { useParams } from "next/navigation";
+import type { SellerApplication, SellerIdentityProfile, User } from "@/types";
 
 type ModalState = "none" | "approve" | "reject";
+
+interface ApplicationDetailResponse {
+  application: SellerApplication & {
+    ai_recommendation?: any;
+  };
+  profile: User;
+  identityProfile: SellerIdentityProfile | null;
+  identitySyncError?: string | null;
+}
 
 function ApplicationInfoCard({ label, value, icon: Icon }: any) {
   return (
@@ -181,33 +190,36 @@ export default function ApplicationDetailPage() {
   const applicationId = params.id as string;
   const [modalState, setModalState] = useState<ModalState>("none");
   const [adminNotes, setAdminNotes] = useState("");
-  const [app, setApp] = useState<any>(null);
+  const [data, setData] = useState<ApplicationDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     async function loadApplication() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("seller_applications")
-        .select("*, profiles(*)")
-        .eq("id", applicationId)
-        .single();
+      const response = await fetch(`/api/admin/application/${applicationId}`, {
+        cache: "no-store",
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to load application");
+      }
 
       // Parse ai_recommendation if it's a JSON string (stored as TEXT in DB)
-      if (data?.ai_recommendation && typeof data.ai_recommendation === 'string') {
+      if (payload?.application?.ai_recommendation && typeof payload.application.ai_recommendation === 'string') {
         try {
-          data.ai_recommendation = JSON.parse(data.ai_recommendation);
+          payload.application.ai_recommendation = JSON.parse(payload.application.ai_recommendation);
         } catch {
           // If it's not valid JSON, leave as-is
         }
       }
 
-      setApp(data);
+      setData(payload);
+      setAdminNotes(payload.application?.admin_notes || "");
       setLoading(false);
 
       // Auto-generate AI recommendation if not present and application is pending
-      if (data && !data.ai_recommendation && data.status === 'pending') {
+      if (payload.application && !payload.application.ai_recommendation && payload.application.status === 'pending') {
         setAiLoading(true);
         try {
           const response = await fetch(`/api/admin/application/${applicationId}/ai-recommendation`, {
@@ -215,7 +227,17 @@ export default function ApplicationDetailPage() {
           });
           if (response.ok) {
             const recommendation = await response.json();
-            setApp((prev: any) => prev ? { ...prev, ai_recommendation: recommendation } : prev);
+            setData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    application: {
+                      ...prev.application,
+                      ai_recommendation: recommendation,
+                    },
+                  }
+                : prev
+            );
           }
         } catch (err) {
           console.error('Failed to generate AI recommendation:', err);
@@ -225,14 +247,17 @@ export default function ApplicationDetailPage() {
       }
     }
 
-    loadApplication();
+    loadApplication().catch((err) => {
+      console.error("Failed to load application:", err);
+      setLoading(false);
+    });
   }, [applicationId]);
 
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState('');
 
   const handleApprove = async () => {
-    if (!app) return;
+    if (!data) return;
     setActionLoading(true);
     setActionError('');
 
@@ -249,7 +274,17 @@ export default function ApplicationDetailPage() {
         throw new Error(data.error || 'Failed to approve application');
       }
 
-      setApp({ ...app, status: 'approved', admin_notes: adminNotes });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              application: data.application,
+              profile: data.profile,
+              identityProfile: data.identityProfile ?? prev.identityProfile,
+              identitySyncError: null,
+            }
+          : prev
+      );
     } catch (err: any) {
       setActionError(err.message || 'Failed to approve application');
     } finally {
@@ -259,7 +294,7 @@ export default function ApplicationDetailPage() {
   };
 
   const handleReject = async () => {
-    if (!app) return;
+    if (!data) return;
     setActionLoading(true);
     setActionError('');
 
@@ -276,13 +311,16 @@ export default function ApplicationDetailPage() {
         throw new Error(data.error || 'Failed to reject application');
       }
 
-      const newRejectionCount = (app.rejection_count || 0) + 1;
-      setApp({
-        ...app,
-        status: newRejectionCount >= 2 ? 'rejected_final' : 'rejected',
-        rejection_count: newRejectionCount,
-        admin_notes: adminNotes,
-      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              application: data.application,
+              profile: data.profile ?? prev.profile,
+              identitySyncError: prev.identitySyncError ?? null,
+            }
+          : prev
+      );
     } catch (err: any) {
       setActionError(err.message || 'Failed to reject application');
     } finally {
@@ -299,7 +337,7 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  if (!app) {
+  if (!data) {
     return (
       <div className="space-y-6 pb-12">
         <Link href="/admin/applications">
@@ -315,6 +353,17 @@ export default function ApplicationDetailPage() {
     );
   }
 
+  const app = data.application;
+  const profile = data.profile;
+  const identityProfile = data.identityProfile;
+  const onboardingComplete =
+    identityProfile?.stripe_connect_onboarding_complete ??
+    profile.stripe_connect_onboarding_complete ??
+    app.stripe_connected;
+  const identityReviewRequired =
+    Boolean(identityProfile?.admin_review_required) || Boolean(profile.seller_identity_review_required);
+  const approvalBlocked =
+    profile.is_banned || !onboardingComplete || (identityReviewRequired && !profile.is_founding_seller);
   const isRejectable = (app.rejection_count || 0) < 3;
 
   return (
@@ -330,15 +379,15 @@ export default function ApplicationDetailPage() {
       {/* Application Info */}
       <div className="relay-card p-5">
         <div className="mb-6">
-          <p className="text-[#f5f7fb] text-2xl font-bold">{app.profiles?.full_name || app.profiles?.display_name || app.profiles?.username || 'Unknown'}</p>
-          <p className="text-white/60 text-sm mt-1">{app.profiles?.email || 'N/A'}</p>
+          <p className="text-[#f5f7fb] text-2xl font-bold">{profile.full_name || profile.display_name || profile.username || 'Unknown'}</p>
+          <p className="text-white/60 text-sm mt-1">{profile.email || 'N/A'}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <ApplicationInfoCard
             icon={Mail}
             label="Email"
-            value={app.profiles?.email || 'N/A'}
+            value={profile.email || 'N/A'}
           />
           <ApplicationInfoCard
             icon={Calendar}
@@ -448,16 +497,16 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* Connection Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="relay-card p-5">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-500/20 rounded-lg">
               <CreditCard className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-white/60 text-sm">Stripe Connected</p>
+              <p className="text-white/60 text-sm">Connect Onboarding</p>
               <p className="text-green-400 font-semibold text-sm mt-1">
-                {app.stripe_connected ? "Yes" : "No"}
+                {onboardingComplete ? "Complete" : "Incomplete"}
               </p>
             </div>
           </div>
@@ -469,9 +518,9 @@ export default function ApplicationDetailPage() {
               <CheckCircle className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-white/60 text-sm">Terms Accepted</p>
+              <p className="text-white/60 text-sm">Verification Status</p>
               <p className="text-green-400 font-semibold text-sm mt-1">
-                {app.terms_accepted ? "Yes" : "No"}
+                {(identityProfile?.verification_status || profile.stripe_identity_verification_status || "unverified").replaceAll("_", " ")}
               </p>
             </div>
           </div>
@@ -481,9 +530,43 @@ export default function ApplicationDetailPage() {
           <div className="flex items-center gap-3">
             <div
               className={`p-2 rounded-lg ${
-                (app.rejection_count || 0) > 0
-                  ? "bg-orange-500/20"
+                identityReviewRequired || identityProfile?.matched_banned_identity
+                  ? "bg-amber-500/20"
                   : "bg-green-500/20"
+              }`}
+            >
+              <AlertTriangle
+                className={`w-5 h-5 ${
+                  identityReviewRequired || identityProfile?.matched_banned_identity
+                    ? "text-amber-400"
+                    : "text-green-400"
+                }`}
+              />
+            </div>
+            <div>
+              <p className="text-white/60 text-sm">Identity Review</p>
+              <p
+                className={`font-semibold text-sm mt-1 ${
+                  identityReviewRequired || identityProfile?.matched_banned_identity
+                    ? "text-amber-400"
+                    : "text-green-400"
+                }`}
+              >
+                {identityReviewRequired
+                  ? profile.is_founding_seller
+                    ? "Flagged, founding bypass"
+                    : "Manual review required"
+                  : "Clear"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="relay-card p-5">
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-2 rounded-lg ${
+                (app.rejection_count || 0) > 0 ? "bg-orange-500/20" : "bg-green-500/20"
               }`}
             >
               <AlertTriangle
@@ -496,18 +579,60 @@ export default function ApplicationDetailPage() {
               <p className="text-white/60 text-sm">Rejection Count</p>
               <p
                 className={`font-semibold text-sm mt-1 ${
-                  (app.rejection_count || 0) > 0
-                    ? "text-orange-400"
-                    : "text-green-400"
+                  (app.rejection_count || 0) > 0 ? "text-orange-400" : "text-green-400"
                 }`}
               >
-                {(app.rejection_count || 0) === 0
-                  ? "None"
-                  : `${app.rejection_count}/3 attempts`}
+                {(app.rejection_count || 0) === 0 ? "None" : `${app.rejection_count}/3 attempts`}
               </p>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="relay-card p-5 space-y-3">
+        <h3 className="text-lg font-semibold text-[#f5f7fb]">Identity Protection</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+            <p className="text-white/50 mb-1">Stripe account</p>
+            <p className="text-[#f5f7fb] break-all">
+              {identityProfile?.stripe_account_id || profile.stripe_account_id || "Not connected"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+            <p className="text-white/50 mb-1">Banned identity match</p>
+            <p className="text-[#f5f7fb]">
+              {identityProfile?.matched_banned_identity ? "Matched" : "No banned match detected"}
+            </p>
+          </div>
+        </div>
+        {profile.seller_identity_review_reason && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-200 text-sm">
+            {profile.seller_identity_review_reason}
+          </div>
+        )}
+        {identityProfile?.match_reasons && identityProfile.match_reasons.length > 0 && (
+          <p className="text-white/60 text-sm">
+            Match reasons:{" "}
+            <span className="text-[#f5f7fb]">
+              {identityProfile.match_reasons.map((reason) => reason.replaceAll("_", " ")).join(", ")}
+            </span>
+          </p>
+        )}
+        {data.identitySyncError && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-200 text-sm">
+            Identity sync warning: {data.identitySyncError}
+          </div>
+        )}
+        {approvalBlocked && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-200 text-sm">
+            Approval is blocked until Stripe Connect onboarding is complete and identity review holds are cleared.
+          </div>
+        )}
+        {profile.is_founding_seller && identityReviewRequired && !profile.is_banned && (
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-200 text-sm">
+            Founding seller status can bypass Relay identity review, but Stripe Connect onboarding must still be complete.
+          </div>
+        )}
       </div>
 
       {/* Admin Notes */}
@@ -536,7 +661,8 @@ export default function ApplicationDetailPage() {
         <div className="flex flex-col sm:flex-row gap-4">
           <button
             onClick={() => setModalState("approve")}
-            className="relay-button-accent flex items-center justify-center"
+            disabled={approvalBlocked || actionLoading}
+            className="relay-button-accent flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <CheckCircle className="w-4 h-4 mr-2" />
             Approve Application

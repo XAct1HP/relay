@@ -54,6 +54,47 @@ export async function publishCatalogListingAction(input: PublishCatalogListingIn
   }
 
   try {
+    const { data: sellerProfile, error: sellerProfileError } = await supabase
+      .from("profiles")
+      .select("role, seller_application_status, stripe_connect_onboarding_complete, seller_identity_review_required, is_founding_seller, is_banned")
+      .eq("id", user.id)
+      .single();
+
+    if (sellerProfileError || !sellerProfile) {
+      return {
+        success: false as const,
+        error: "Could not load your seller profile.",
+      };
+    }
+
+    if (sellerProfile.role !== "seller" || sellerProfile.seller_application_status !== "approved") {
+      return {
+        success: false as const,
+        error: "Only approved sellers can publish listings.",
+      };
+    }
+
+    if (!sellerProfile.stripe_connect_onboarding_complete) {
+      return {
+        success: false as const,
+        error: "Complete Stripe Connect onboarding before publishing listings.",
+      };
+    }
+
+    if (sellerProfile.is_banned) {
+      return {
+        success: false as const,
+        error: "Seller account is under review and cannot publish listings right now.",
+      };
+    }
+
+    if (sellerProfile.seller_identity_review_required && !sellerProfile.is_founding_seller) {
+      return {
+        success: false as const,
+        error: "Seller account is under review and cannot publish listings right now.",
+      };
+    }
+
     const normalizedVariants = (input.variants || [])
       .map((variant) => ({
         size: String(variant.size || "").trim(),

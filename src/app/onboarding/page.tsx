@@ -105,8 +105,32 @@ export default function OnboardingPage() {
   // Handle return from Stripe onboarding
   useEffect(() => {
     if (searchParams.get('stripe_onboarded') === 'true') {
-      setStripeConnected(true);
-      setCurrentStep(4); // Go to Review & Submit after successful Stripe connection
+      void (async () => {
+        try {
+          const response = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to verify Stripe Connect onboarding.');
+          }
+
+          setStripeConnected(Boolean(payload.onboardingComplete));
+          setFormData((prev) => ({
+            ...prev,
+            stripe_connected: Boolean(payload.onboardingComplete),
+          }));
+
+          if (payload.onboardingComplete) {
+            setCurrentStep(4); // Go to Review & Submit after successful Stripe connection
+          } else {
+            setError('Stripe Connect onboarding is not complete yet. Please finish onboarding before submitting.');
+            setCurrentStep(3);
+          }
+        } catch (err: any) {
+          setError(err.message || 'Failed to verify Stripe Connect onboarding.');
+          setCurrentStep(3);
+        }
+      })();
     }
     if (searchParams.get('stripe_refresh') === 'true') {
       setError('Stripe onboarding session expired. Please try again.');
@@ -311,6 +335,17 @@ export default function OnboardingPage() {
       const supabase = createClient();
 
       if (!currentUser) throw new Error('No user logged in');
+
+      const connectStatusResponse = await fetch('/api/stripe/connect/status', { cache: 'no-store' });
+      const connectStatus = await connectStatusResponse.json();
+
+      if (!connectStatusResponse.ok) {
+        throw new Error(connectStatus.error || 'Failed to verify Stripe Connect onboarding.');
+      }
+
+      if (!connectStatus.onboardingComplete) {
+        throw new Error('Complete Stripe Connect onboarding before submitting your seller application.');
+      }
 
       // Create seller application
       const { error: appError } = await supabase.from('seller_applications').insert({

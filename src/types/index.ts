@@ -12,6 +12,10 @@ export interface User {
   vacation_mode_enabled: boolean;
   offers_enabled: boolean;
   stripe_account_id: string | null;
+  stripe_connect_onboarding_complete?: boolean;
+  stripe_identity_verification_status?: import("./trust").SellerIdentityProfile["verification_status"];
+  seller_identity_review_required?: boolean;
+  seller_identity_review_reason?: string | null;
   ship_from_address: ShippingAddress | null;
   profile_banner_url: string | null;
   display_name: string;

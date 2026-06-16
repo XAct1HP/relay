@@ -17,6 +17,10 @@ interface SellerApprovalRow {
   id: string;
   role: string;
   seller_application_status: string;
+  stripe_connect_onboarding_complete?: boolean;
+  seller_identity_review_required?: boolean;
+  is_founding_seller?: boolean;
+  is_banned?: boolean;
 }
 
 export interface AuthenticatedIntegrationSeller {
@@ -74,7 +78,7 @@ export async function authenticateIntegrationRequest(
 
   const { data: sellerProfile, error: sellerError } = await admin
     .from("profiles")
-    .select("id, role, seller_application_status")
+    .select("id, role, seller_application_status, stripe_connect_onboarding_complete, seller_identity_review_required, is_founding_seller, is_banned")
     .eq("id", matchedKey.seller_id)
     .maybeSingle();
 
@@ -90,6 +94,18 @@ export async function authenticateIntegrationRequest(
 
   if (seller.role !== "seller" || seller.seller_application_status !== "approved") {
     throw new IntegrationAuthError("seller_not_approved", "Seller not approved.", 403);
+  }
+
+  if (
+    !seller.stripe_connect_onboarding_complete ||
+    seller.is_banned ||
+    (seller.seller_identity_review_required && !seller.is_founding_seller)
+  ) {
+    throw new IntegrationAuthError(
+      "seller_not_approved",
+      "Seller is not eligible for Relay integrations.",
+      403
+    );
   }
 
   return {

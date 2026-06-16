@@ -15,13 +15,6 @@ const CARRIER_ACCEPTANCE_TRACKING_STATUSES = new Set(["TRANSIT", "IN_TRANSIT"]);
 const DELIVERY_TRACKING_STATUSES = new Set(["DELIVERED"]);
 const ACTIVE_EXPOSURE_HOLD_STATUSES = ["active", "disputed"] as const;
 const ACTIVE_LEDGER_STATUSES = ["pending", "posted", "completed"] as const;
-const AVAILABLE_BALANCE_LEDGER_TYPES = [
-  "order_available_credit",
-  "withdrawal_requested",
-  "withdrawal_failed",
-  "dispute_debit",
-  "admin_adjustment",
-] as const;
 export const WITHDRAWAL_TRANSFER_FEE_CENTS = 25;
 const MANUAL_WITHDRAWAL_REVIEW_THRESHOLD_CENTS = 200_000;
 
@@ -141,6 +134,10 @@ export interface RelayBalanceSnapshot {
   availableBalanceCents: number;
   exposureCents: number;
   withdrawableBalanceCents: number;
+  adminFrozen: boolean;
+  frozenReason: string | null;
+  frozenAt: string | null;
+  frozenByAdminId: string | null;
   updatedAt: string | null;
 }
 
@@ -657,26 +654,6 @@ async function getOpenExposureHold(
   return data || null;
 }
 
-function sumAvailableLedgerRows(
-  rows: Array<{
-    type: RelayBalanceLedgerType;
-    amount_cents: number;
-    status: string;
-  }>
-) {
-  return rows.reduce((sum, row) => {
-    if (!ACTIVE_LEDGER_STATUSES.includes(row.status as (typeof ACTIVE_LEDGER_STATUSES)[number])) {
-      return sum;
-    }
-
-    if (!AVAILABLE_BALANCE_LEDGER_TYPES.includes(row.type as (typeof AVAILABLE_BALANCE_LEDGER_TYPES)[number])) {
-      return sum;
-    }
-
-    return sum + Number(row.amount_cents || 0);
-  }, 0);
-}
-
 function normalizeMoneyAmountCents(value: number) {
   return Math.max(0, Math.round(Number(value || 0)));
 }
@@ -710,12 +687,10 @@ async function recalculateRelayBalance(
   }
 }
 
-export async function getRelayBalanceSnapshot(
-  sellerId: string,
-  options?: MoneyMutationOptions
-): Promise<RelayBalanceSnapshot> {
-  const adminClient = getAdminClient(options);
-
+async function ensureRelayBalanceRow(
+  adminClient: SupabaseAdminClient,
+  sellerId: string
+) {
   await recalculateRelayBalance(adminClient, sellerId);
 
   const { data, error } = await adminClient
@@ -728,37 +703,41 @@ export async function getRelayBalanceSnapshot(
     throw new Error(error.message || "Failed to load relay balance");
   }
 
-  if (!data) {
-    const { data: insertedBalance, error: insertError } = await adminClient
-      .from("relay_balances")
-      .upsert(
-        {
-          seller_id: sellerId,
-          total_balance_cents: 0,
-          available_balance_cents: 0,
-          pending_balance_cents: 0,
-          exposure_cents: 0,
-          withdrawable_balance_cents: 0,
-        },
-        { onConflict: "seller_id" }
-      )
-      .select("*")
-      .single();
-
-    if (insertError || !insertedBalance) {
-      throw new Error(insertError?.message || "Failed to initialize relay balance");
-    }
-
-    return {
-      sellerId,
-      totalBalanceCents: Number(insertedBalance.total_balance_cents || 0),
-      pendingBalanceCents: Number(insertedBalance.pending_balance_cents || 0),
-      availableBalanceCents: Number(insertedBalance.available_balance_cents || 0),
-      exposureCents: Number(insertedBalance.exposure_cents || 0),
-      withdrawableBalanceCents: Number(insertedBalance.withdrawable_balance_cents || 0),
-      updatedAt: insertedBalance.updated_at || null,
-    };
+  if (data) {
+    return data;
   }
+
+  const { data: insertedBalance, error: insertError } = await adminClient
+    .from("relay_balances")
+    .upsert(
+      {
+        seller_id: sellerId,
+        total_balance_cents: 0,
+        available_balance_cents: 0,
+        pending_balance_cents: 0,
+        exposure_cents: 0,
+        withdrawable_balance_cents: 0,
+        admin_frozen: false,
+      },
+      { onConflict: "seller_id" }
+    )
+    .select("*")
+    .single();
+
+  if (insertError || !insertedBalance) {
+    throw new Error(insertError?.message || "Failed to initialize relay balance");
+  }
+
+  return insertedBalance;
+}
+
+export async function getRelayBalanceSnapshot(
+  sellerId: string,
+  options?: MoneyMutationOptions
+): Promise<RelayBalanceSnapshot> {
+  const adminClient = getAdminClient(options);
+  const data = await ensureRelayBalanceRow(adminClient, sellerId);
+  const adminFrozen = Boolean((data as any).admin_frozen);
 
   return {
     sellerId,
@@ -766,7 +745,13 @@ export async function getRelayBalanceSnapshot(
     pendingBalanceCents: Number(data.pending_balance_cents || 0),
     availableBalanceCents: Number(data.available_balance_cents || 0),
     exposureCents: Number(data.exposure_cents || 0),
-    withdrawableBalanceCents: Number(data.withdrawable_balance_cents || 0),
+    withdrawableBalanceCents: adminFrozen
+      ? 0
+      : Number(data.withdrawable_balance_cents || 0),
+    adminFrozen,
+    frozenReason: (data as any).frozen_reason || null,
+    frozenAt: (data as any).frozen_at || null,
+    frozenByAdminId: (data as any).frozen_by_admin_id || null,
     updatedAt: data.updated_at || null,
   };
 }
@@ -925,44 +910,127 @@ export async function calculateWithdrawableBalance(
   sellerId: string,
   options?: MoneyMutationOptions
 ) {
+  const relayBalance = await getRelayBalanceSnapshot(sellerId, options);
+  return relayBalance.adminFrozen ? 0 : relayBalance.withdrawableBalanceCents;
+}
+
+export async function setSellerRelayBalanceFrozen(
+  sellerId: string,
+  input: {
+    frozen: boolean;
+    reason: string;
+  },
+  options?: MoneyMutationOptions
+) {
   const adminClient = getAdminClient(options);
-  const [ledgerResult, exposureResult] = await Promise.all([
-    adminClient
-      .from("relay_balance_ledger")
-      .select("type, amount_cents, status")
-      .eq("seller_id", sellerId)
-      .in("type", Array.from(AVAILABLE_BALANCE_LEDGER_TYPES)),
-    adminClient
-      .from("exposure_holds")
-      .select("amount_cents")
-      .eq("seller_id", sellerId)
-      .in("status", Array.from(ACTIVE_EXPOSURE_HOLD_STATUSES)),
-  ]);
+  const normalizedReason = String(input.reason || "").trim();
 
-  if (ledgerResult.error) {
-    throw new Error(
-      ledgerResult.error.message || "Failed to load available relay balance ledger rows"
-    );
+  if (!normalizedReason) {
+    throw new Error("A reason is required to freeze or unfreeze Relay Balance.");
   }
 
-  if (exposureResult.error) {
-    throw new Error(
-      exposureResult.error.message || "Failed to load active exposure holds"
-    );
+  await ensureRelayBalanceRow(adminClient, sellerId);
+
+  const nowIso = getNow(options).toISOString();
+  const updatePayload: Record<string, unknown> = {
+    admin_frozen: input.frozen,
+    frozen_reason: normalizedReason,
+    frozen_at: input.frozen ? nowIso : null,
+    frozen_by_admin_id: input.frozen ? getActorUserId(options) : null,
+  };
+
+  if (input.frozen) {
+    updatePayload.withdrawable_balance_cents = 0;
   }
 
-  const availableBalanceCents = sumAvailableLedgerRows(
-    (ledgerResult.data || []) as Array<{
-      type: RelayBalanceLedgerType;
-      amount_cents: number;
-      status: string;
-    }>
-  );
-  const activeExposureCents = (exposureResult.data || []).reduce((sum, row) => {
-    return sum + Number(row.amount_cents || 0);
-  }, 0);
+  const { data, error } = await adminClient
+    .from("relay_balances")
+    .update(updatePayload)
+    .eq("seller_id", sellerId)
+    .select("*")
+    .single();
 
-  return Math.max(0, availableBalanceCents - activeExposureCents);
+  if (error || !data) {
+    throw new Error(error?.message || "Failed to update Relay Balance freeze state");
+  }
+
+  await logMoneyMovement(adminClient, options, {
+    sellerId,
+    eventType: input.frozen ? "money.seller_balance_frozen" : "money.seller_balance_unfrozen",
+    metadata: {
+      reason: normalizedReason,
+      relayBalanceId: data.id,
+    },
+  });
+
+  return getRelayBalanceSnapshot(sellerId, {
+    ...options,
+    adminClient,
+  });
+}
+
+export async function createAdminBalanceAdjustment(
+  sellerId: string,
+  input: {
+    amountCents: number;
+    reason: string;
+    orderId?: string | null;
+    idempotencyKey?: string | null;
+  },
+  options?: MoneyMutationOptions
+) {
+  const adminClient = getAdminClient(options);
+  const normalizedReason = String(input.reason || "").trim();
+  const normalizedAmountCents = Math.round(Number(input.amountCents || 0));
+
+  if (!normalizedReason) {
+    throw new Error("A reason is required for a manual balance adjustment.");
+  }
+
+  if (!Number.isFinite(normalizedAmountCents) || normalizedAmountCents === 0) {
+    throw new Error("Manual balance adjustments must be a non-zero cent amount.");
+  }
+
+  const idempotencyKey =
+    input.idempotencyKey?.trim() ||
+    `money:admin_adjustment:${sellerId}:${normalizedAmountCents}:${Date.now()}`;
+
+  const ledgerWrite = await insertLedgerEntryIdempotently(adminClient, {
+    sellerId,
+    orderId: input.orderId || null,
+    type: "admin_adjustment",
+    amountCents: normalizedAmountCents,
+    status: "posted",
+    idempotencyKey,
+    metadata: {
+      source: "admin_money_controls",
+      reason: normalizedReason,
+      actor_user_id: getActorUserId(options),
+    },
+  });
+
+  if (ledgerWrite.created) {
+    await logMoneyMovement(adminClient, options, {
+      orderId: input.orderId || null,
+      sellerId,
+      eventType: "money.admin_adjustment_created",
+      metadata: {
+        amountCents: normalizedAmountCents,
+        reason: normalizedReason,
+        ledgerEntryId: ledgerWrite.entry.id,
+        idempotencyKey,
+      },
+    });
+  }
+
+  return {
+    created: ledgerWrite.created,
+    ledgerEntry: ledgerWrite.entry,
+    relayBalance: await getRelayBalanceSnapshot(sellerId, {
+      ...options,
+      adminClient,
+    }),
+  };
 }
 
 export async function createOrderPendingCredit(
@@ -1565,6 +1633,13 @@ export async function createSellerWithdrawalRequest(
     ...options,
     adminClient,
   });
+  if (relayBalance.adminFrozen) {
+    throw new Error(
+      relayBalance.frozenReason
+        ? `Withdrawals are temporarily frozen by Relay admin review: ${relayBalance.frozenReason}`
+        : "Withdrawals are temporarily frozen by Relay admin review."
+    );
+  }
   const withdrawableBalanceCents = await calculateWithdrawableBalance(sellerId, {
     ...options,
     adminClient,

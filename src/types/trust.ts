@@ -141,6 +141,35 @@ export interface SellerReserveAccount {
   updated_at: string;
 }
 
+export interface SellerIdentityProfile {
+  id: string;
+  seller_id: string;
+  identity_fingerprint: string | null;
+  phone_fingerprint: string | null;
+  email_fingerprint: string | null;
+  bank_account_fingerprint?: string | null;
+  country_code?: string | null;
+  stripe_account_id: string | null;
+  verification_status:
+    | "unverified"
+    | "pending"
+    | "verified"
+    | "restricted"
+    | "review_required";
+  stripe_connect_onboarding_complete: boolean;
+  matched_banned_identity?: boolean;
+  matched_banned_identity_id?: string | null;
+  match_reasons?: string[];
+  admin_review_required?: boolean;
+  false_positive_cleared?: boolean;
+  false_positive_cleared_at?: string | null;
+  false_positive_cleared_by_admin_id?: string | null;
+  banned_identity: boolean;
+  banned_reason: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface RelayBalance {
   id: string;
   seller_id: string;
@@ -149,6 +178,10 @@ export interface RelayBalance {
   pending_balance_cents: number;
   exposure_cents: number;
   withdrawable_balance_cents: number;
+  admin_frozen?: boolean;
+  frozen_reason?: string | null;
+  frozen_at?: string | null;
+  frozen_by_admin_id?: string | null;
   updated_at: string;
 }
 

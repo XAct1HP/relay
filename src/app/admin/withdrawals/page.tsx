@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, Clock, RefreshCw, ShieldAlert, XCircle } from "lucide-react";
+import { Banknote, Clock, RefreshCw, ShieldAlert, Wallet, XCircle } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
 
 interface AdminWithdrawalItem {
@@ -186,7 +187,7 @@ export default function AdminWithdrawalsPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Withdrawals</h1>
@@ -202,6 +203,13 @@ export default function AdminWithdrawalsPage() {
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Link href="/admin/money" className="relay-button-secondary inline-flex items-center gap-2">
+          <Wallet className="w-4 h-4" />
+          Relay Balance Overview
+        </Link>
       </div>
 
       {error && (
@@ -295,6 +303,14 @@ export default function AdminWithdrawalsPage() {
                           <p className="text-white/45 text-sm">
                             {withdrawal.seller?.email || "No email"} {withdrawal.seller?.stripe_account_id ? "- Stripe connected" : "- Stripe missing"}
                           </p>
+                          {withdrawal.seller_id && (
+                            <Link
+                              href={`/admin/money/sellers/${withdrawal.seller_id}`}
+                              className="inline-flex items-center gap-1 text-sm text-[#7ca6ff] hover:text-[#9bbcff]"
+                            >
+                              Seller money detail
+                            </Link>
+                          )}
                           <div className="flex flex-wrap gap-2 text-xs">
                             <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">
                               Gross {formatMoneyFromCents(withdrawal.amount_cents)}

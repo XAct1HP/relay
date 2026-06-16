@@ -24,6 +24,7 @@ import {
   Shield,
   ShieldCheck,
   Wallet,
+  CircleDollarSign,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -73,6 +74,7 @@ export function Sidebar() {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/money", label: "Relay Balance", icon: CircleDollarSign },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
     { href: "/admin/withdrawals", label: "Withdrawals", icon: Wallet },

@@ -26,6 +26,7 @@ import type {
   SellerReserveAccount,
   SellerReserveEntry,
   RelayTag,
+  SellerIdentityProfile,
   User,
 } from "@/types";
 
@@ -33,6 +34,7 @@ interface SellerTrustDetailResponse {
   seller: User;
   reserveAccount: SellerReserveAccount | null;
   reserveEntries: SellerReserveEntry[];
+  identityProfile: SellerIdentityProfile | null;
   tierHistory: SellerTierHistoryEntry[];
   evaluations: SellerTrustEvaluation[];
   violations: SellerViolation[];
@@ -97,6 +99,7 @@ export default function AdminSellerTrustDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
+  const [identityBanReason, setIdentityBanReason] = useState("");
   const [targetTier, setTargetTier] = useState<SellerTier>("tier_1");
   const [violationType, setViolationType] = useState<"authenticity" | "tag_tampering" | "dispute_rate" | "manual_demotion" | "other">("authenticity");
   const [violationNotes, setViolationNotes] = useState("");
@@ -221,6 +224,37 @@ export default function AdminSellerTrustDetailPage() {
     }
   }
 
+  async function updateIdentity(action: "sync" | "clear_false_positive" | "ban_identity") {
+    setActionLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`/api/admin/trust/sellers/${sellerId}/identity`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          reason: action === "ban_identity" ? identityBanReason : undefined,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to update seller identity status");
+      }
+
+      if (action === "ban_identity") {
+        setIdentityBanReason("");
+      }
+
+      await loadSeller();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update seller identity status");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function processManualPayout(orderId: string) {
     setActionLoading(true);
     setError("");
@@ -259,7 +293,18 @@ export default function AdminSellerTrustDetailPage() {
     return <div className="py-12 text-center text-white/40">Seller not found.</div>;
   }
 
-  const { seller, reserveAccount, reserveEntries, tierHistory, evaluations, violations, tags, recentOrders, reviewOrders } = data;
+  const {
+    seller,
+    reserveAccount,
+    reserveEntries,
+    identityProfile,
+    tierHistory,
+    evaluations,
+    violations,
+    tags,
+    recentOrders,
+    reviewOrders,
+  } = data;
 
   return (
     <div className="space-y-6 pb-12">
@@ -281,6 +326,13 @@ export default function AdminSellerTrustDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/admin/money/sellers/${sellerId}`}
+            className="relay-button-secondary inline-flex items-center gap-2"
+          >
+            <Archive className="w-4 h-4" />
+            Money Detail
+          </Link>
           {seller.tier_locked ? (
             <button
               onClick={() => updateOverride("unlock")}
@@ -477,6 +529,99 @@ export default function AdminSellerTrustDetailPage() {
         </div>
 
         <div className="space-y-4 sm:space-y-6">
+          <div className="relay-card p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield className="w-5 h-5 text-[#7ca6ff]" />
+              <h2 className="text-lg font-semibold text-[#f5f7fb]">Identity Protection</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <p className="text-white/50 text-[10px] uppercase tracking-[0.16em] mb-1">Connect</p>
+                <p className="text-[#f5f7fb] font-semibold">
+                  {identityProfile?.stripe_connect_onboarding_complete ? "Complete" : "Incomplete"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <p className="text-white/50 text-[10px] uppercase tracking-[0.16em] mb-1">Verification</p>
+                <p className="text-[#f5f7fb] font-semibold">
+                  {(identityProfile?.verification_status || seller.stripe_identity_verification_status || "unverified").replaceAll("_", " ")}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <p className="text-white/50 text-[10px] uppercase tracking-[0.16em] mb-1">Review</p>
+                <p className="text-[#f5f7fb] font-semibold">
+                  {identityProfile?.admin_review_required || seller.seller_identity_review_required ? "Required" : "Clear"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <p className="text-white/50 text-[10px] uppercase tracking-[0.16em] mb-1">Banned Match</p>
+                <p className="text-[#f5f7fb] font-semibold">
+                  {identityProfile?.matched_banned_identity ? "Matched" : "None"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm text-white/60">
+              <p>
+                Stripe account:{" "}
+                <span className="text-[#f5f7fb]">
+                  {identityProfile?.stripe_account_id || seller.stripe_account_id || "Not connected"}
+                </span>
+              </p>
+              {seller.seller_identity_review_reason && (
+                <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-200">
+                  {seller.seller_identity_review_reason}
+                </p>
+              )}
+              {identityProfile?.match_reasons && identityProfile.match_reasons.length > 0 && (
+                <p>
+                  Match reasons:{" "}
+                  <span className="text-[#f5f7fb]">
+                    {identityProfile.match_reasons.map((reason) => reason.replaceAll("_", " ")).join(", ")}
+                  </span>
+                </p>
+              )}
+              {seller.is_founding_seller && (identityProfile?.admin_review_required || seller.seller_identity_review_required) && !seller.is_banned && (
+                <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-200">
+                  Founding seller status can bypass Relay review holds, but Stripe Connect onboarding is still required.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3 mt-4">
+              <button
+                onClick={() => updateIdentity("sync")}
+                disabled={actionLoading}
+                className="relay-button-secondary w-full inline-flex items-center justify-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${actionLoading ? "animate-spin" : ""}`} />
+                Sync Identity From Stripe
+              </button>
+              <button
+                onClick={() => updateIdentity("clear_false_positive")}
+                disabled={actionLoading}
+                className="relay-button-secondary w-full"
+              >
+                Clear False Positive
+              </button>
+              <textarea
+                value={identityBanReason}
+                onChange={(event) => setIdentityBanReason(event.target.value)}
+                className="relay-textarea"
+                rows={3}
+                placeholder="Document why this identity should be banned."
+              />
+              <button
+                onClick={() => updateIdentity("ban_identity")}
+                disabled={actionLoading || !identityBanReason.trim()}
+                className="relay-button-secondary w-full bg-red-500/20 text-red-300"
+              >
+                Ban Identity
+              </button>
+            </div>
+          </div>
+
           <div className="relay-card p-4 sm:p-5">
             <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Manual Controls</h2>
             <div className="space-y-3">
