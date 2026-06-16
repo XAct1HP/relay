@@ -1,0 +1,55 @@
+import { NextResponse } from "next/server";
+import { getRelayBalanceSnapshot, WITHDRAWAL_TRANSFER_FEE_CENTS } from "@/lib/money-policy";
+import { requireSellerSession } from "@/lib/seller-access";
+
+export async function GET() {
+  try {
+    const { user, profile, adminClient } = await requireSellerSession();
+    const relayBalance = await getRelayBalanceSnapshot(user.id, {
+      adminClient,
+      actorRole: "seller",
+      actorUserId: user.id,
+    });
+
+    const { data: withdrawals, error: withdrawalsError } = await adminClient
+      .from("withdrawal_requests")
+      .select("*")
+      .eq("seller_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (withdrawalsError) {
+      throw new Error(withdrawalsError.message || "Failed to load withdrawal history");
+    }
+
+    return NextResponse.json({
+      profile: {
+        id: profile.id,
+        stripeAccountId: profile.stripe_account_id,
+        stripeConnected: Boolean(profile.stripe_account_id),
+        displayName:
+          profile.display_name || profile.full_name || profile.username || profile.email || "Seller",
+      },
+      balances: {
+        relayBalanceCents: relayBalance.totalBalanceCents,
+        pendingBalanceCents: relayBalance.pendingBalanceCents,
+        availableBalanceCents: relayBalance.availableBalanceCents,
+        currentExposureCents: relayBalance.exposureCents,
+        withdrawableBalanceCents: relayBalance.withdrawableBalanceCents,
+        updatedAt: relayBalance.updatedAt,
+      },
+      withdrawalConfig: {
+        transferFeeCents: WITHDRAWAL_TRANSFER_FEE_CENTS,
+      },
+      withdrawals: withdrawals || [],
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load seller balance";
+
+    return NextResponse.json(
+      { error: message },
+      { status: message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 500 }
+    );
+  }
+}

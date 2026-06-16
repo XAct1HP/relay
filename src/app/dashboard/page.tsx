@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote, AlertCircle } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -16,7 +16,7 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
-import { Order, Conversation } from "@/types";
+import type { WithdrawalRequest } from "@/types";
 
 interface ChartDataPoint {
   month: string;
@@ -40,6 +40,49 @@ interface RecentMessage {
   lastMessage: string;
   time: string;
   avatar: string;
+}
+
+interface SellerBalanceResponse {
+  profile: {
+    id: string;
+    stripeAccountId: string | null;
+    stripeConnected: boolean;
+    displayName: string;
+  };
+  balances: {
+    relayBalanceCents: number;
+    pendingBalanceCents: number;
+    availableBalanceCents: number;
+    currentExposureCents: number;
+    withdrawableBalanceCents: number;
+    updatedAt: string | null;
+  };
+  withdrawalConfig: {
+    transferFeeCents: number;
+  };
+  withdrawals: WithdrawalRequest[];
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
+}
+
+function formatMoneyFromCents(cents: number) {
+  return formatMoney((cents || 0) / 100);
+}
+
+function parseDollarInputToCents(value: string) {
+  const normalized = value.replace(/[^0-9.]/g, "");
+  const numericValue = Number(normalized);
+
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return 0;
+  }
+
+  return Math.round(numericValue * 100);
 }
 
 function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
@@ -141,6 +184,13 @@ export default function DashboardPage() {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [recentOrdersList, setRecentOrders] = useState<RecentOrder[]>([]);
   const [recentMessagesList, setRecentMessages] = useState<RecentMessage[]>([]);
+  const [balanceData, setBalanceData] = useState<SellerBalanceResponse | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceError, setBalanceError] = useState("");
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
+  const [withdrawFeedback, setWithdrawFeedback] = useState("");
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
     activeListings: 0,
@@ -156,6 +206,11 @@ export default function DashboardPage() {
     totalConversations: 0,
   });
   const [loading, setLoading] = useState(true);
+  const transferFeeCents = balanceData?.withdrawalConfig.transferFeeCents || 25;
+  const withdrawalAmountCents = parseDollarInputToCents(withdrawAmount);
+  const netTransferAmountCents = Math.max(0, withdrawalAmountCents - transferFeeCents);
+  const withdrawableBalanceCents =
+    balanceData?.balances.withdrawableBalanceCents || 0;
 
   useEffect(() => {
     if (!currentUser?.id) {
@@ -346,6 +401,116 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser?.id || currentUser.role !== "seller") {
+      setBalanceLoading(false);
+      setBalanceData(null);
+      return;
+    }
+
+    async function fetchBalanceData() {
+      setBalanceLoading(true);
+      setBalanceError("");
+
+      try {
+        const response = await fetch("/api/seller/balance", { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Failed to load Relay Balance");
+        }
+
+        setBalanceData(payload);
+      } catch (error) {
+        setBalanceError(
+          error instanceof Error ? error.message : "Failed to load Relay Balance"
+        );
+      } finally {
+        setBalanceLoading(false);
+      }
+    }
+
+    void fetchBalanceData();
+  }, [currentUser?.id, currentUser?.role]);
+
+  async function handleWithdrawalSubmit() {
+    if (!balanceData) {
+      return;
+    }
+
+    setWithdrawSubmitting(true);
+    setWithdrawFeedback("");
+
+    try {
+      if (withdrawalAmountCents <= 0) {
+        throw new Error("Enter a withdrawal amount greater than zero.");
+      }
+
+      if (withdrawalAmountCents > withdrawableBalanceCents) {
+        throw new Error("Withdrawal amount exceeds your withdrawable balance.");
+      }
+
+      if (netTransferAmountCents <= 0) {
+        throw new Error("Withdrawal amount must exceed the Stripe transfer fee.");
+      }
+
+      const idempotencyKey =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `withdrawal-${Date.now()}`;
+      const response = await fetch("/api/seller/withdrawals", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amountCents: withdrawalAmountCents,
+          idempotencyKey,
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to create withdrawal");
+      }
+
+      setBalanceData((previous) =>
+        previous
+          ? {
+              ...previous,
+              balances: {
+                relayBalanceCents: payload.relayBalance.totalBalanceCents,
+                pendingBalanceCents: payload.relayBalance.pendingBalanceCents,
+                availableBalanceCents: payload.relayBalance.availableBalanceCents,
+                currentExposureCents: payload.relayBalance.exposureCents,
+                withdrawableBalanceCents: payload.relayBalance.withdrawableBalanceCents,
+                updatedAt: payload.relayBalance.updatedAt,
+              },
+              withdrawals: [
+                payload.withdrawalRequest,
+                ...previous.withdrawals.filter(
+                  (item) => item.id !== payload.withdrawalRequest.id
+                ),
+              ].slice(0, 10),
+            }
+          : previous
+      );
+      setWithdrawFeedback(
+        payload.withdrawalRequest.review_required
+          ? "Withdrawal requested. It is pending manual review before transfer."
+          : "Withdrawal submitted successfully."
+      );
+      setWithdrawAmount("");
+      setWithdrawOpen(false);
+    } catch (error) {
+      setWithdrawFeedback(
+        error instanceof Error ? error.message : "Failed to create withdrawal"
+      );
+    } finally {
+      setWithdrawSubmitting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="relay-empty text-center">Loading...</div>
@@ -399,6 +564,230 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        {currentUser?.role === "seller" && (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="relay-eyebrow text-[#5f8fff] mb-2">RELAY BALANCE</p>
+              <h2 className="text-2xl font-semibold text-[#f5f7fb]">Withdraw to Stripe Connect</h2>
+              <p className="text-white/50 text-sm mt-1 max-w-2xl">
+                Pending funds stay inside Relay until they clear. Withdrawable balance already excludes exposure holds and dispute freezes.
+              </p>
+            </div>
+            <button
+              onClick={() => setWithdrawOpen((open) => !open)}
+              disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
+              className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              <Wallet className="w-4 h-4" />
+              Withdraw
+            </button>
+          </div>
+
+          {balanceError && (
+            <div className="relay-card border border-red-500/20 bg-red-500/10 p-4 text-red-300">
+              {balanceError}
+            </div>
+          )}
+
+          {withdrawFeedback && (
+            <div className="relay-card border border-[#5f8fff]/20 bg-[#5f8fff]/10 p-4 text-[#dce7ff]">
+              {withdrawFeedback}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 sm:gap-4">
+            <MetricCard
+              icon={Banknote}
+              label="Relay Balance"
+              value={balanceLoading ? "..." : formatMoneyFromCents(balanceData?.balances.relayBalanceCents || 0)}
+              trend="up"
+              trendValue="gross"
+            />
+            <MetricCard
+              icon={DollarSign}
+              label="Pending Balance"
+              value={balanceLoading ? "..." : formatMoneyFromCents(balanceData?.balances.pendingBalanceCents || 0)}
+              trend="up"
+              trendValue="held"
+            />
+            <MetricCard
+              icon={Wallet}
+              label="Available Balance"
+              value={balanceLoading ? "..." : formatMoneyFromCents(balanceData?.balances.availableBalanceCents || 0)}
+              trend="up"
+              trendValue="cleared"
+            />
+            <MetricCard
+              icon={AlertCircle}
+              label="Current Exposure"
+              value={balanceLoading ? "..." : formatMoneyFromCents(balanceData?.balances.currentExposureCents || 0)}
+              trend="down"
+              trendValue="reserved"
+            />
+            <MetricCard
+              icon={TrendingUp}
+              label="Withdrawable"
+              value={balanceLoading ? "..." : formatMoneyFromCents(withdrawableBalanceCents)}
+              trend="up"
+              trendValue="ready"
+            />
+          </div>
+
+          {withdrawOpen && (
+            <div className="relay-card p-5 space-y-5">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-[#f5f7fb]">Withdraw Funds</h3>
+                  <p className="text-white/45 text-sm">
+                    Enter any amount up to {formatMoneyFromCents(withdrawableBalanceCents)}.
+                  </p>
+                </div>
+                <div className="text-sm text-white/45">
+                  Connected account: {balanceData?.profile.stripeConnected ? "ready" : "not connected"}
+                </div>
+              </div>
+
+              {!balanceData?.profile.stripeConnected && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-200 text-sm">
+                  Connect Stripe in Settings before requesting a withdrawal.
+                </div>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="space-y-2">
+                  <label htmlFor="withdraw-amount" className="text-sm text-white/60">
+                    Withdrawal amount
+                  </label>
+                  <input
+                    id="withdraw-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={withdrawAmount}
+                    onChange={(event) => setWithdrawAmount(event.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
+                  />
+                  <p className="text-xs text-white/40">
+                    Pending funds, active exposure holds, and disputed amounts are excluded automatically.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                  <div className="flex items-center justify-between text-sm text-white/60">
+                    <span>Withdrawal amount</span>
+                    <span className="text-[#f5f7fb] font-medium">
+                      {formatMoneyFromCents(withdrawalAmountCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-white/60">
+                    <span>Stripe transfer fee</span>
+                    <span className="text-[#f5f7fb] font-medium">
+                      {formatMoneyFromCents(transferFeeCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-white/60">
+                    <span>Net transfer amount</span>
+                    <span className="text-[#f5f7fb] font-medium">
+                      {formatMoneyFromCents(netTransferAmountCents)}
+                    </span>
+                  </div>
+                  <div className="pt-3 border-t border-white/10 flex items-center justify-between text-sm text-white/60">
+                    <span>Withdrawable balance</span>
+                    <span className="text-[#7ca6ff] font-semibold">
+                      {formatMoneyFromCents(withdrawableBalanceCents)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => void handleWithdrawalSubmit()}
+                  disabled={
+                    withdrawSubmitting ||
+                    !balanceData?.profile.stripeConnected ||
+                    withdrawalAmountCents <= 0 ||
+                    withdrawalAmountCents > withdrawableBalanceCents ||
+                    netTransferAmountCents <= 0
+                  }
+                  className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {withdrawSubmitting ? "Processing..." : "Confirm Withdrawal"}
+                </button>
+                <button
+                  onClick={() => setWithdrawOpen(false)}
+                  className="relay-button-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="relay-card p-5">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-lg font-semibold text-[#f5f7fb]">Recent Withdrawals</h3>
+                <p className="text-white/45 text-sm">Latest Relay Balance transfers to Stripe Connect.</p>
+              </div>
+            </div>
+
+            {balanceLoading ? (
+              <div className="text-white/40 text-sm">Loading withdrawal history...</div>
+            ) : (balanceData?.withdrawals || []).length === 0 ? (
+              <div className="text-white/40 text-sm">No withdrawals yet.</div>
+            ) : (
+              <div className="space-y-0 divide-y divide-white/5">
+                {balanceData?.withdrawals.map((withdrawal) => {
+                  const netAmountCents = Math.max(
+                    0,
+                    Number(withdrawal.amount_cents || 0) -
+                      Number(withdrawal.stripe_transfer_fee_cents || transferFeeCents)
+                  );
+
+                  return (
+                    <div
+                      key={withdrawal.id}
+                      className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-[#f5f7fb] font-medium">
+                          {formatMoneyFromCents(Number(withdrawal.amount_cents || 0))}
+                        </p>
+                        <p className="text-white/40 text-sm">
+                          Net {formatMoneyFromCents(netAmountCents)} after {formatMoneyFromCents(Number(withdrawal.stripe_transfer_fee_cents || transferFeeCents))} fee
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-sm">
+                        <span className={`px-2.5 py-1 rounded-full font-semibold ${
+                          withdrawal.status === "completed"
+                            ? "bg-emerald-500/15 text-emerald-300"
+                            : withdrawal.status === "failed" || withdrawal.status === "canceled"
+                              ? "bg-red-500/15 text-red-300"
+                              : "bg-amber-500/15 text-amber-300"
+                        }`}>
+                          {withdrawal.status.replace(/_/g, " ")}
+                        </span>
+                        {withdrawal.review_required && (
+                          <span className="px-2.5 py-1 rounded-full font-semibold bg-[#5f8fff]/15 text-[#7ca6ff]">
+                            manual review
+                          </span>
+                        )}
+                        <span className="text-white/40">
+                          {new Date(withdrawal.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+        )}
 
         {/* Top Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

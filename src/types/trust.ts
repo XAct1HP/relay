@@ -181,6 +181,13 @@ export interface WithdrawalRequest {
   amount_cents: number;
   stripe_transfer_id: string | null;
   stripe_transfer_fee_cents: number;
+  idempotency_key?: string | null;
+  review_required?: boolean;
+  reviewed_at?: string | null;
+  reviewed_by_admin_id?: string | null;
+  review_notes?: string | null;
+  canceled_at?: string | null;
+  canceled_by_admin_id?: string | null;
   status: WithdrawalRequestStatus;
   failure_reason: string | null;
   created_at: string;

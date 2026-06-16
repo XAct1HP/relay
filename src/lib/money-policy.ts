@@ -1,10 +1,15 @@
 import "server-only";
 
+import Stripe from "stripe";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { createAdminClient } from "@/lib/supabase-admin";
 import type { AuditActorRole, SellerTier } from "@/types/trust";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2024-06-20",
+});
 
 const CARRIER_ACCEPTANCE_TRACKING_STATUSES = new Set(["TRANSIT", "IN_TRANSIT"]);
 const DELIVERY_TRACKING_STATUSES = new Set(["DELIVERED"]);
@@ -17,6 +22,8 @@ const AVAILABLE_BALANCE_LEDGER_TYPES = [
   "dispute_debit",
   "admin_adjustment",
 ] as const;
+export const WITHDRAWAL_TRANSFER_FEE_CENTS = 25;
+const MANUAL_WITHDRAWAL_REVIEW_THRESHOLD_CENTS = 200_000;
 
 type RelayBalanceLedgerType =
   | "order_pending_credit"
@@ -125,6 +132,23 @@ export interface ExposureHoldResult extends RelayBalanceMutationResult {
   amountCents: number;
   hold?: any;
   ledgerEntry?: any;
+}
+
+export interface RelayBalanceSnapshot {
+  sellerId: string;
+  totalBalanceCents: number;
+  pendingBalanceCents: number;
+  availableBalanceCents: number;
+  exposureCents: number;
+  withdrawableBalanceCents: number;
+  updatedAt: string | null;
+}
+
+export interface SellerWithdrawalRequestResult extends RelayBalanceMutationResult {
+  withdrawalRequest: any;
+  relayBalance: RelayBalanceSnapshot;
+  transferFeeCents: number;
+  netTransferAmountCents: number;
 }
 
 function getAdminClient(options?: MoneyMutationOptions) {
@@ -653,8 +677,255 @@ function sumAvailableLedgerRows(
   }, 0);
 }
 
-export async function calculateWithdrawableBalance(sellerId: string) {
-  const adminClient = createAdminClient();
+function normalizeMoneyAmountCents(value: number) {
+  return Math.max(0, Math.round(Number(value || 0)));
+}
+
+function calculateNetWithdrawalAmountCents(
+  amountCents: number,
+  transferFeeCents = WITHDRAWAL_TRANSFER_FEE_CENTS
+) {
+  return Math.max(
+    0,
+    normalizeMoneyAmountCents(amountCents) -
+      Math.max(0, normalizeMoneyAmountCents(transferFeeCents))
+  );
+}
+
+function determineWithdrawalReviewRequired(amountCents: number) {
+  // TODO: Replace this flat threshold with seller risk scoring / anomaly checks.
+  return normalizeMoneyAmountCents(amountCents) >= MANUAL_WITHDRAWAL_REVIEW_THRESHOLD_CENTS;
+}
+
+async function recalculateRelayBalance(
+  adminClient: SupabaseAdminClient,
+  sellerId: string
+) {
+  const { error } = await adminClient.rpc("recalculate_relay_balance", {
+    target_seller_id: sellerId,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to recalculate relay balance");
+  }
+}
+
+export async function getRelayBalanceSnapshot(
+  sellerId: string,
+  options?: MoneyMutationOptions
+): Promise<RelayBalanceSnapshot> {
+  const adminClient = getAdminClient(options);
+
+  await recalculateRelayBalance(adminClient, sellerId);
+
+  const { data, error } = await adminClient
+    .from("relay_balances")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "Failed to load relay balance");
+  }
+
+  if (!data) {
+    const { data: insertedBalance, error: insertError } = await adminClient
+      .from("relay_balances")
+      .upsert(
+        {
+          seller_id: sellerId,
+          total_balance_cents: 0,
+          available_balance_cents: 0,
+          pending_balance_cents: 0,
+          exposure_cents: 0,
+          withdrawable_balance_cents: 0,
+        },
+        { onConflict: "seller_id" }
+      )
+      .select("*")
+      .single();
+
+    if (insertError || !insertedBalance) {
+      throw new Error(insertError?.message || "Failed to initialize relay balance");
+    }
+
+    return {
+      sellerId,
+      totalBalanceCents: Number(insertedBalance.total_balance_cents || 0),
+      pendingBalanceCents: Number(insertedBalance.pending_balance_cents || 0),
+      availableBalanceCents: Number(insertedBalance.available_balance_cents || 0),
+      exposureCents: Number(insertedBalance.exposure_cents || 0),
+      withdrawableBalanceCents: Number(insertedBalance.withdrawable_balance_cents || 0),
+      updatedAt: insertedBalance.updated_at || null,
+    };
+  }
+
+  return {
+    sellerId,
+    totalBalanceCents: Number(data.total_balance_cents || 0),
+    pendingBalanceCents: Number(data.pending_balance_cents || 0),
+    availableBalanceCents: Number(data.available_balance_cents || 0),
+    exposureCents: Number(data.exposure_cents || 0),
+    withdrawableBalanceCents: Number(data.withdrawable_balance_cents || 0),
+    updatedAt: data.updated_at || null,
+  };
+}
+
+async function getSellerWithdrawalProfile(
+  adminClient: SupabaseAdminClient,
+  sellerId: string
+) {
+  const { data, error } = await adminClient
+    .from("profiles")
+    .select("id, role, stripe_account_id, display_name, full_name, username, email")
+    .eq("id", sellerId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Seller profile not found");
+  }
+
+  return data;
+}
+
+async function getWithdrawalRequestByIdempotencyKey(
+  adminClient: SupabaseAdminClient,
+  sellerId: string,
+  idempotencyKey: string
+) {
+  const { data, error } = await adminClient
+    .from("withdrawal_requests")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "Failed to load withdrawal request");
+  }
+
+  return data || null;
+}
+
+async function loadWithdrawalRequest(
+  adminClient: SupabaseAdminClient,
+  withdrawalRequestId: string
+) {
+  const { data, error } = await adminClient
+    .from("withdrawal_requests")
+    .select(`
+      *,
+      seller:profiles!withdrawal_requests_seller_id_fkey(
+        id,
+        role,
+        stripe_account_id,
+        display_name,
+        full_name,
+        username,
+        email
+      )
+    `)
+    .eq("id", withdrawalRequestId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Withdrawal request not found");
+  }
+
+  const seller = Array.isArray((data as any).seller)
+    ? (data as any).seller[0]
+    : (data as any).seller;
+
+  return {
+    ...(data as any),
+    seller: seller || null,
+  };
+}
+
+async function restoreWithdrawalBalance(
+  adminClient: SupabaseAdminClient,
+  request: any,
+  options: MoneyMutationOptions | undefined,
+  input: {
+    status: "failed" | "canceled";
+    failureReason: string;
+    eventType: string;
+    reviewRequired?: boolean;
+    reviewedAt?: string | null;
+    reviewedByAdminId?: string | null;
+    reviewNotes?: string | null;
+    canceledAt?: string | null;
+    canceledByAdminId?: string | null;
+  }
+) {
+  const updatedPayload: Record<string, unknown> = {
+    status: input.status,
+    failure_reason: input.failureReason,
+  };
+
+  if (typeof input.reviewRequired === "boolean") {
+    updatedPayload.review_required = input.reviewRequired;
+  }
+  if (input.reviewedAt !== undefined) {
+    updatedPayload.reviewed_at = input.reviewedAt;
+  }
+  if (input.reviewedByAdminId !== undefined) {
+    updatedPayload.reviewed_by_admin_id = input.reviewedByAdminId;
+  }
+  if (input.reviewNotes !== undefined) {
+    updatedPayload.review_notes = input.reviewNotes;
+  }
+  if (input.canceledAt !== undefined) {
+    updatedPayload.canceled_at = input.canceledAt;
+  }
+  if (input.canceledByAdminId !== undefined) {
+    updatedPayload.canceled_by_admin_id = input.canceledByAdminId;
+  }
+
+  const { data: updatedRequest, error: updateError } = await adminClient
+    .from("withdrawal_requests")
+    .update(updatedPayload)
+    .eq("id", request.id)
+    .select("*")
+    .single();
+
+  if (updateError || !updatedRequest) {
+    throw new Error(updateError?.message || "Failed to update withdrawal request");
+  }
+
+  const ledgerWrite = await insertLedgerEntryIdempotently(adminClient, {
+    sellerId: request.seller_id,
+    type: "withdrawal_failed",
+    amountCents: Math.abs(Number(request.amount_cents || 0)),
+    status: input.status === "failed" ? "failed" : "canceled",
+    idempotencyKey: `money:withdrawal:${request.id}:restore`,
+    metadata: {
+      source: "relay_balance_policy",
+      withdrawal_request_id: request.id,
+      restoration_status: input.status,
+      reason: input.failureReason,
+    },
+  });
+
+  await logMoneyMovement(adminClient, options, {
+    sellerId: request.seller_id,
+    eventType: input.eventType,
+    metadata: {
+      withdrawalRequestId: request.id,
+      amountCents: Number(request.amount_cents || 0),
+      ledgerEntryId: ledgerWrite.entry.id,
+      reason: input.failureReason,
+    },
+  });
+
+  return updatedRequest;
+}
+
+export async function calculateWithdrawableBalance(
+  sellerId: string,
+  options?: MoneyMutationOptions
+) {
+  const adminClient = getAdminClient(options);
   const [ledgerResult, exposureResult] = await Promise.all([
     adminClient
       .from("relay_balance_ledger")
@@ -1232,5 +1503,504 @@ export async function debitSellerForDispute(
     created: ledgerWrite.created,
     sellerProceedsCents,
     ledgerEntry: ledgerWrite.entry,
+  };
+}
+
+export async function createSellerWithdrawalRequest(
+  sellerId: string,
+  amountCents: number,
+  options?: MoneyMutationOptions & {
+    idempotencyKey?: string;
+    reviewRequired?: boolean;
+  }
+): Promise<SellerWithdrawalRequestResult> {
+  const adminClient = getAdminClient(options);
+  const normalizedAmountCents = normalizeMoneyAmountCents(amountCents);
+  const transferFeeCents = WITHDRAWAL_TRANSFER_FEE_CENTS;
+  const netTransferAmountCents = calculateNetWithdrawalAmountCents(
+    normalizedAmountCents,
+    transferFeeCents
+  );
+  const idempotencyKey =
+    options?.idempotencyKey?.trim() ||
+    `withdrawal:${sellerId}:${normalizedAmountCents}:${Date.now()}`;
+
+  if (normalizedAmountCents <= 0) {
+    throw new Error("Withdrawal amount must be greater than zero.");
+  }
+
+  if (netTransferAmountCents <= 0) {
+    throw new Error("Withdrawal amount must exceed the Stripe transfer fee.");
+  }
+
+  const [sellerProfile, existingRequest] = await Promise.all([
+    getSellerWithdrawalProfile(adminClient, sellerId),
+    getWithdrawalRequestByIdempotencyKey(adminClient, sellerId, idempotencyKey),
+  ]);
+
+  if (!sellerProfile.stripe_account_id) {
+    throw new Error("Connect Stripe in Settings before requesting a withdrawal.");
+  }
+
+  if (existingRequest) {
+    const relayBalance = await getRelayBalanceSnapshot(sellerId, {
+      ...options,
+      adminClient,
+    });
+
+    return {
+      created: false,
+      reason: "existing_withdrawal_request",
+      withdrawalRequest: existingRequest,
+      relayBalance,
+      transferFeeCents,
+      netTransferAmountCents: calculateNetWithdrawalAmountCents(
+        Number(existingRequest.amount_cents || 0),
+        Number(existingRequest.stripe_transfer_fee_cents || transferFeeCents)
+      ),
+    };
+  }
+
+  const relayBalance = await getRelayBalanceSnapshot(sellerId, {
+    ...options,
+    adminClient,
+  });
+  const withdrawableBalanceCents = await calculateWithdrawableBalance(sellerId, {
+    ...options,
+    adminClient,
+  });
+
+  if (normalizedAmountCents > withdrawableBalanceCents) {
+    throw new Error("Withdrawal amount exceeds withdrawable balance.");
+  }
+
+  const reviewRequired =
+    typeof options?.reviewRequired === "boolean"
+      ? options.reviewRequired
+      : determineWithdrawalReviewRequired(normalizedAmountCents);
+
+  const { data: insertedRequest, error: insertError } = await adminClient
+    .from("withdrawal_requests")
+    .insert({
+      seller_id: sellerId,
+      amount_cents: normalizedAmountCents,
+      stripe_transfer_fee_cents: transferFeeCents,
+      status: "pending",
+      idempotency_key: idempotencyKey,
+      review_required: reviewRequired,
+    })
+    .select("*")
+    .single();
+
+  if (insertError || !insertedRequest) {
+    const recoveredRequest = await getWithdrawalRequestByIdempotencyKey(
+      adminClient,
+      sellerId,
+      idempotencyKey
+    );
+
+    if (recoveredRequest) {
+      return {
+        created: false,
+        reason: "existing_withdrawal_request",
+        withdrawalRequest: recoveredRequest,
+        relayBalance,
+        transferFeeCents,
+        netTransferAmountCents,
+      };
+    }
+
+    throw new Error(insertError?.message || "Failed to create withdrawal request");
+  }
+
+  const ledgerWrite = await insertLedgerEntryIdempotently(adminClient, {
+    sellerId,
+    type: "withdrawal_requested",
+    amountCents: -normalizedAmountCents,
+    status: reviewRequired ? "pending" : "posted",
+    idempotencyKey: `money:withdrawal:${insertedRequest.id}:requested`,
+    metadata: {
+      source: "relay_balance_policy",
+      withdrawal_request_id: insertedRequest.id,
+      seller_stripe_account_id: sellerProfile.stripe_account_id,
+      transfer_fee_cents: transferFeeCents,
+      net_transfer_amount_cents: netTransferAmountCents,
+      review_required: reviewRequired,
+    },
+  });
+
+  await logMoneyMovement(adminClient, options, {
+    sellerId,
+    eventType: "money.withdrawal_requested",
+    metadata: {
+      withdrawalRequestId: insertedRequest.id,
+      amountCents: normalizedAmountCents,
+      transferFeeCents,
+      netTransferAmountCents,
+      reviewRequired,
+      ledgerEntryId: ledgerWrite.entry.id,
+    },
+  });
+
+  if (reviewRequired) {
+    const refreshedBalance = await getRelayBalanceSnapshot(sellerId, {
+      ...options,
+      adminClient,
+    });
+
+    return {
+      created: true,
+      withdrawalRequest: insertedRequest,
+      relayBalance: refreshedBalance,
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  }
+
+  return processSellerWithdrawalRequest(insertedRequest.id, {
+    ...options,
+    adminClient,
+  });
+}
+
+export async function processSellerWithdrawalRequest(
+  withdrawalRequestId: string,
+  options?: MoneyMutationOptions
+): Promise<SellerWithdrawalRequestResult> {
+  const adminClient = getAdminClient(options);
+  const request = await loadWithdrawalRequest(adminClient, withdrawalRequestId);
+  const transferFeeCents = Number(
+    request.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS
+  );
+  const normalizedAmountCents = Math.abs(Number(request.amount_cents || 0));
+  const netTransferAmountCents = calculateNetWithdrawalAmountCents(
+    normalizedAmountCents,
+    transferFeeCents
+  );
+
+  if (!request.seller?.stripe_account_id) {
+    const failedRequest = await restoreWithdrawalBalance(adminClient, request, options, {
+      status: "failed",
+      failureReason: "Seller does not have a connected Stripe account.",
+      eventType: "money.withdrawal_failed",
+    });
+
+    return {
+      created: false,
+      reason: "missing_stripe_account",
+      withdrawalRequest: failedRequest,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  }
+
+  if (request.status === "completed") {
+    return {
+      created: false,
+      reason: "withdrawal_already_completed",
+      withdrawalRequest: request,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  }
+
+  if (request.status === "canceled") {
+    throw new Error("Canceled withdrawals cannot be processed.");
+  }
+
+  if (request.status === "failed") {
+    throw new Error("Failed withdrawals must be recreated before processing again.");
+  }
+
+  if (request.review_required && !request.reviewed_at) {
+    throw new Error("Withdrawal requires admin review before processing.");
+  }
+
+  if (netTransferAmountCents <= 0) {
+    const failedRequest = await restoreWithdrawalBalance(adminClient, request, options, {
+      status: "failed",
+      failureReason: "Withdrawal amount must exceed the Stripe transfer fee.",
+      eventType: "money.withdrawal_failed",
+    });
+
+    return {
+      created: false,
+      reason: "invalid_net_transfer_amount",
+      withdrawalRequest: failedRequest,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  }
+
+  if (request.status !== "processing") {
+    const { error: processingError } = await adminClient
+      .from("withdrawal_requests")
+      .update({
+        status: "processing",
+      })
+      .eq("id", request.id)
+      .in("status", ["pending", "processing"]);
+
+    if (processingError) {
+      throw new Error(processingError.message || "Failed to mark withdrawal as processing");
+    }
+  }
+
+  let transfer: Stripe.Response<Stripe.Transfer> | null = null;
+
+  try {
+    transfer = await stripe.transfers.create(
+      {
+        amount: netTransferAmountCents,
+        currency: "usd",
+        destination: request.seller.stripe_account_id,
+        metadata: {
+          withdrawal_request_id: request.id,
+          seller_id: request.seller_id,
+          gross_amount_cents: String(normalizedAmountCents),
+          transfer_fee_cents: String(transferFeeCents),
+        },
+        transfer_group: `relay_withdrawal_${request.id}`,
+      },
+      {
+        idempotencyKey: request.idempotency_key || `relay-withdrawal-${request.id}`,
+      }
+    );
+
+    const completedAt = getNow(options).toISOString();
+    const { data: updatedRequest, error: updateError } = await adminClient
+      .from("withdrawal_requests")
+      .update({
+        status: "completed",
+        stripe_transfer_id: transfer.id,
+        completed_at: completedAt,
+        failure_reason: null,
+      })
+      .eq("id", request.id)
+      .select("*")
+      .single();
+
+    if (updateError || !updatedRequest) {
+      throw new Error(updateError?.message || "Failed to finalize withdrawal request");
+    }
+
+    const completionLedger = await insertLedgerEntryIdempotently(adminClient, {
+      sellerId: request.seller_id,
+      type: "withdrawal_completed",
+      amountCents: normalizedAmountCents,
+      status: "completed",
+      idempotencyKey: `money:withdrawal:${request.id}:completed`,
+      metadata: {
+        source: "relay_balance_policy",
+        withdrawal_request_id: request.id,
+        stripe_transfer_id: transfer.id,
+        gross_amount_cents: normalizedAmountCents,
+        transfer_fee_cents: transferFeeCents,
+        net_transfer_amount_cents: netTransferAmountCents,
+      },
+    });
+
+    await logMoneyMovement(adminClient, options, {
+      sellerId: request.seller_id,
+      eventType: "money.withdrawal_completed",
+      metadata: {
+        withdrawalRequestId: request.id,
+        stripeTransferId: transfer.id,
+        amountCents: normalizedAmountCents,
+        transferFeeCents,
+        netTransferAmountCents,
+        ledgerEntryId: completionLedger.entry.id,
+      },
+    });
+
+    return {
+      created: true,
+      withdrawalRequest: updatedRequest,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  } catch (error) {
+    if (transfer) {
+      return {
+        created: false,
+        reason: "stripe_transfer_created_pending_reconcile",
+        withdrawalRequest: await loadWithdrawalRequest(adminClient, withdrawalRequestId),
+        relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+          ...options,
+          adminClient,
+        }),
+        transferFeeCents,
+        netTransferAmountCents,
+      };
+    }
+
+    const failureReason =
+      error instanceof Error ? error.message : "Failed to create Stripe transfer";
+    const failedRequest = await restoreWithdrawalBalance(adminClient, request, options, {
+      status: "failed",
+      failureReason,
+      eventType: "money.withdrawal_failed",
+    });
+
+    return {
+      created: false,
+      reason: "stripe_transfer_failed",
+      withdrawalRequest: failedRequest,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents,
+      netTransferAmountCents,
+    };
+  }
+}
+
+export async function reviewSellerWithdrawalRequest(
+  withdrawalRequestId: string,
+  input: {
+    reviewNotes?: string | null;
+    processAfterReview?: boolean;
+  },
+  options?: MoneyMutationOptions
+): Promise<SellerWithdrawalRequestResult> {
+  const adminClient = getAdminClient(options);
+  const request = await loadWithdrawalRequest(adminClient, withdrawalRequestId);
+  const reviewedAt = getNow(options).toISOString();
+  const reviewNotes =
+    typeof input.reviewNotes === "string" && input.reviewNotes.trim().length > 0
+      ? input.reviewNotes.trim()
+      : request.review_notes || null;
+
+  const { data: updatedRequest, error } = await adminClient
+    .from("withdrawal_requests")
+    .update({
+      reviewed_at: reviewedAt,
+      reviewed_by_admin_id: getActorUserId(options),
+      review_notes: reviewNotes,
+    })
+    .eq("id", request.id)
+    .select("*")
+    .single();
+
+  if (error || !updatedRequest) {
+    throw new Error(error?.message || "Failed to mark withdrawal as reviewed");
+  }
+
+  await logMoneyMovement(adminClient, options, {
+    sellerId: request.seller_id,
+    eventType: "money.withdrawal_reviewed",
+    metadata: {
+      withdrawalRequestId: request.id,
+      reviewNotes,
+      processedAfterReview: input.processAfterReview !== false,
+    },
+  });
+
+  if (updatedRequest.status === "pending" && input.processAfterReview !== false) {
+    return processSellerWithdrawalRequest(withdrawalRequestId, {
+      ...options,
+      adminClient,
+    });
+  }
+
+  return {
+    created: true,
+    withdrawalRequest: updatedRequest,
+    relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+      ...options,
+      adminClient,
+    }),
+    transferFeeCents: Number(
+      updatedRequest.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS
+    ),
+    netTransferAmountCents: calculateNetWithdrawalAmountCents(
+      Number(updatedRequest.amount_cents || 0),
+      Number(updatedRequest.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS)
+    ),
+  };
+}
+
+export async function cancelSellerWithdrawalRequest(
+  withdrawalRequestId: string,
+  input: {
+    reason?: string | null;
+  },
+  options?: MoneyMutationOptions
+): Promise<SellerWithdrawalRequestResult> {
+  const adminClient = getAdminClient(options);
+  const request = await loadWithdrawalRequest(adminClient, withdrawalRequestId);
+
+  if (request.status === "completed") {
+    throw new Error("Completed withdrawals cannot be canceled.");
+  }
+
+  if (request.status === "processing") {
+    throw new Error("Processing withdrawals cannot be canceled safely.");
+  }
+
+  if (request.status === "canceled") {
+    return {
+      created: false,
+      reason: "withdrawal_already_canceled",
+      withdrawalRequest: request,
+      relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+        ...options,
+        adminClient,
+      }),
+      transferFeeCents: Number(
+        request.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS
+      ),
+      netTransferAmountCents: calculateNetWithdrawalAmountCents(
+        Number(request.amount_cents || 0),
+        Number(request.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS)
+      ),
+    };
+  }
+
+  const canceledAt = getNow(options).toISOString();
+  const canceledRequest = await restoreWithdrawalBalance(adminClient, request, options, {
+    status: "canceled",
+    failureReason:
+      typeof input.reason === "string" && input.reason.trim().length > 0
+        ? input.reason.trim()
+        : "Canceled by admin review.",
+    eventType: "money.withdrawal_canceled",
+    canceledAt,
+    canceledByAdminId: getActorUserId(options),
+  });
+
+  return {
+    created: true,
+    withdrawalRequest: canceledRequest,
+    relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
+      ...options,
+      adminClient,
+    }),
+    transferFeeCents: Number(
+      canceledRequest.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS
+    ),
+    netTransferAmountCents: calculateNetWithdrawalAmountCents(
+      Number(canceledRequest.amount_cents || 0),
+      Number(
+        canceledRequest.stripe_transfer_fee_cents || WITHDRAWAL_TRANSFER_FEE_CENTS
+      )
+    ),
   };
 }

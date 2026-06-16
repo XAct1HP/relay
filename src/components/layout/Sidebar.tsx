@@ -23,6 +23,7 @@ import {
   Users,
   Shield,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSidebarStore } from "@/store/sidebarStore";
@@ -74,6 +75,7 @@ export function Sidebar() {
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
+    { href: "/admin/withdrawals", label: "Withdrawals", icon: Wallet },
     { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },

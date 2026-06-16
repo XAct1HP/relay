@@ -27,6 +27,7 @@ import {
   Shield,
   ShieldCheck,
   X,
+  Wallet,
 } from "lucide-react";
 
 // Routes accessible without authentication
@@ -93,6 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
+    { href: "/admin/withdrawals", label: "Withdrawals", icon: Wallet },
     { href: "/admin/tags", label: "Relay Tags", icon: Tag },
     { href: "/admin/listing-reviews", label: "Listing Reviews", icon: ClipboardCheck },
     { href: "/admin/users", label: "All Users", icon: Users },
