@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote, AlertCircle } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -708,167 +708,146 @@ export default function DashboardPage() {
         </div>
 
         {currentUser?.role === "seller" && (
-        <div className="relay-card p-5 sm:p-6 space-y-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-3">
-              <div>
-                <p className="relay-eyebrow text-[#5f8fff] mb-2">RELAY BALANCE</p>
-                <h2 className="text-2xl font-semibold text-[#f5f7fb]">Your seller funds inside Relay</h2>
-              </div>
-              <p className="text-white/55 text-sm max-w-3xl">
-                Relay Balance keeps cleared seller funds in one place before you transfer them to your Stripe payout account. Withdrawable Balance never includes pending funds, current exposure, or disputed amounts.
-              </p>
-              <div className="rounded-2xl border border-[#5f8fff]/20 bg-[#5f8fff]/10 p-4">
-                <p className="text-[#dce7ff] text-sm font-medium">{getTierAvailabilityMessage(sellerTier)}</p>
-              </div>
-            </div>
+        <div className="space-y-5">
+          {/* Hero Balance Display */}
+          <div className="relay-card relative overflow-hidden">
+            {/* Subtle gradient background accent */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#5f8fff]/[0.06] via-transparent to-emerald-500/[0.04] pointer-events-none" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[#5f8fff]/[0.03] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
 
-            <div className="flex flex-col items-start xl:items-end gap-3 min-w-[240px]">
-              <div className="text-sm text-white/45">
-                Stripe payout account: {balanceData?.profile.stripeConnected ? "connected" : "not connected"}
+            <div className="relative p-6 sm:p-8">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+                {/* Left: Main balance display */}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className="p-2 rounded-xl bg-[#5f8fff]/15">
+                      <Wallet className="w-5 h-5 text-[#7ca6ff]" />
+                    </div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-[#7ca6ff] font-semibold">Relay Balance</p>
+                  </div>
+                  <p className="text-white/50 text-sm">Total funds in Relay</p>
+                  <p className="text-4xl sm:text-5xl font-bold text-[#f5f7fb] tracking-tight">
+                    {balanceLoading ? "..." : formatMoneyFromCents(relayBalanceCents)}
+                  </p>
+                </div>
+
+                {/* Right: Withdrawable highlight + CTA */}
+                <div className="flex flex-col items-start lg:items-end gap-4">
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-[0.14em] text-emerald-400/80 font-medium mb-1">Ready to withdraw</p>
+                    <p className="text-3xl sm:text-4xl font-bold text-emerald-300 tracking-tight">
+                      {balanceLoading ? "..." : formatMoneyFromCents(withdrawableBalanceCents)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {balanceData?.profile.stripeConnected ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400/70">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        Stripe connected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-amber-400/70">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        Stripe not connected
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setWithdrawOpen((open) => !open)}
+                      disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
+                      className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                    >
+                      <Banknote className="w-4 h-4" />
+                      Withdraw
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => setWithdrawOpen((open) => !open)}
-                disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
-                className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-              >
-                <Wallet className="w-4 h-4" />
-                Withdraw
-              </button>
+
+              {/* Fund flow visualization */}
+              {!balanceLoading && (
+                <div className="mt-8">
+                  {/* Composition bar */}
+                  {relayBalanceCents > 0 && (
+                    <div className="mb-5">
+                      <div className="flex rounded-full h-3 overflow-hidden bg-white/[0.06]">
+                        {pendingBalanceCents > 0 && (
+                          <div
+                            className="bg-amber-400/70 transition-all duration-700"
+                            style={{ width: `${Math.max(3, (pendingBalanceCents / relayBalanceCents) * 100)}%` }}
+                            title={`Pending: ${formatMoneyFromCents(pendingBalanceCents)}`}
+                          />
+                        )}
+                        {availableBalanceCents > 0 && (
+                          <div
+                            className="bg-emerald-400/70 transition-all duration-700"
+                            style={{ width: `${Math.max(3, (availableBalanceCents / relayBalanceCents) * 100)}%` }}
+                            title={`Available: ${formatMoneyFromCents(availableBalanceCents)}`}
+                          />
+                        )}
+                        {currentExposureCents > 0 && (
+                          <div
+                            className="bg-[#5f8fff]/60 transition-all duration-700"
+                            style={{ width: `${Math.max(3, (currentExposureCents / relayBalanceCents) * 100)}%` }}
+                            title={`Exposure: ${formatMoneyFromCents(currentExposureCents)}`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fund stages */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400/70 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white/45 text-xs">Pending</p>
+                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(pendingBalanceCents)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/70 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white/45 text-xs">Available</p>
+                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(availableBalanceCents)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]/60 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white/45 text-xs">Exposure hold</p>
+                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(currentExposureCents)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tier info */}
+              <div className="mt-5 rounded-xl bg-[#5f8fff]/[0.07] border border-[#5f8fff]/15 px-4 py-3">
+                <p className="text-[#b8ccff] text-sm">{getTierAvailabilityMessage(sellerTier)}</p>
+              </div>
             </div>
           </div>
 
+          {/* Error / feedback banners */}
           {balanceError && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-300">
               {balanceError}
             </div>
           )}
-
           {withdrawFeedback && (
             <div className="rounded-2xl border border-[#5f8fff]/20 bg-[#5f8fff]/10 p-4 text-[#dce7ff]">
               {withdrawFeedback}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 sm:gap-4">
-            {[
-              {
-                label: "Total Relay Balance",
-                value: relayBalanceCents,
-                icon: Banknote,
-                description: "All seller funds currently tracked inside Relay.",
-              },
-              {
-                label: "Pending Balance",
-                value: pendingBalanceCents,
-                icon: DollarSign,
-                description: "Funds from orders that are not eligible yet.",
-              },
-              {
-                label: "Available Balance",
-                value: availableBalanceCents,
-                icon: Wallet,
-                description: "Funds that have cleared order requirements.",
-              },
-              {
-                label: "Current Exposure",
-                value: currentExposureCents,
-                icon: AlertCircle,
-                description: "Amount temporarily kept on Relay while recent orders are still inside the buyer review window.",
-              },
-              {
-                label: "Withdrawable Balance",
-                value: withdrawableBalanceCents,
-                icon: TrendingUp,
-                description: "Amount available to transfer to your Stripe payout account.",
-              },
-            ].map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="p-2 rounded-xl bg-white/5">
-                      <Icon className="w-5 h-5 text-[#7ca6ff]" />
-                    </div>
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-                      Relay
-                    </div>
-                  </div>
-                  <p className="text-white/55 text-xs sm:text-sm mb-2">{item.label}</p>
-                  <p className="text-2xl sm:text-3xl font-semibold text-[#f5f7fb]">
-                    {balanceLoading ? "..." : formatMoneyFromCents(item.value)}
-                  </p>
-                  <p className="text-white/40 text-xs sm:text-sm mt-3 leading-relaxed">
-                    {item.description}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.9fr)] gap-6">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-[#f5f7fb]">Recent balance activity</h3>
-                  <p className="text-white/45 text-sm">Latest movement across pending, available, exposure, disputes, and withdrawals.</p>
-                </div>
-                {balanceData?.balances.updatedAt && (
-                  <span className="text-xs text-white/35">
-                    Updated {formatRelativeTimestamp(balanceData.balances.updatedAt)}
-                  </span>
-                )}
-              </div>
-
-              {balanceLoading ? (
-                <div className="text-white/40 text-sm">Loading balance activity...</div>
-              ) : (balanceData?.activity || []).length === 0 ? (
-                <div className="text-white/40 text-sm">No balance activity yet.</div>
-              ) : (
-                <div className="space-y-0 divide-y divide-white/5">
-                  {(balanceData?.activity || []).map((entry) => {
-                    const summary = getLedgerActivitySummary(entry);
-                    const toneClasses =
-                      summary.tone === "green"
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : summary.tone === "amber"
-                          ? "bg-amber-500/15 text-amber-300"
-                          : summary.tone === "red"
-                            ? "bg-red-500/15 text-red-300"
-                            : "bg-[#5f8fff]/15 text-[#7ca6ff]";
-
-                    return (
-                      <div
-                        key={entry.id}
-                        className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                            <p className="text-[#f5f7fb] font-medium">{summary.title}</p>
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${toneClasses}`}>
-                              {entry.status.replace(/_/g, " ")}
-                            </span>
-                          </div>
-                          <p className="text-white/45 text-sm">{summary.detail}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-sm flex-shrink-0">
-                          <span className="text-[#f5f7fb] font-semibold">{summary.amountLabel}</span>
-                          <span className="text-white/35">{formatRelativeTimestamp(entry.created_at)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 space-y-5">
-              <div>
+          {/* Withdrawal panel + Activity feed */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)] gap-5">
+            {/* Withdraw to Stripe */}
+            <div className="relay-card p-5 space-y-5">
+              <div className="flex items-center gap-2.5">
+                <Banknote className="w-5 h-5 text-emerald-300" />
                 <h3 className="text-lg font-semibold text-[#f5f7fb]">Withdraw to Stripe</h3>
-                <p className="text-white/45 text-sm mt-1">
-                  Move up to {formatMoneyFromCents(withdrawableBalanceCents)} from your Withdrawable Balance to your Stripe payout account.
-                </p>
               </div>
 
               {!balanceData?.profile.stripeConnected && (
@@ -877,30 +856,19 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-white/10 bg-black/10 p-4 space-y-3">
-                <div className="flex items-center justify-between text-sm text-white/60">
-                  <span>Withdrawal amount</span>
-                  <span className="text-[#f5f7fb] font-medium">
-                    {formatMoneyFromCents(withdrawalAmountCents)}
-                  </span>
+              {/* Fee calculator */}
+              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-white/50">Amount</span>
+                  <span className="text-[#f5f7fb] font-medium">{formatMoneyFromCents(withdrawalAmountCents)}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm text-white/60">
-                  <span>Stripe transfer fee</span>
-                  <span className="text-[#f5f7fb] font-medium">
-                    {formatMoneyFromCents(transferFeeCents)}
-                  </span>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-white/50">Transfer fee</span>
+                  <span className="text-white/60">{formatMoneyFromCents(transferFeeCents)}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm text-white/60">
-                  <span>Net transfer amount</span>
-                  <span className="text-[#f5f7fb] font-medium">
-                    {formatMoneyFromCents(netTransferAmountCents)}
-                  </span>
-                </div>
-                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-sm text-white/60">
-                  <span>Withdrawable Balance</span>
-                  <span className="text-[#7ca6ff] font-semibold">
-                    {formatMoneyFromCents(withdrawableBalanceCents)}
-                  </span>
+                <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-sm">
+                  <span className="text-white/70 font-medium">You receive</span>
+                  <span className="text-emerald-300 font-semibold text-base">{formatMoneyFromCents(netTransferAmountCents)}</span>
                 </div>
               </div>
 
@@ -920,8 +888,8 @@ export default function DashboardPage() {
                       placeholder="0.00"
                       className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
                     />
-                    <p className="text-xs text-white/40">
-                      Pending funds, current exposure, and disputed amounts are excluded automatically.
+                    <p className="text-xs text-white/35">
+                      Max {formatMoneyFromCents(withdrawableBalanceCents)}. Pending, exposure, and disputed amounts excluded.
                     </p>
                   </div>
 
@@ -951,55 +919,118 @@ export default function DashboardPage() {
                 <button
                   onClick={() => setWithdrawOpen(true)}
                   disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
-                  className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  className="w-full relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   <Wallet className="w-4 h-4" />
                   Start Withdrawal
                 </button>
               )}
 
-              <div className="pt-4 border-t border-white/10">
-                <p className="text-white/55 text-sm font-medium mb-2">Recent withdrawals</p>
-                {balanceLoading ? (
-                  <div className="text-white/40 text-sm">Loading withdrawals...</div>
-                ) : (balanceData?.withdrawals || []).length === 0 ? (
-                  <div className="text-white/40 text-sm">No withdrawals yet.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {balanceData?.withdrawals.slice(0, 4).map((withdrawal) => {
+              {/* Recent withdrawals */}
+              {!balanceLoading && (balanceData?.withdrawals || []).length > 0 && (
+                <div className="pt-4 border-t border-white/[0.06]">
+                  <p className="text-white/45 text-xs uppercase tracking-[0.14em] font-medium mb-3">Recent transfers</p>
+                  <div className="space-y-2">
+                    {balanceData?.withdrawals.slice(0, 3).map((withdrawal) => {
                       const netAmountCents = Math.max(
                         0,
                         clampNonNegativeCents(withdrawal.amount_cents) -
                           clampNonNegativeCents(withdrawal.stripe_transfer_fee_cents || transferFeeCents)
                       );
+                      const statusColor =
+                        withdrawal.status === "completed"
+                          ? "text-emerald-400"
+                          : withdrawal.status === "failed" || withdrawal.status === "canceled"
+                            ? "text-red-400"
+                            : "text-amber-400";
 
                       return (
                         <div
                           key={withdrawal.id}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3"
+                          className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.02] px-3.5 py-2.5"
                         >
-                          <div>
-                            <p className="text-[#f5f7fb] text-sm font-medium">
-                              {formatMoneyFromCents(clampNonNegativeCents(withdrawal.amount_cents))}
-                            </p>
-                            <p className="text-white/40 text-xs">
-                              Net {formatMoneyFromCents(netAmountCents)}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-white/55 text-xs capitalize">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`text-xs font-semibold capitalize ${statusColor}`}>
                               {withdrawal.status.replace(/_/g, " ")}
-                            </p>
-                            <p className="text-white/35 text-xs">
-                              {formatRelativeTimestamp(withdrawal.created_at)}
-                            </p>
+                            </span>
+                            <span className="text-white/25">|</span>
+                            <span className="text-[#f5f7fb] text-sm font-medium">
+                              {formatMoneyFromCents(clampNonNegativeCents(withdrawal.amount_cents))}
+                            </span>
+                          </div>
+                          <span className="text-white/30 text-xs">
+                            {formatRelativeTimestamp(withdrawal.created_at)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Activity timeline */}
+            <div className="relay-card p-5">
+              <div className="flex items-center justify-between gap-3 mb-5">
+                <h3 className="text-lg font-semibold text-[#f5f7fb]">Activity</h3>
+                {balanceData?.balances.updatedAt && (
+                  <span className="text-xs text-white/30">
+                    {formatRelativeTimestamp(balanceData.balances.updatedAt)}
+                  </span>
+                )}
+              </div>
+
+              {balanceLoading ? (
+                <div className="text-white/40 text-sm">Loading...</div>
+              ) : (balanceData?.activity || []).length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="p-3 rounded-2xl bg-white/[0.03] inline-block mb-3">
+                    <TrendingUp className="w-6 h-6 text-white/20" />
+                  </div>
+                  <p className="text-white/35 text-sm">No balance activity yet</p>
+                  <p className="text-white/25 text-xs mt-1">Activity will appear here as orders come in</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/[0.06]" />
+
+                  <div className="space-y-0.5">
+                    {(balanceData?.activity || []).map((entry) => {
+                      const summary = getLedgerActivitySummary(entry);
+                      const dotColor =
+                        summary.tone === "green"
+                          ? "bg-emerald-400"
+                          : summary.tone === "amber"
+                            ? "bg-amber-400"
+                            : summary.tone === "red"
+                              ? "bg-red-400"
+                              : "bg-[#5f8fff]";
+
+                      return (
+                        <div
+                          key={entry.id}
+                          className="relative flex gap-4 py-3 pl-6"
+                        >
+                          {/* Timeline dot */}
+                          <div className={`absolute left-[4px] top-[18px] w-[7px] h-[7px] rounded-full ${dotColor} ring-2 ring-[#06070a]`} />
+
+                          <div className="flex-1 min-w-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-[#f5f7fb] text-sm font-medium">{summary.title}</p>
+                              <p className="text-white/40 text-xs mt-0.5">{summary.detail}</p>
+                            </div>
+                            <div className="flex items-center gap-2.5 flex-shrink-0">
+                              <span className="text-[#f5f7fb] text-sm font-semibold">{summary.amountLabel}</span>
+                              <span className="text-white/25 text-xs">{formatRelativeTimestamp(entry.created_at)}</span>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1216,7 +1247,7 @@ export default function DashboardPage() {
             <Star className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
             <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Rating</p>
             <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
-              {metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "—"}
+              {metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "N/A"}
             </p>
             <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">{metrics.ratingTrend.value}</p>
           </div>

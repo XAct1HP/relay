@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, Clock, RefreshCw, ShieldAlert, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, RefreshCw, ShieldAlert, Wallet, XCircle } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
 
 interface AdminWithdrawalItem {
@@ -51,32 +51,6 @@ function formatMoneyFromCents(cents: number) {
     style: "currency",
     currency: "USD",
   }).format((cents || 0) / 100);
-}
-
-function MetricCard({
-  label,
-  value,
-  tone = "blue",
-}: {
-  label: string;
-  value: string | number;
-  tone?: "blue" | "amber" | "green" | "red";
-}) {
-  const tones = {
-    blue: "border-[#5f8fff]/20 bg-[#5f8fff]/10 text-[#7ca6ff]",
-    amber: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-    green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
-    red: "border-red-500/20 bg-red-500/10 text-red-300",
-  };
-
-  return (
-    <div className="relay-card p-4 sm:p-5">
-      <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
-      <div className={`inline-flex rounded-xl border px-3 py-2 text-lg font-semibold ${tones[tone]}`}>
-        {value}
-      </div>
-    </div>
-  );
 }
 
 export default function AdminWithdrawalsPage() {
@@ -177,6 +151,13 @@ export default function AdminWithdrawalsPage() {
     return withdrawals.filter((item) => item.status === "failed" || item.status === "canceled");
   }, [data?.withdrawals, statusFilter]);
 
+  const grossWithdrawnCents = useMemo(() => {
+    if (!data) return 0;
+    return data.withdrawals
+      .filter((item) => item.status === "completed")
+      .reduce((sum, item) => sum + (item.amount_cents || 0), 0);
+  }, [data]);
+
   if (isLoading || loading) {
     return <div className="py-12 text-center text-white/40">Loading withdrawal queue...</div>;
   }
@@ -186,68 +167,70 @@ export default function AdminWithdrawalsPage() {
   }
 
   return (
-    <div className="space-y-6 pb-12">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
+    <div className="space-y-5 pb-12">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1.5">
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Withdrawals</h1>
-          <p className="text-white/50 max-w-3xl">
-            Review Relay Balance withdrawals, approve manual-review requests, and cancel suspicious pending transfers before funds leave Relay.
+          <p className="text-white/50 max-w-2xl text-sm">
+            Review withdrawals, approve manual-review requests, and cancel suspicious transfers before funds leave Relay.
           </p>
         </div>
 
-        <button
-          onClick={() => void loadWithdrawals()}
-          className="relay-button-secondary inline-flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Link href="/admin/money" className="relay-button-secondary inline-flex items-center gap-2">
-          <Wallet className="w-4 h-4" />
-          Relay Balance Overview
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/money" className="relay-button-secondary inline-flex items-center gap-2 text-sm">
+            <Wallet className="w-3.5 h-3.5" />
+            Balance Overview
+          </Link>
+          <button
+            onClick={() => void loadWithdrawals()}
+            className="relay-button-secondary inline-flex items-center gap-2 text-sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="relay-card border border-red-500/20 bg-red-500/10 p-4 text-red-300">
+        <div className="relay-card border border-red-500/20 bg-red-500/10 p-4 text-red-300 text-sm">
           {error}
         </div>
       )}
 
       {data && (
         <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-            <MetricCard label="All Requests" value={data.counts.total} />
-            <MetricCard label="Pending" value={data.counts.pending} tone="amber" />
-            <MetricCard label="Review Required" value={data.counts.reviewRequired} tone="blue" />
-            <MetricCard label="Completed" value={data.counts.completed} tone="green" />
-            <MetricCard label="Processing" value={data.counts.processing} tone="blue" />
-            <MetricCard label="Failed" value={data.counts.failed} tone="red" />
-            <MetricCard label="Canceled" value={data.counts.canceled} tone="red" />
-            <MetricCard
-              label="Gross Withdrawn"
-              value={formatMoneyFromCents(
-                data.withdrawals
-                  .filter((item) => item.status === "completed")
-                  .reduce((sum, item) => sum + (item.amount_cents || 0), 0)
-              )}
-              tone="green"
-            />
+          {/* Summary bar */}
+          <div className="relay-card px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-sm font-semibold text-amber-300">
+                {data.counts.pending} Pending
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5f8fff]/20 bg-[#5f8fff]/10 px-3 py-1 text-sm font-semibold text-[#7ca6ff]">
+                {data.counts.reviewRequired} Review Required
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-300">
+                {data.counts.completed} Completed
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-sm font-semibold text-red-300">
+                {data.counts.failed + data.counts.canceled} Failed / Canceled
+              </span>
+              <span className="ml-auto text-sm text-white/40">
+                Gross withdrawn: <span className="text-emerald-300 font-semibold">{formatMoneyFromCents(grossWithdrawnCents)}</span>
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          {/* Filter pills */}
+          <div className="flex flex-wrap gap-1.5">
             {(["all", "pending", "completed", "failed"] as const).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setStatusFilter(filter)}
-                className={`rounded-lg border px-4 py-2 font-medium transition-colors ${
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
                   statusFilter === filter
-                    ? "border-[#5f8fff] bg-[#5f8fff] text-white"
-                    : "border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
+                    ? "bg-[#5f8fff] text-white"
+                    : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70"
                 }`}
               >
                 {filter === "all"
@@ -261,10 +244,11 @@ export default function AdminWithdrawalsPage() {
             ))}
           </div>
 
+          {/* Withdrawal list */}
           <div className="relay-card p-0 overflow-hidden">
             <div className="divide-y divide-white/5">
               {filteredWithdrawals.length === 0 ? (
-                <div className="py-12 text-center text-white/40">No withdrawals match this filter.</div>
+                <div className="py-12 text-center text-white/40 text-sm">No withdrawals match this filter.</div>
               ) : (
                 filteredWithdrawals.map((withdrawal) => {
                   const sellerLabel =
@@ -278,13 +262,29 @@ export default function AdminWithdrawalsPage() {
                     Number(withdrawal.amount_cents || 0) -
                       Number(withdrawal.stripe_transfer_fee_cents || 0)
                   );
+                  const borderAccent =
+                    withdrawal.status === "completed"
+                      ? "border-l-emerald-500/60"
+                      : withdrawal.status === "failed" || withdrawal.status === "canceled"
+                        ? "border-l-red-500/60"
+                        : "border-l-amber-500/60";
 
                   return (
-                    <div key={withdrawal.id} className="px-5 py-4">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div key={withdrawal.id} className={`border-l-2 ${borderAccent} px-5 py-3.5`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        {/* Left: seller info + money pills */}
                         <div className="min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[#f5f7fb] font-semibold">{sellerLabel}</p>
+                            {withdrawal.seller_id ? (
+                              <Link
+                                href={`/admin/money/sellers/${withdrawal.seller_id}`}
+                                className="text-[#f5f7fb] font-semibold hover:text-[#7ca6ff] transition-colors"
+                              >
+                                {sellerLabel}
+                              </Link>
+                            ) : (
+                              <p className="text-[#f5f7fb] font-semibold">{sellerLabel}</p>
+                            )}
                             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                               withdrawal.status === "completed"
                                 ? "bg-emerald-500/15 text-emerald-300"
@@ -299,19 +299,13 @@ export default function AdminWithdrawalsPage() {
                                 manual review
                               </span>
                             )}
+                            <span className="text-white/30 text-xs">
+                              {new Date(withdrawal.created_at).toLocaleDateString()}{" "}
+                              {new Date(withdrawal.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
                           </div>
-                          <p className="text-white/45 text-sm">
-                            {withdrawal.seller?.email || "No email"} {withdrawal.seller?.stripe_account_id ? "- Stripe connected" : "- Stripe missing"}
-                          </p>
-                          {withdrawal.seller_id && (
-                            <Link
-                              href={`/admin/money/sellers/${withdrawal.seller_id}`}
-                              className="inline-flex items-center gap-1 text-sm text-[#7ca6ff] hover:text-[#9bbcff]"
-                            >
-                              Seller money detail
-                            </Link>
-                          )}
-                          <div className="flex flex-wrap gap-2 text-xs">
+
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
                             <span className="rounded-full bg-white/5 px-2 py-0.5 text-white/60">
                               Gross {formatMoneyFromCents(withdrawal.amount_cents)}
                             </span>
@@ -327,77 +321,48 @@ export default function AdminWithdrawalsPage() {
                               </span>
                             )}
                           </div>
+
                           {withdrawal.failure_reason && (
-                            <p className="text-sm text-red-300">{withdrawal.failure_reason}</p>
+                            <p className="text-xs text-red-300">{withdrawal.failure_reason}</p>
                           )}
                           {withdrawal.review_notes && (
-                            <p className="text-sm text-white/55">Review note: {withdrawal.review_notes}</p>
+                            <p className="text-xs text-white/50">Review note: {withdrawal.review_notes}</p>
                           )}
                         </div>
 
-                        <div className="hidden md:grid md:grid-cols-4 gap-3 xl:min-w-[520px]">
-                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Requested</p>
-                            <p className="font-semibold text-[#f5f7fb]">
-                              {new Date(withdrawal.created_at).toLocaleString()}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Completed</p>
-                            <p className="font-semibold text-[#f5f7fb]">
-                              {withdrawal.completed_at
-                                ? new Date(withdrawal.completed_at).toLocaleString()
-                                : "n/a"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Reviewed</p>
-                            <p className="font-semibold text-[#f5f7fb]">
-                              {withdrawal.reviewed_at
-                                ? new Date(withdrawal.reviewed_at).toLocaleDateString()
-                                : "not yet"}
-                            </p>
-                          </div>
-                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 mb-1">Idempotency</p>
-                            <p className="font-semibold text-[#f5f7fb] truncate">
-                              {withdrawal.idempotency_key || "n/a"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3">
+                        {/* Right: actions */}
+                        <div className="flex shrink-0 items-center gap-2">
                           {withdrawal.status === "pending" && (
                             <>
                               <button
                                 onClick={() => void runAction(withdrawal.id, "mark_reviewed")}
                                 disabled={actionId === withdrawal.id}
-                                className="relay-button-secondary inline-flex items-center gap-2 disabled:opacity-50"
+                                className="relay-button-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
                               >
-                                <ShieldAlert className="w-4 h-4" />
+                                <ShieldAlert className="w-3.5 h-3.5" />
                                 {actionId === withdrawal.id ? "Working..." : "Mark Reviewed"}
                               </button>
                               <button
                                 onClick={() => void runAction(withdrawal.id, "cancel")}
                                 disabled={actionId === withdrawal.id}
-                                className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/15 disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                               >
-                                <XCircle className="w-4 h-4" />
-                                Cancel Pending
+                                <XCircle className="w-3.5 h-3.5" />
+                                Cancel
                               </button>
                             </>
                           )}
                           {withdrawal.status === "completed" && (
-                            <div className="inline-flex items-center gap-2 text-emerald-300 text-sm font-medium">
-                              <Banknote className="w-4 h-4" />
+                            <span className="inline-flex items-center gap-1.5 text-emerald-300 text-sm font-medium">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
                               Sent
-                            </div>
+                            </span>
                           )}
                           {withdrawal.status === "processing" && (
-                            <div className="inline-flex items-center gap-2 text-[#7ca6ff] text-sm font-medium">
-                              <Clock className="w-4 h-4" />
+                            <span className="inline-flex items-center gap-1.5 text-[#7ca6ff] text-sm font-medium">
+                              <Clock className="w-3.5 h-3.5" />
                               Processing
-                            </div>
+                            </span>
                           )}
                         </div>
                       </div>
