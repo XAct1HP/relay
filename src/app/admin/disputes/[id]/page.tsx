@@ -29,6 +29,16 @@ import useAuth from "@/hooks/useAuth";
 
 interface AdminDisputeDetailResponse {
   order: any;
+  relayBalance: {
+    totalBalanceCents: number;
+    pendingBalanceCents: number;
+    availableBalanceCents: number;
+    exposureCents: number;
+    withdrawableBalanceCents: number;
+    adminFrozen: boolean;
+  } | null;
+  orderLedger: any[];
+  exposureHolds: any[];
   reserveEntries: any[];
   reserveSummary: {
     status: string;
@@ -49,6 +59,29 @@ interface AdminDisputeDetailResponse {
   }>;
   computed: {
     orderValueCents: number;
+    buyerPaidAmountCents: number;
+    refundAmountCents: number;
+    sellerProceedsCents: number;
+    pendingCreditCents: number;
+    availableCreditCents: number;
+    disputeFreezeCents: number;
+    disputeDebitCents: number;
+    exposureActiveCents: number;
+    exposureReleasedCents: number;
+    exposureConsumedCents: number;
+    exposureStatus: string;
+    currentExposureHoldCents: number;
+    relayBalanceImpact: {
+      totalBalanceCents: number;
+      pendingBalanceCents: number;
+      availableBalanceCents: number;
+      exposureCents: number;
+      withdrawableBalanceCents: number;
+      adminFrozen: boolean;
+    };
+    sellerDebitAmountCents: number;
+    finalFinancialOutcome: string;
+    withdrawalBlocked: boolean;
     reserveStatus: string;
     tagMatch: boolean;
     tagMismatchReason: string | null;
@@ -443,6 +476,42 @@ export default function AdminDisputeDetailPage() {
             <InfoCard label="Consumed" value={formatMoney(data.reserveSummary.consumedCents || 0)} />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-[#f5f7fb]">Relay Balance Impact</p>
+                <Badge tone={data.computed.withdrawalBlocked ? "red" : "green"}>
+                  {data.computed.withdrawalBlocked ? "withdrawal blocked" : "withdrawal allowed"}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoCard label="Pending Credit" value={formatMoney(data.computed.pendingCreditCents)} />
+                <InfoCard label="Available Credit" value={formatMoney(data.computed.availableCreditCents)} />
+                <InfoCard label="Balance Pending" value={formatMoney(data.computed.relayBalanceImpact.pendingBalanceCents)} />
+                <InfoCard label="Balance Available" value={formatMoney(data.computed.relayBalanceImpact.availableBalanceCents)} />
+                <InfoCard label="Exposure" value={formatMoney(data.computed.relayBalanceImpact.exposureCents)} />
+                <InfoCard label="Withdrawable" value={formatMoney(data.computed.relayBalanceImpact.withdrawableBalanceCents)} />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-[#f5f7fb]">Resolution Money Outcome</p>
+                <Badge tone={data.computed.finalFinancialOutcome === "seller_paid" ? "green" : data.computed.finalFinancialOutcome === "buyer_refunded" ? "red" : "amber"}>
+                  {formatLabel(data.computed.finalFinancialOutcome)}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoCard label="Refund Amount" value={formatMoney(data.computed.refundAmountCents)} />
+                <InfoCard label="Seller Debit" value={formatMoney(data.computed.sellerDebitAmountCents)} />
+                <InfoCard label="Exposure Status" value={formatLabel(data.computed.exposureStatus)} />
+                <InfoCard label="Exposure Held" value={formatMoney(data.computed.currentExposureHoldCents)} />
+                <InfoCard label="Exposure Released" value={formatMoney(data.computed.exposureReleasedCents)} />
+                <InfoCard label="Exposure Consumed" value={formatMoney(data.computed.exposureConsumedCents)} />
+              </div>
+            </div>
+          </div>
+
           {payouts.length > 0 && (
             <div className="space-y-3">
               <p className="text-sm font-medium text-[#f5f7fb]">Payout Ledger</p>
@@ -496,12 +565,12 @@ export default function AdminDisputeDetailPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-3">
               <button
-                onClick={() => void submitAction("approve_buyer_claim", {}, "Buyer claim approved and return workflow started.")}
+                onClick={() => void submitAction("approve_buyer_claim", {}, "Buyer claim resolved in buyer's favor and refunded through Relay Balance flow.")}
                 disabled={saving}
                 className="relay-button-secondary inline-flex items-center justify-center gap-2 !bg-emerald-500/20 !text-emerald-300 !border-emerald-500/30"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Approve Buyer Claim
+                Buyer Wins + Refund
               </button>
               <button
                 onClick={() => void submitAction("deny_buyer_claim", {}, "Buyer claim denied and seller payout resumed.")}
@@ -620,7 +689,7 @@ export default function AdminDisputeDetailPage() {
                   Consume Seller Reserve
                 </button>
                 <button
-                  onClick={() => void submitAction("issue_refund_now", {}, "Refund issued through the existing payout/refund flow.")}
+                  onClick={() => void submitAction("issue_refund_now", {}, "Refund issued through the Relay Balance dispute flow.")}
                   disabled={saving}
                   className="relay-button-danger inline-flex items-center justify-center gap-2"
                 >
@@ -674,7 +743,7 @@ export default function AdminDisputeDetailPage() {
               </select>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <button
-                  onClick={() => void submitAction("set_outcome", { outcome: manualOutcome }, "Manual dispute outcome saved.")}
+                  onClick={() => void submitAction("set_outcome", { outcome: manualOutcome }, "Manual dispute outcome saved and funds kept frozen for admin handling.")}
                   disabled={saving}
                   className="relay-button-secondary inline-flex items-center justify-center gap-2"
                 >

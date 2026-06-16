@@ -3,12 +3,15 @@ import "server-only";
 import crypto from "crypto";
 import {
   applySellerDisputeLossPenalties,
+  estimateRefundAmountCents,
+  estimateSellerProceedsCents,
   finalizeBuyerRefundAndSellerLoss,
   freezeOrderPayoutsForDispute,
   processOrderPayoutTrigger,
   unfreezeOrderPayouts,
   consumeSellerReserveForOrder,
 } from "@/lib/payouts";
+import { getRelayBalanceSnapshot, releaseExposureHold } from "@/lib/money-policy";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { banSellerIdentity } from "@/lib/seller-identity";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
@@ -175,6 +178,49 @@ function computeReserveSummary(entries: any[]) {
     frozenCents,
     nextReleaseAt,
   };
+}
+
+function sumLedgerAmountByType(rows: any[], type: string) {
+  return rows.reduce((sum, row) => {
+    if (row.type !== type) {
+      return sum;
+    }
+
+    return sum + Number(row.amount_cents || 0);
+  }, 0);
+}
+
+function getLatestExposureHold(rows: any[]) {
+  return [...rows].sort((left, right) => {
+    return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime();
+  })[0] || null;
+}
+
+function isReviewWindowExpired(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+async function incrementSellerDisputeFlagCount(
+  adminClient: SupabaseAdminClient,
+  sellerId: string
+) {
+  const { data: sellerProfile } = await adminClient
+    .from("profiles")
+    .select("dispute_flags_count")
+    .eq("id", sellerId)
+    .single();
+
+  await adminClient
+    .from("profiles")
+    .update({
+      dispute_flags_count: (sellerProfile?.dispute_flags_count || 0) + 1,
+    })
+    .eq("id", sellerId);
 }
 
 function buildLegacyDisputeRecord(order: any): AdminDisputeRecord {
@@ -678,7 +724,14 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
   const custody = normalizeRelationRecord<any>(order.order_chain_of_custody);
   const orderPayouts = normalizeRelationList<any>(order.order_payouts);
 
-  const [reserveEntriesResult, eventsResult, sellerViolationsResult] = await Promise.all([
+  const [
+    reserveEntriesResult,
+    eventsResult,
+    sellerViolationsResult,
+    orderLedgerResult,
+    exposureHoldsResult,
+    relayBalance,
+  ] = await Promise.all([
     adminClient
       .from("seller_reserve_entries")
       .select("*")
@@ -696,8 +749,21 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
           .select("*")
           .eq("seller_id", seller.id)
           .order("created_at", { ascending: false })
-          .limit(10)
+      .limit(10)
       : Promise.resolve({ data: [], error: null }),
+    adminClient
+      .from("relay_balance_ledger")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false }),
+    adminClient
+      .from("exposure_holds")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false }),
+    seller?.id
+      ? getRelayBalanceSnapshot(seller.id, { adminClient })
+      : Promise.resolve(null),
   ]);
 
   if (reserveEntriesResult.error) {
@@ -709,9 +775,18 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
   if (sellerViolationsResult.error) {
     throw new Error(sellerViolationsResult.error.message || "Failed to load seller violations");
   }
+  if (orderLedgerResult.error) {
+    throw new Error(orderLedgerResult.error.message || "Failed to load Relay Balance ledger");
+  }
+  if (exposureHoldsResult.error) {
+    throw new Error(exposureHoldsResult.error.message || "Failed to load exposure holds");
+  }
 
   const reserveEntries = reserveEntriesResult.data || [];
   const reserveSummary = computeReserveSummary(reserveEntries);
+  const orderLedger = orderLedgerResult.data || [];
+  const exposureHolds = exposureHoldsResult.data || [];
+  const latestExposureHold = getLatestExposureHold(exposureHolds);
   const expectedTagValues = [relayTag?.tag_serial_number, relayTag?.barcode_value]
     .filter(Boolean)
     .map((value) => String(value).trim().toUpperCase());
@@ -741,6 +816,30 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
     buyer_evidence_urls: await resolveSignedMediaList(adminClient, dispute.buyer_evidence_urls),
     seller_evidence_urls: await resolveSignedMediaList(adminClient, dispute.seller_evidence_urls),
   };
+  const buyerPaidAmountCents = estimateRefundAmountCents({
+    orderPrice: order.price,
+    shippingCost: order.shipping_cost,
+    stripeAmountTotal: order.amount_total,
+  });
+  const sellerProceedsCents = estimateSellerProceedsCents({
+    sellerProceedsCents: order.seller_proceeds_cents,
+    sellerEarnings: order.seller_earnings,
+    orderPrice: order.price,
+    stripeFeeEstimateCents: order.stripe_fee_estimate_cents,
+  });
+  const pendingCreditCents = sumLedgerAmountByType(orderLedger, "order_pending_credit");
+  const availableCreditCents = sumLedgerAmountByType(orderLedger, "order_available_credit");
+  const disputeFreezeCents = sumLedgerAmountByType(orderLedger, "dispute_freeze");
+  const disputeDebitCents = Math.abs(sumLedgerAmountByType(orderLedger, "dispute_debit"));
+  const exposureActiveCents = exposureHolds
+    .filter((row: any) => ["active", "disputed"].includes(row.status))
+    .reduce((sum: number, row: any) => sum + Number(row.amount_cents || 0), 0);
+  const exposureReleasedCents = exposureHolds
+    .filter((row: any) => row.status === "released")
+    .reduce((sum: number, row: any) => sum + Number(row.amount_cents || 0), 0);
+  const exposureConsumedCents = exposureHolds
+    .filter((row: any) => row.status === "consumed")
+    .reduce((sum: number, row: any) => sum + Number(row.amount_cents || 0), 0);
 
   return {
     order: {
@@ -756,12 +855,43 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
       order_dispute: signedDispute,
       order_payouts: orderPayouts,
     },
+    relayBalance,
+    orderLedger,
+    exposureHolds,
     reserveEntries,
     reserveSummary,
     sellerViolations: sellerViolationsResult.data || [],
     timeline: (eventsResult.data || []) as RelayAuditEvent[],
     computed: {
       orderValueCents: toCents(order.price),
+      buyerPaidAmountCents,
+      refundAmountCents: buyerPaidAmountCents,
+      sellerProceedsCents,
+      pendingCreditCents,
+      availableCreditCents,
+      disputeFreezeCents,
+      disputeDebitCents,
+      exposureActiveCents,
+      exposureReleasedCents,
+      exposureConsumedCents,
+      exposureStatus: latestExposureHold?.status || "none",
+      currentExposureHoldCents: Number(latestExposureHold?.amount_cents || 0),
+      relayBalanceImpact: {
+        totalBalanceCents: relayBalance?.totalBalanceCents || 0,
+        pendingBalanceCents: relayBalance?.pendingBalanceCents || 0,
+        availableBalanceCents: relayBalance?.availableBalanceCents || 0,
+        exposureCents: relayBalance?.exposureCents || 0,
+        withdrawableBalanceCents: relayBalance?.withdrawableBalanceCents || 0,
+        adminFrozen: relayBalance?.adminFrozen || false,
+      },
+      sellerDebitAmountCents:
+        disputeDebitCents > 0 ? disputeDebitCents : sellerProceedsCents,
+      finalFinancialOutcome: dispute.financial_outcome || "pending_admin_resolution",
+      withdrawalBlocked:
+        Boolean(order.seller_funds_frozen) ||
+        order.payout_status === "frozen" ||
+        latestExposureHold?.status === "disputed" ||
+        Boolean(relayBalance?.adminFrozen),
       reserveStatus: reserveSummary.status,
       tagMatch,
       tagMismatchReason: mismatchReason,
@@ -806,28 +936,26 @@ export async function runAdminDisputeAction(
       .eq("id", input.orderId);
   };
 
-  if (input.action === "approve_buyer_claim") {
-    if (!order.buyer_shipping_address) {
-      throw new Error("Buyer shipping address not found on order. Cannot create return label.");
-    }
+  if (input.action === "approve_buyer_claim" || input.action === "issue_refund_now") {
+    const refundAmountCents = estimateRefundAmountCents({
+      orderPrice: order.price,
+      shippingCost: order.shipping_cost,
+      stripeAmountTotal: order.amount_total,
+    });
+    const result = await finalizeBuyerRefundAndSellerLoss(adminClient, {
+      orderId: input.orderId,
+      actorUserId: input.adminUserId,
+      actorRole: "admin",
+    });
 
-    const buyerProfile = Array.isArray(order.buyer) ? order.buyer[0] : order.buyer;
-    const returnLabel = await createReturnLabel(
-      order.buyer_shipping_address,
-      buyerProfile?.email || null
-    );
     await adminClient
       .from("orders")
       .update({
-        status: "return_pending",
+        status: "refunded",
         dispute_ruling: "buyer",
         admin_notes: notes,
-        return_label_url: returnLabel.labelUrl,
-        return_tracking_number: returnLabel.trackingNumber,
-        return_packing_slip_id: generatePackingSlipId(),
-        return_status: "pending",
-        return_created_at: nowIso,
         seller_funds_frozen: true,
+        updated_at: nowIso,
       })
       .eq("id", input.orderId);
 
@@ -835,14 +963,18 @@ export async function runAdminDisputeAction(
       .from("order_disputes")
       .update({
         status: "resolved",
-        admin_resolution: notes || "Buyer won dispute; return required before refund.",
-        financial_outcome: "return_required_refund_pending",
+        admin_resolution:
+          notes || "Buyer won dispute. Buyer refunded and seller Relay Balance adjusted.",
+        financial_outcome: "buyer_refunded",
         seller_penalty_outcome: dispute.category,
         seller_funds_frozen: true,
         resolved_by_admin_id: input.adminUserId,
         resolved_at: nowIso,
         metadata: updateDisputeMetadata(dispute, {
           outcome: "buyer_wins",
+          refundAmountCents,
+          debitedAmountCents: result.debitedAmountCents,
+          resolutionFlow: "relay_balance_refund",
         }),
       })
       .eq("id", dispute.id);
@@ -855,19 +987,37 @@ export async function runAdminDisputeAction(
       notes,
     });
 
-    const { data: sellerProfile } = await adminClient
-      .from("profiles")
-      .select("dispute_flags_count")
-      .eq("id", order.seller_id)
-      .single();
+    await incrementSellerDisputeFlagCount(adminClient, order.seller_id);
+
+    await logRelayAuditEvent(adminClient, {
+      actorUserId: input.adminUserId,
+      actorRole: "admin",
+      orderId: input.orderId,
+      sellerId: order.seller_id,
+      eventType: "admin.dispute_buyer_won",
+      metadata: {
+        category: dispute.category,
+        refundAmountCents,
+        sellerDebitAmountCents: result.debitedAmountCents,
+        notes,
+      },
+    });
+  } else if (input.action === "deny_buyer_claim") {
+    const reviewWindowExpired = isReviewWindowExpired(
+      order.review_window_ends_at || order.review_deadline
+    );
 
     await adminClient
-      .from("profiles")
+      .from("orders")
       .update({
-        dispute_flags_count: (sellerProfile?.dispute_flags_count || 0) + 1,
+        status: "completed",
+        dispute_ruling: "seller",
+        admin_notes: notes,
+        seller_funds_frozen: false,
+        updated_at: nowIso,
       })
-      .eq("id", order.seller_id);
-  } else if (input.action === "deny_buyer_claim") {
+      .eq("id", input.orderId);
+
     await unfreezeOrderPayouts(adminClient, {
       orderId: input.orderId,
       sellerId: order.seller_id,
@@ -881,19 +1031,16 @@ export async function runAdminDisputeAction(
       trigger: "manual_override",
       actorUserId: input.adminUserId,
       actorRole: "admin",
-      allowFrozenProcessing: true,
       overrideReason: notes,
     });
 
-    await adminClient
-      .from("orders")
-      .update({
-        status: "completed",
-        dispute_ruling: "seller",
-        admin_notes: notes,
-        seller_funds_frozen: false,
-      })
-      .eq("id", input.orderId);
+    const exposureReleaseResult = reviewWindowExpired
+      ? await releaseExposureHold(input.orderId, {
+          adminClient,
+          actorUserId: input.adminUserId,
+          actorRole: "admin",
+        })
+      : null;
 
     await adminClient
       .from("order_disputes")
@@ -907,9 +1054,24 @@ export async function runAdminDisputeAction(
         resolved_at: nowIso,
         metadata: updateDisputeMetadata(dispute, {
           outcome: "seller_wins",
+          reviewWindowExpired,
+          exposureReleased: Boolean(exposureReleaseResult?.created),
         }),
       })
       .eq("id", dispute.id);
+
+    await logRelayAuditEvent(adminClient, {
+      actorUserId: input.adminUserId,
+      actorRole: "admin",
+      orderId: input.orderId,
+      sellerId: order.seller_id,
+      eventType: "admin.dispute_seller_won",
+      metadata: {
+        reviewWindowExpired,
+        exposureReleased: Boolean(exposureReleaseResult?.created),
+        notes,
+      },
+    });
   } else if (input.action === "request_buyer_evidence" || input.action === "request_seller_evidence") {
     const requestedFrom = input.action === "request_buyer_evidence" ? "buyer" : "seller";
     const priorRequests = Array.isArray(dispute.metadata?.evidenceRequests)
@@ -1017,45 +1179,6 @@ export async function runAdminDisputeAction(
       .eq("id", dispute.id);
 
     await updateOrderAdminNotes();
-  } else if (input.action === "issue_refund_now") {
-    const result = await finalizeBuyerRefundAndSellerLoss(adminClient, {
-      orderId: input.orderId,
-      actorUserId: input.adminUserId,
-      actorRole: "admin",
-    });
-
-    await adminClient
-      .from("order_disputes")
-      .update({
-        status: "resolved",
-        admin_resolution: notes || "Buyer refunded during dispute review.",
-        financial_outcome: "buyer_refunded",
-        seller_penalty_outcome: dispute.category,
-        seller_funds_frozen: true,
-        resolved_by_admin_id: input.adminUserId,
-        resolved_at: nowIso,
-        metadata: updateDisputeMetadata(dispute, {
-          outcome: "buyer_refunded",
-          consumedReserveCents: result.consumedReserveCents,
-        }),
-      })
-      .eq("id", dispute.id);
-
-    await adminClient
-      .from("orders")
-      .update({
-        admin_notes: notes,
-        seller_funds_frozen: true,
-      })
-      .eq("id", input.orderId);
-
-    await applySellerDisputeLossPenalties(adminClient, {
-      orderId: input.orderId,
-      sellerId: order.seller_id,
-      category: dispute.category,
-      actorUserId: input.adminUserId,
-      notes,
-    });
   } else if (
     input.action === "mark_tag_tampered" ||
     input.action === "mark_authenticity_violation" ||
@@ -1199,6 +1322,29 @@ export async function runAdminDisputeAction(
     await updateOrderAdminNotes();
   } else if (input.action === "set_outcome") {
     const outcome = input.outcome || "manual_handling";
+    if ([
+      "carrier_issue_manual_handling",
+      "insufficient_evidence",
+      "partial_resolution_manual_review",
+    ].includes(outcome)) {
+      await freezeOrderPayoutsForDispute(adminClient, {
+        orderId: input.orderId,
+        sellerId: order.seller_id,
+        actorUserId: input.adminUserId,
+        actorRole: "admin",
+        reason: notes || "Admin routed dispute to manual handling.",
+      });
+
+      await adminClient
+        .from("orders")
+        .update({
+          seller_funds_frozen: true,
+          status: "disputed",
+          admin_notes: notes,
+        })
+        .eq("id", input.orderId);
+    }
+
     await adminClient
       .from("order_disputes")
       .update({
@@ -1207,6 +1353,7 @@ export async function runAdminDisputeAction(
           : dispute.status,
         admin_resolution: notes || dispute.admin_resolution,
         financial_outcome: outcome,
+        seller_funds_frozen: true,
         metadata: updateDisputeMetadata(dispute, {
           adminOutcome: outcome,
           adminOutcomeSetAt: nowIso,
@@ -1215,6 +1362,18 @@ export async function runAdminDisputeAction(
       .eq("id", dispute.id);
 
     await updateOrderAdminNotes();
+
+    await logRelayAuditEvent(adminClient, {
+      actorUserId: input.adminUserId,
+      actorRole: "admin",
+      orderId: input.orderId,
+      sellerId: order.seller_id,
+      eventType: "admin.dispute_manual_handling",
+      metadata: {
+        outcome,
+        notes,
+      },
+    });
   } else {
     throw new Error("Unsupported dispute action");
   }

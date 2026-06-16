@@ -5,10 +5,11 @@ import { logRelayAuditEvent } from "./relay-audit";
 import {
   createExposureHold,
   createOrderPendingCredit,
+  calculateStripeFeeEstimateCents,
   debitSellerForDispute,
   freezeFundsForDispute,
-  releaseExposureHold,
   releaseOrderFundsToAvailable,
+  releaseExposureHold,
 } from "./money-policy";
 import { determinePayoutPolicyForTier } from "./seller-trust";
 import { evaluateSellerTrustById, recordSellerViolation } from "./seller-trust-admin";
@@ -1023,6 +1024,23 @@ export async function finalizeBuyerRefundAndSellerLoss(
     throw new Error("No payment intent found for this order");
   }
 
+  const sellerProceedsCents =
+    Math.max(0, Number(order.seller_proceeds_cents || 0)) ||
+    toCents(order.seller_earnings);
+
+  if (sellerProceedsCents > 0) {
+    await releaseOrderFundsToAvailable(order.id, sellerProceedsCents, {
+      adminClient,
+      actorUserId: input.actorUserId || null,
+      actorRole: input.actorRole,
+      forceReleaseKeys: [
+        "buyer_confirmation_or_review_expiry",
+        "delivery",
+        "carrier_acceptance",
+      ],
+    });
+  }
+
   await stripe.refunds.create(
     {
       payment_intent: order.stripe_payment_intent_id,
@@ -1132,5 +1150,59 @@ export async function applySellerDisputeLossPenalties(
       actorRole: "admin",
       source: "manual",
     });
+    return;
   }
+
+  if (input.category === "wrong_item") {
+    await recordSellerViolation(adminClient, {
+      sellerId: input.sellerId,
+      orderId: input.orderId,
+      violationType: "other",
+      severity: "high",
+      penaltyOutcome: "seller_dispute_loss",
+      notes: input.notes || "Buyer won a wrong item dispute.",
+      actorUserId: input.actorUserId,
+      metadata: {
+        orderId: input.orderId,
+        disputeCategory: "wrong_item",
+      },
+    });
+  }
+}
+
+export function estimateRefundAmountCents(input: {
+  orderPrice?: number | string | null;
+  shippingCost?: number | string | null;
+  stripeAmountTotal?: number | string | null;
+}) {
+  const stripeTotalCents = toCents(input.stripeAmountTotal);
+  if (stripeTotalCents > 0) {
+    return stripeTotalCents;
+  }
+
+  return toCents(input.orderPrice) + toCents(input.shippingCost);
+}
+
+export function estimateSellerProceedsCents(input: {
+  sellerProceedsCents?: number | null;
+  sellerEarnings?: number | string | null;
+  orderPrice?: number | string | null;
+  stripeFeeEstimateCents?: number | null;
+}) {
+  if (typeof input.sellerProceedsCents === "number") {
+    return Math.max(0, input.sellerProceedsCents);
+  }
+
+  const sellerEarningsCents = toCents(input.sellerEarnings);
+  if (sellerEarningsCents > 0) {
+    return sellerEarningsCents;
+  }
+
+  const subtotalCents = toCents(input.orderPrice);
+  const stripeFeeEstimateCents =
+    typeof input.stripeFeeEstimateCents === "number"
+      ? Math.max(0, input.stripeFeeEstimateCents)
+      : calculateStripeFeeEstimateCents(subtotalCents);
+
+  return Math.max(0, subtotalCents - Math.round(subtotalCents * 0.01) - stripeFeeEstimateCents);
 }
