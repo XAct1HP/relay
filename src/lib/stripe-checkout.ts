@@ -1,6 +1,12 @@
 import "server-only";
 
 import type Stripe from "stripe";
+import {
+  calculateRelayFee,
+  createOrderPendingCredit,
+  calculateSellerProceeds,
+  calculateStripeFeeEstimateCents,
+} from "@/lib/money-policy";
 import { evaluateOrderAuthenticationRequirements } from "@/lib/order-auth";
 import { buildOrderPayoutSnapshotForTier } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
@@ -293,9 +299,16 @@ async function finalizeShoeOrderPurchase(
     }
   }
 
-  const platformFee = shoePrice * 0.01;
-  const stripeFee = shoePrice * 0.03 + 0.3;
-  const sellerEarnings = shoePrice - platformFee - stripeFee;
+  const shoePriceCents = Math.round(shoePrice * 100);
+  const relayFeeCents = calculateRelayFee(shoePriceCents);
+  const stripeFeeCents = calculateStripeFeeEstimateCents(shoePriceCents);
+  const sellerProceedsCents = calculateSellerProceeds(
+    shoePriceCents,
+    stripeFeeCents
+  );
+  const platformFee = relayFeeCents / 100;
+  const stripeFee = stripeFeeCents / 100;
+  const sellerEarnings = sellerProceedsCents / 100;
 
   const shippingDeadline = new Date();
   shippingDeadline.setDate(shippingDeadline.getDate() + 5);
@@ -389,6 +402,9 @@ async function finalizeShoeOrderPurchase(
       platform_fee: platformFee,
       stripe_fee: stripeFee,
       seller_earnings: sellerEarnings,
+      relay_fee_cents: relayFeeCents,
+      stripe_fee_estimate_cents: stripeFeeCents,
+      seller_proceeds_cents: sellerProceedsCents,
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId,
       challenge_code: challengeCode,
@@ -445,6 +461,12 @@ async function finalizeShoeOrderPurchase(
 
     throw new Error(orderError?.message || "Failed to create order");
   }
+
+  await createOrderPendingCredit(insertedOrder.id, {
+    adminClient: supabase,
+    actorRole: "buyer",
+    actorUserId: buyerId,
+  });
 
   await logRelayAuditEvent(supabase, {
     actorUserId: buyerId,

@@ -2,7 +2,15 @@ import "server-only";
 
 import Stripe from "stripe";
 import { logRelayAuditEvent } from "./relay-audit";
-import { determinePayoutPolicyForTier, determineReservePolicyForTier } from "./seller-trust";
+import {
+  createExposureHold,
+  createOrderPendingCredit,
+  debitSellerForDispute,
+  freezeFundsForDispute,
+  releaseExposureHold,
+  releaseOrderFundsToAvailable,
+} from "./money-policy";
+import { determinePayoutPolicyForTier } from "./seller-trust";
 import { evaluateSellerTrustById, recordSellerViolation } from "./seller-trust-admin";
 import {
   buildOrderPayoutIdempotencyKey,
@@ -54,6 +62,7 @@ interface OrderPayoutContext {
   buyer_id: string;
   status: string;
   seller_earnings: number | null;
+  seller_proceeds_cents: number | null;
   stripe_transfer_id: string | null;
   stripe_payment_intent_id: string | null;
   seller_funds_frozen: boolean | null;
@@ -82,15 +91,14 @@ export interface OrderPayoutSnapshotResult extends OrderPayoutPolicySnapshot {
 export function buildOrderPayoutSnapshotForTier(
   sellerTier: SellerTier
 ): OrderPayoutSnapshotResult {
-  const reservePolicy = determineReservePolicyForTier(sellerTier);
   const payoutPolicy = determinePayoutPolicyForTier(sellerTier);
 
   return {
     sellerTierSnapshot: sellerTier,
     payoutSchedule: payoutPolicy.schedule,
-    reservePercentageBps: reservePolicy.reservePercentageBps,
-    reserveHoldDurationDays: reservePolicy.holdDurationDays,
-    minimumReserveBalanceCents: reservePolicy.minimumReserveBalanceCents,
+    reservePercentageBps: 0,
+    reserveHoldDurationDays: null,
+    minimumReserveBalanceCents: 0,
   };
 }
 
@@ -139,6 +147,7 @@ async function getOrderPayoutContext(
       buyer_id,
       status,
       seller_earnings,
+      seller_proceeds_cents,
       stripe_transfer_id,
       stripe_payment_intent_id,
       seller_funds_frozen,
@@ -235,6 +244,66 @@ async function getExistingPayoutRows(
   return (data || []) as PayoutStepRow[];
 }
 
+function getForcedReleaseKeysForTrigger(
+  snapshot: OrderPayoutSnapshotResult,
+  trigger: OrderPayoutTrigger
+): Array<"buyer_confirmation_or_review_expiry" | "delivery" | "carrier_acceptance"> {
+  if (trigger === "buyer_confirmation") {
+    return ["buyer_confirmation_or_review_expiry"];
+  }
+
+  if (trigger !== "manual_override") {
+    return [];
+  }
+
+  if (snapshot.payoutSchedule === "carrier_acceptance_and_delivery_split") {
+    return ["carrier_acceptance", "delivery"];
+  }
+
+  if (snapshot.payoutSchedule === "delivery") {
+    return ["delivery"];
+  }
+
+  return ["buyer_confirmation_or_review_expiry"];
+}
+
+async function syncExposureHoldForTrigger(
+  adminClient: SupabaseAdminClient,
+  input: {
+    orderId: string;
+    sellerTier: SellerTier;
+    trigger: OrderPayoutTrigger;
+    actorUserId?: string | null;
+    actorRole: ActorRole;
+    forceRelease?: boolean;
+  }
+) {
+  if (
+    input.trigger === "delivery" &&
+    (input.sellerTier === "tier_2" || input.sellerTier === "tier_3")
+  ) {
+    return createExposureHold(input.orderId, {
+      adminClient,
+      actorUserId: input.actorUserId || null,
+      actorRole: input.actorRole,
+    });
+  }
+
+  if (
+    input.forceRelease ||
+    input.trigger === "buyer_confirmation" ||
+    input.trigger === "review_window_expiry"
+  ) {
+    return releaseExposureHold(input.orderId, {
+      adminClient,
+      actorUserId: input.actorUserId || null,
+      actorRole: input.actorRole,
+    });
+  }
+
+  return null;
+}
+
 async function syncOrderPayoutSummary(
   adminClient: SupabaseAdminClient,
   input: {
@@ -296,10 +365,7 @@ async function syncOrderPayoutSummary(
       seller_amount_paid_cents: totalPaidCents,
       seller_amount_held_in_reserve_cents: heldReserveCents,
       seller_amount_frozen_cents:
-        payoutStatus === "frozen"
-          ? Math.max(0, input.sellerEarningsCents - totalPaidCents) +
-            frozenReserveCents
-          : 0,
+        payoutStatus === "frozen" ? Math.max(0, input.sellerEarningsCents) : 0,
       payout_last_processed_at: new Date().toISOString(),
     })
     .eq("id", input.orderId);
@@ -434,18 +500,10 @@ export async function processOrderPayoutTrigger(
 ) {
   const order = await getOrderPayoutContext(adminClient, input.orderId);
   const snapshot = await ensureOrderPayoutSnapshot(adminClient, order);
-  const reserveAccount = await ensureReserveAccount(
-    adminClient,
-    order.seller_id,
-    snapshot
-  );
+  const sellerTier = snapshot.sellerTierSnapshot || order.seller?.seller_tier || "tier_1";
   const existingRows = await getExistingPayoutRows(adminClient, order.id);
   const steps = getPayoutStepDefinitions(snapshot.payoutSchedule);
   const targetRank = resolveTargetRankForTrigger(snapshot.payoutSchedule, input.trigger);
-
-  if (targetRank === null) {
-    return { processedSteps: [], snapshot };
-  }
 
   if (
     (order.seller_funds_frozen || order.payout_status === "frozen" || order.status === "disputed") &&
@@ -455,10 +513,17 @@ export async function processOrderPayoutTrigger(
   }
 
   const processedSteps: PayoutStepRow[] = [];
-  const sellerEarningsCents = toCents(order.seller_earnings);
-  let currentReserveBalanceCents = reserveAccount.balance_cents || 0;
+  const sellerEarningsCents =
+    Math.max(0, order.seller_proceeds_cents || 0) || toCents(order.seller_earnings);
 
-  for (const step of steps.filter((candidate) => candidate.rank <= targetRank)) {
+  await createOrderPendingCredit(order.id, {
+    adminClient,
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+  });
+
+  if (targetRank !== null) {
+    for (const step of steps.filter((candidate) => candidate.rank <= targetRank)) {
     const existing = existingRows.find((row) => row.payout_step === step.key);
     if (existing?.status === "paid") {
       continue;
@@ -480,23 +545,22 @@ export async function processOrderPayoutTrigger(
 
     const allocation = calculatePayoutAllocation({
       sellerEarningsCents,
-      reservePercentageBps: snapshot.reservePercentageBps,
-      currentReserveBalanceCents,
-      minimumReserveBalanceCents: snapshot.minimumReserveBalanceCents,
+      reservePercentageBps: 0,
+      currentReserveBalanceCents: 0,
+      minimumReserveBalanceCents: 0,
       cumulativeGrossReleasedCents,
       cumulativeReserveWithheldCents,
       step: stepWithCumulativeBps,
     });
 
+    if (allocation.netPaidCents <= 0) {
+      continue;
+    }
+
     const idempotencyKey =
       existing?.idempotency_key ||
       buildOrderPayoutIdempotencyKey(order.id, step.key);
-    const reserveReleaseEligibleAt =
-      snapshot.reserveHoldDurationDays === null
-        ? null
-        : new Date(
-            Date.now() + snapshot.reserveHoldDurationDays * 24 * 60 * 60 * 1000
-          ).toISOString();
+    const reserveReleaseEligibleAt = null;
 
     const payoutPayload = {
       order_id: order.id,
@@ -504,14 +568,15 @@ export async function processOrderPayoutTrigger(
       payout_step: step.key,
       status: "pending",
       gross_amount_cents: allocation.grossAmountCents,
-      reserve_withheld_cents: allocation.reserveWithheldCents,
-      minimum_balance_top_up_cents: allocation.minimumBalanceTopUpCents,
+      reserve_withheld_cents: 0,
+      minimum_balance_top_up_cents: 0,
       net_paid_cents: allocation.netPaidCents,
       reserve_release_eligible_at: reserveReleaseEligibleAt,
       trigger_source: input.trigger,
       idempotency_key: idempotencyKey,
       metadata: {
         overrideReason: input.overrideReason || null,
+        releaseDestination: "relay_balance",
       },
     };
 
@@ -525,124 +590,54 @@ export async function processOrderPayoutTrigger(
       throw new Error(payoutRowError?.message || "Failed to stage payout row");
     }
 
-    let stripeTransferId = existing?.stripe_transfer_id || null;
-    if (allocation.netPaidCents > 0) {
-      if (!order.seller?.stripe_account_id) {
-        await adminClient
-          .from("order_payouts")
-          .update({
-            status: "failed",
-            failure_reason: "Seller has no Stripe Connect account",
-          })
-          .eq("id", payoutRow.id);
-
-        await adminClient
-          .from("orders")
-          .update({
-            payout_status: "failed",
-            payout_last_error: "Seller has no Stripe Connect account",
-            status: "payout_failed",
-          })
-          .eq("id", order.id);
-        throw new Error("Seller has no Stripe Connect account");
-      }
-
-      try {
-        const transfer = await stripe.transfers.create(
-          {
-            amount: allocation.netPaidCents,
-            currency: "usd",
-            destination: order.seller.stripe_account_id,
-            metadata: {
-              orderId: order.id,
-              payoutStep: step.key,
-            },
-          },
-          {
-            idempotencyKey,
-          }
-        );
-
-        stripeTransferId = transfer.id;
-      } catch (error) {
-        await adminClient
-          .from("order_payouts")
-          .update({
-            status: "failed",
-            failure_reason: error instanceof Error ? error.message : "Stripe transfer failed",
-          })
-          .eq("id", payoutRow.id);
-
-        await adminClient
-          .from("orders")
-          .update({
-            payout_status: "failed",
-            payout_last_error:
-              error instanceof Error ? error.message : "Stripe transfer failed",
-            status: "payout_failed",
-          })
-          .eq("id", order.id);
-
-        throw error;
-      }
-    }
-
-    await ensureReserveEntriesForPayout(adminClient, {
-      orderId: order.id,
-      sellerId: order.seller_id,
-      orderPayoutId: payoutRow.id,
-      reserveWithheldCents: allocation.reserveWithheldCents,
-      minimumBalanceTopUpCents: allocation.minimumBalanceTopUpCents,
-      reservePercentageBps: snapshot.reservePercentageBps,
-      reserveHoldDurationDays: snapshot.reserveHoldDurationDays,
+    const releaseResult = await releaseOrderFundsToAvailable(order.id, allocation.netPaidCents, {
+      adminClient,
       actorUserId: input.actorUserId || null,
       actorRole: input.actorRole,
+      forceReleaseKeys: getForcedReleaseKeysForTrigger(snapshot, input.trigger),
     });
-    currentReserveBalanceCents +=
-      allocation.reserveWithheldCents + allocation.minimumBalanceTopUpCents;
+
+    const payoutStatusForRow =
+      releaseResult.releasedAmountCents >= allocation.netPaidCents
+        ? "paid"
+        : "pending";
 
     const { data: finalizedPayoutRow } = await adminClient
       .from("order_payouts")
       .update({
-        status: "paid",
-        stripe_transfer_id: stripeTransferId,
-        paid_at: new Date().toISOString(),
+        status: payoutStatusForRow,
+        stripe_transfer_id: null,
+        failure_reason: null,
+        paid_at:
+          payoutStatusForRow === "paid" ? new Date().toISOString() : null,
       })
       .eq("id", payoutRow.id)
       .select("*")
       .single();
 
-    if (!order.stripe_transfer_id && stripeTransferId) {
-      await adminClient
-        .from("orders")
-        .update({
-          stripe_transfer_id: stripeTransferId,
-          payout_last_trigger: input.trigger,
-        })
-        .eq("id", order.id);
-    } else {
-      await adminClient
-        .from("orders")
-        .update({
-          payout_last_trigger: input.trigger,
-        })
-        .eq("id", order.id);
-    }
+    await adminClient
+      .from("orders")
+      .update({
+        payout_last_trigger: input.trigger,
+        payout_last_error: null,
+      })
+      .eq("id", order.id);
 
     await logRelayAuditEvent(adminClient, {
       actorUserId: input.actorUserId || null,
       actorRole: input.actorRole,
       orderId: order.id,
       sellerId: order.seller_id,
-      eventType: "order.payout_released",
+      eventType: "order.balance_release_recorded",
       metadata: {
         payoutStep: step.key,
         trigger: input.trigger,
         grossAmountCents: allocation.grossAmountCents,
-        reserveWithheldCents: allocation.reserveWithheldCents,
-        minimumBalanceTopUpCents: allocation.minimumBalanceTopUpCents,
+        reserveWithheldCents: 0,
+        minimumBalanceTopUpCents: 0,
         netPaidCents: allocation.netPaidCents,
-        stripeTransferId,
+        stripeTransferId: null,
+        relayBalanceReleasedCents: releaseResult.releasedAmountCents,
       },
     });
 
@@ -651,6 +646,16 @@ export async function processOrderPayoutTrigger(
       existingRows.push(finalizedPayoutRow as PayoutStepRow);
     }
   }
+  }
+
+  await syncExposureHoldForTrigger(adminClient, {
+    orderId: order.id,
+    sellerTier,
+    trigger: input.trigger,
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+    forceRelease: Boolean(input.allowFrozenProcessing),
+  });
 
   await syncOrderPayoutSummary(adminClient, {
     orderId: order.id,
@@ -679,6 +684,12 @@ export async function freezeOrderPayoutsForDispute(
   const sellerEarningsCents = toCents(order.seller_earnings);
   const nowIso = new Date().toISOString();
 
+  await freezeFundsForDispute(input.orderId, {
+    adminClient,
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+  });
+
   await Promise.all([
     adminClient
       .from("orders")
@@ -686,10 +697,7 @@ export async function freezeOrderPayoutsForDispute(
         payout_status: "frozen",
         payout_frozen_at: nowIso,
         payout_frozen_reason: input.reason,
-        seller_amount_frozen_cents: Math.max(
-          0,
-          sellerEarningsCents - (order.seller_amount_paid_cents || 0)
-        ),
+        seller_amount_frozen_cents: Math.max(0, sellerEarningsCents),
       })
       .eq("id", input.orderId),
     adminClient
@@ -734,7 +742,6 @@ export async function unfreezeOrderPayouts(
   }
 ) {
   const order = await getOrderPayoutContext(adminClient, input.orderId);
-  const nowIso = new Date().toISOString();
 
   await Promise.all([
     adminClient
@@ -761,6 +768,13 @@ export async function unfreezeOrderPayouts(
         freeze_reason: null,
       })
       .eq("order_id", input.orderId),
+    adminClient
+      .from("exposure_holds")
+      .update({
+        status: "active",
+      })
+      .eq("order_id", input.orderId)
+      .eq("status", "disputed"),
   ]);
 
   await syncOrderPayoutSummary(adminClient, {
@@ -1018,14 +1032,14 @@ export async function finalizeBuyerRefundAndSellerLoss(
     }
   );
 
-  const consumedReserveCents = await consumeReserveBalance(adminClient, {
-    sellerId: order.seller_id,
-    orderId: order.id,
-    targetConsumeCents:
-      Math.max(order.seller_amount_paid_cents || 0, order.seller_amount_held_in_reserve_cents || 0),
+  const debitResult = await debitSellerForDispute(order.id, {
+    adminClient,
     actorUserId: input.actorUserId || null,
     actorRole: input.actorRole,
   });
+  const debitedAmountCents = debitResult.created
+    ? debitResult.sellerProceedsCents
+    : debitResult.sellerProceedsCents || 0;
 
   await adminClient
     .from("orders")
@@ -1034,9 +1048,12 @@ export async function finalizeBuyerRefundAndSellerLoss(
       payout_status: "refunded",
       seller_amount_refunded_cents: Math.max(
         order.seller_amount_refunded_cents || 0,
-        order.seller_amount_paid_cents || 0
+        debitResult.sellerProceedsCents ||
+          order.seller_amount_paid_cents ||
+          0
       ),
       payout_last_trigger: "manual_override",
+      seller_funds_frozen: true,
     })
     .eq("id", order.id);
 
@@ -1054,12 +1071,13 @@ export async function finalizeBuyerRefundAndSellerLoss(
     sellerId: order.seller_id,
     eventType: "order.buyer_refunded",
     metadata: {
-      consumedReserveCents,
+      debitedAmountCents,
     },
   });
 
   return {
-    consumedReserveCents,
+    consumedReserveCents: 0,
+    debitedAmountCents,
   };
 }
 

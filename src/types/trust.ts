@@ -10,6 +10,41 @@ export type CheckCheckStatus =
 
 export type ReserveEntryStatus = "pending" | "held" | "released" | "consumed";
 
+export type RelayBalanceCreditStatus =
+  | "not_started"
+  | "pending"
+  | "available"
+  | "failed"
+  | "reversed";
+
+export type RelayBalanceLedgerType =
+  | "order_pending_credit"
+  | "order_available_credit"
+  | "withdrawal_requested"
+  | "withdrawal_completed"
+  | "withdrawal_failed"
+  | "exposure_hold_created"
+  | "exposure_hold_released"
+  | "dispute_freeze"
+  | "dispute_debit"
+  | "admin_adjustment";
+
+export type RelayBalanceLedgerStatus =
+  | "pending"
+  | "posted"
+  | "completed"
+  | "failed"
+  | "canceled";
+
+export type ExposureHoldStatus = "active" | "released" | "consumed" | "disputed";
+
+export type WithdrawalRequestStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "canceled";
+
 export type OrderPayoutStatus =
   | "pending"
   | "partially_paid"
@@ -104,6 +139,52 @@ export interface SellerReserveAccount {
   hold_duration_days: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface RelayBalance {
+  id: string;
+  seller_id: string;
+  total_balance_cents: number;
+  available_balance_cents: number;
+  pending_balance_cents: number;
+  exposure_cents: number;
+  withdrawable_balance_cents: number;
+  updated_at: string;
+}
+
+export interface RelayBalanceLedgerEntry {
+  id: string;
+  seller_id: string;
+  order_id: string | null;
+  type: RelayBalanceLedgerType;
+  amount_cents: number;
+  currency: string;
+  status: RelayBalanceLedgerStatus;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ExposureHold {
+  id: string;
+  seller_id: string;
+  order_id: string;
+  amount_cents: number;
+  status: ExposureHoldStatus;
+  reason: string;
+  created_at: string;
+  released_at: string | null;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  seller_id: string;
+  amount_cents: number;
+  stripe_transfer_id: string | null;
+  stripe_transfer_fee_cents: number;
+  status: WithdrawalRequestStatus;
+  failure_reason: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 export interface SellerReserveEntry {

@@ -180,6 +180,12 @@ export interface Order {
   platform_fee: number;
   stripe_fee: number;
   seller_earnings: number;
+  relay_fee_cents?: number | null;
+  stripe_fee_estimate_cents?: number | null;
+  seller_proceeds_cents?: number | null;
+  balance_credit_status?: import("./trust").RelayBalanceCreditStatus | null;
+  review_window_ends_at?: string | null;
+  funds_available_at?: string | null;
   seller_tier_snapshot?: import("./trust").SellerTier | null;
   payout_schedule?: string | null;
   reserve_percentage_bps_snapshot?: number | null;
