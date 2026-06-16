@@ -2,8 +2,8 @@ import "server-only";
 
 import {
   evaluateBuyerCompletionEligibility,
+  finalizeOrderReviewCompletion,
   loadBuyerOrderReviewContext,
-  markOrderTagCompleted,
 } from "@/lib/buyer-order-review";
 import { getOrderFulfillmentGateStatus } from "@/lib/order-auth";
 import { releaseEligibleReserveEntries, processOrderPayoutTrigger } from "@/lib/payouts";
@@ -90,6 +90,7 @@ export async function handleShippoTrackingWebhookEvent(
       shipped_at,
       delivered_at,
       review_deadline,
+      review_window_ends_at,
       seller_funds_frozen,
       payout_status,
       seller_tier_snapshot,
@@ -122,21 +123,22 @@ export async function handleShippoTrackingWebhookEvent(
   }
 
   if (CARRIER_ACCEPTANCE_STATUSES.has(normalizedStatus)) {
+    const shippedAt = order.shipped_at || nowIso;
     const transitionedToShipped = order.status === "label_created";
-    if (transitionedToShipped) {
+    if (transitionedToShipped || !order.shipped_at) {
       await adminClient
         .from("orders")
         .update({
-          status: "shipped",
-          shipped_at: order.shipped_at || nowIso,
+          status: transitionedToShipped ? "shipped" : order.status,
+          shipped_at: shippedAt,
         })
         .eq("id", order.id)
-        .eq("status", "label_created");
+        .in("status", transitionedToShipped ? ["label_created"] : [order.status]);
 
       await updateRelayTagShipmentState(adminClient, {
         relayTagId: order.relay_tag_id || null,
         status: "shipped",
-        at: order.shipped_at || nowIso,
+        at: shippedAt,
       });
     }
 
@@ -177,6 +179,7 @@ export async function handleShippoTrackingWebhookEvent(
         tierSnapshot: order.seller_tier_snapshot || "tier_1",
         payoutStepsProcessed: payoutResult?.processedSteps.length || 0,
         payoutBlockedReason: payoutResult?.blocked || gateBlockedReason,
+        shippedAt,
         rawEvent: input.rawEvent || null,
       },
     });
@@ -188,20 +191,30 @@ export async function handleShippoTrackingWebhookEvent(
       transitionedToShipped,
       payoutStepsProcessed: payoutResult?.processedSteps.length || 0,
       payoutBlockedReason: payoutResult?.blocked || gateBlockedReason,
+      shippedAt,
     };
   }
 
   if (DELIVERY_STATUSES.has(normalizedStatus)) {
-    const nextReviewDeadline =
-      order.review_deadline || new Date(Date.now() + REVIEW_WINDOW_MS).toISOString();
+    const deliveredAt = order.delivered_at || nowIso;
+    const deliveredAtDate = new Date(deliveredAt);
+    const nextReviewDeadline = new Date(
+      deliveredAtDate.getTime() + REVIEW_WINDOW_MS
+    ).toISOString();
     const transitionedToDelivered =
       order.status === "shipped" || order.status === "label_created";
 
-    if (transitionedToDelivered || !order.review_deadline || !order.delivered_at) {
+    if (
+      transitionedToDelivered ||
+      !order.review_deadline ||
+      !order.review_window_ends_at ||
+      !order.delivered_at
+    ) {
       const updatePayload: Record<string, any> = {
         status: transitionedToDelivered ? "delivered" : order.status,
-        delivered_at: order.delivered_at || nowIso,
+        delivered_at: deliveredAt,
         review_deadline: nextReviewDeadline,
+        review_window_ends_at: nextReviewDeadline,
       };
       if (transitionedToDelivered && !order.buyer_challenge_code) {
         updatePayload.buyer_challenge_code = generateChallengeCode();
@@ -247,7 +260,7 @@ export async function handleShippoTrackingWebhookEvent(
         trackingNumber: input.trackingNumber,
         trackingStatus: normalizedStatus,
         transitionedToDelivered,
-        deliveredAt: order.delivered_at || nowIso,
+        deliveredAt,
         reviewDeadline: nextReviewDeadline,
         tierSnapshot,
         payoutStepsProcessed: payoutResult?.processedSteps.length || 0,
@@ -263,6 +276,8 @@ export async function handleShippoTrackingWebhookEvent(
       transitionedToDelivered,
       payoutStepsProcessed: payoutResult?.processedSteps.length || 0,
       payoutBlockedReason: payoutResult?.blocked || gateBlockedReason,
+      deliveredAt,
+      reviewWindowEndsAt: nextReviewDeadline,
     };
   }
 
@@ -304,63 +319,16 @@ export async function runAutoCompleteReviewWindowJob(
         continue;
       }
 
-      const payoutResult = await processOrderPayoutTrigger(adminClient, {
+      const completionResult = await finalizeOrderReviewCompletion(adminClient, {
         orderId: candidate.id,
-        trigger: "review_window_expiry",
         actorRole: "system",
+        completionSource: "review_window_expiry",
       });
 
-      const { data: order, error: orderError } = await adminClient
-        .from("orders")
-        .select("id, seller_id, relay_tag_id")
-        .eq("id", candidate.id)
-        .single();
-
-      if (orderError || !order) {
-        results.push({
-          orderId: candidate.id,
-          status: "error",
-          error: orderError?.message || "Order not found",
-        });
-        continue;
-      }
-
-      const { error: updateError } = await adminClient
-        .from("orders")
-        .update({
-          status: "completed",
-          seller_funds_frozen: false,
-        })
-        .eq("id", order.id)
-        .in("status", ["delivered", "review_window"]);
-
-      if (updateError) {
-        results.push({
-          orderId: order.id,
-          status: "error",
-          error: updateError.message || "DB update failed",
-        });
-        continue;
-      }
-
-      await markOrderTagCompleted(adminClient, {
-        relayTagId: order.relay_tag_id,
-        orderId: order.id,
+      results.push({
+        orderId: completionResult.orderId,
+        status: completionResult.alreadyCompleted ? "already_completed" : "completed",
       });
-
-      await logRelayAuditEvent(adminClient, {
-        actorRole: "system",
-        orderId: order.id,
-        sellerId: order.seller_id,
-        eventType: "order.auto_completed_after_review_window",
-        metadata: {
-          reviewDeadlinePassed: true,
-          payoutStepsProcessed: payoutResult.processedSteps.length,
-          payoutBlockedReason: payoutResult.blocked || null,
-        },
-      });
-
-      results.push({ orderId: order.id, status: "completed" });
     } catch (error) {
       results.push({
         orderId: candidate.id,
@@ -373,7 +341,10 @@ export async function runAutoCompleteReviewWindowJob(
   return {
     processed: results.length,
     completed: results.filter((result) => result.status === "completed").length,
-    failed: results.filter((result) => result.status !== "completed").length,
+    alreadyCompleted: results.filter((result) => result.status === "already_completed").length,
+    failed: results.filter(
+      (result) => result.status === "blocked" || result.status === "error"
+    ).length,
     results,
   };
 }

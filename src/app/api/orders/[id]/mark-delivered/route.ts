@@ -45,7 +45,7 @@ export async function POST(
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, buyer_id, seller_id, status')
+      .select('id, buyer_id, seller_id, status, buyer_challenge_code')
       .eq('id', orderId)
       .single()
 
@@ -67,18 +67,17 @@ export async function POST(
       )
     }
 
-    const reviewDeadline = new Date()
-    reviewDeadline.setHours(reviewDeadline.getHours() + 48)
-
-    const buyerChallengeCode = generateChallengeCode()
+    const deliveredAt = new Date()
+    const reviewDeadline = new Date(deliveredAt.getTime() + 48 * 60 * 60 * 1000)
 
     const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
       .update({
         status: 'delivered',
-        delivered_at: new Date().toISOString(),
+        delivered_at: deliveredAt.toISOString(),
         review_deadline: reviewDeadline.toISOString(),
-        buyer_challenge_code: buyerChallengeCode,
+        review_window_ends_at: reviewDeadline.toISOString(),
+        buyer_challenge_code: order.buyer_challenge_code || generateChallengeCode(),
       })
       .eq('id', orderId)
       .select()

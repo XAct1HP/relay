@@ -6,8 +6,8 @@ import {
   isBuyerDisputeCategory,
 } from "@/lib/order-disputes";
 import { isLegacyOrderAuthFlow } from "@/lib/order-auth";
-import { freezeOrderPayoutsForDispute } from "@/lib/payouts";
-import { logRelayAuditEvent } from "@/lib/relay-audit";
+import { freezeOrderPayoutsForDispute, processOrderPayoutTrigger } from "@/lib/payouts";
+import { logRelayAuditEvent, logRelayAuditEventOnce } from "@/lib/relay-audit";
 import type { DisputeCategory, OrderChainOfCustody } from "@/types";
 
 type SupabaseAdminClient = ReturnType<
@@ -545,5 +545,115 @@ export async function createBuyerDispute(
   return {
     dispute,
     eligibility,
+  };
+}
+
+export async function finalizeOrderReviewCompletion(
+  adminClient: SupabaseAdminClient,
+  input: {
+    orderId: string;
+    actorUserId?: string | null;
+    actorRole: "buyer" | "system" | "admin";
+    completionSource: "buyer_confirmation" | "review_window_expiry";
+    rating?: number | null;
+    comment?: string | null;
+  }
+) {
+  const reviewContext = await loadBuyerOrderReviewContext(adminClient, input.orderId);
+  const eligibility = evaluateBuyerCompletionEligibility(reviewContext);
+  const isBuyerConfirmation = input.completionSource === "buyer_confirmation";
+
+  if (reviewContext.status === "completed") {
+    return {
+      alreadyCompleted: true,
+      payoutResult: { processedSteps: [] as Array<{ id: string }>, blocked: null as string | null },
+      eligibility,
+      orderId: reviewContext.id,
+      sellerId: reviewContext.seller_id,
+    };
+  }
+
+  if (isBuyerConfirmation && !eligibility.canComplete) {
+    throw new Error(
+      eligibility.blockedReasons[0] || "Order cannot be completed yet"
+    );
+  }
+
+  if (!isBuyerConfirmation && !eligibility.canAutoComplete) {
+    throw new Error(
+      eligibility.autoCompleteBlockedReasons[0] || "Order cannot auto-complete yet"
+    );
+  }
+
+  const payoutResult = await processOrderPayoutTrigger(adminClient, {
+    orderId: input.orderId,
+    trigger: input.completionSource,
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+  });
+
+  const { data: order, error: orderError } = await adminClient
+    .from("orders")
+    .select("id, seller_id, relay_tag_id")
+    .eq("id", input.orderId)
+    .single();
+
+  if (orderError || !order) {
+    throw new Error(orderError?.message || "Order not found");
+  }
+
+  const completionPayload: Record<string, unknown> = {
+    status: "completed",
+    seller_funds_frozen: false,
+  };
+
+  if (typeof input.rating === "number") {
+    completionPayload.review_rating = input.rating;
+  }
+
+  if (input.comment !== undefined) {
+    completionPayload.review_comment = input.comment;
+  }
+
+  const { error: updateError } = await adminClient
+    .from("orders")
+    .update(completionPayload)
+    .eq("id", input.orderId)
+    .in("status", ["delivered", "review_window"]);
+
+  if (updateError) {
+    throw new Error(updateError.message || "Failed to update order");
+  }
+
+  await markOrderTagCompleted(adminClient, {
+    relayTagId: order.relay_tag_id,
+    orderId: input.orderId,
+  });
+
+  await logRelayAuditEventOnce(adminClient, {
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+    orderId: input.orderId,
+    sellerId: order.seller_id,
+    eventType:
+      input.completionSource === "buyer_confirmation"
+        ? "order.completed_by_buyer"
+        : "order.auto_completed_after_review_window",
+    idempotencyKey: `audit:order:${input.orderId}:completion:${input.completionSource}`,
+    metadata: {
+      rating: typeof input.rating === "number" ? input.rating : null,
+      reviewWindowExpired: eligibility.reviewWindowExpired,
+      payoutStepsProcessed: payoutResult.processedSteps.length,
+      payoutBlockedReason: payoutResult.blocked || null,
+      completionSource: input.completionSource,
+    },
+  });
+
+  return {
+    alreadyCompleted: false,
+    payoutResult,
+    eligibility,
+    orderId: order.id,
+    sellerId: order.seller_id,
   };
 }

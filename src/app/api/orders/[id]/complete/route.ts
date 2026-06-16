@@ -3,12 +3,10 @@ import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   evaluateBuyerCompletionEligibility,
+  finalizeOrderReviewCompletion,
   loadBuyerOrderReviewContext,
   markBuyerCustodyVerified,
-  markOrderTagCompleted,
 } from "@/lib/buyer-order-review";
-import { processOrderPayoutTrigger } from "@/lib/payouts";
-import { logRelayAuditEvent } from "@/lib/relay-audit";
 
 export async function POST(
   request: NextRequest,
@@ -112,57 +110,13 @@ export async function POST(
       });
     }
 
-    const payoutResult = await processOrderPayoutTrigger(adminClient, {
+    await finalizeOrderReviewCompletion(adminClient, {
       orderId,
-      trigger: "buyer_confirmation",
       actorUserId: user.id,
       actorRole: "buyer",
-    });
-
-    const { data: order, error: orderError } = await adminClient
-      .from("orders")
-      .select("id, seller_id, relay_tag_id")
-      .eq("id", orderId)
-      .single();
-
-    if (orderError || !order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    const { error: updateError } = await adminClient
-      .from("orders")
-      .update({
-        status: "completed",
-        review_rating: rating,
-        review_comment: comment,
-        seller_funds_frozen: false,
-      })
-      .eq("id", orderId)
-      .in("status", ["delivered", "review_window"]);
-
-    if (updateError) {
-      return NextResponse.json(
-        { error: "Failed to update order" },
-        { status: 500 }
-      );
-    }
-
-    await markOrderTagCompleted(adminClient, {
-      relayTagId: order.relay_tag_id,
-      orderId,
-    });
-
-    await logRelayAuditEvent(adminClient, {
-      actorUserId: user.id,
-      actorRole: "buyer",
-      orderId,
-      sellerId: order.seller_id,
-      eventType: "order.completed_by_buyer",
-      metadata: {
-        rating,
-        reviewWindowExpired: eligibility.reviewWindowExpired,
-        payoutStepsProcessed: payoutResult.processedSteps.length,
-      },
+      completionSource: "buyer_confirmation",
+      rating,
+      comment,
     });
 
     return NextResponse.json({
