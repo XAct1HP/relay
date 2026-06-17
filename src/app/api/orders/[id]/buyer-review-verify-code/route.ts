@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { ensureBuyerChallengeCode } from '@/lib/buyer-challenge-code'
 
 export async function POST(
   request: NextRequest,
@@ -42,14 +44,22 @@ export async function POST(
       )
     }
 
-    if (!order.buyer_challenge_code) {
+    const buyerChallengeCode = await ensureBuyerChallengeCode(createAdminClient(), {
+      orderId,
+      currentCode: order.buyer_challenge_code,
+      status: order.status,
+      relayTagRequired: order.relay_tag_required,
+      authRequirementsEvaluatedAt: order.auth_requirements_evaluated_at,
+    })
+
+    if (!buyerChallengeCode) {
       return NextResponse.json(
         { error: 'Buyer verification code has not been generated yet.' },
         { status: 400 }
       )
     }
 
-    if (order.buyer_challenge_code.toUpperCase() !== challengeCode.toUpperCase()) {
+    if (buyerChallengeCode.toUpperCase() !== challengeCode.toUpperCase()) {
       return NextResponse.json({ error: 'Incorrect challenge code.' }, { status: 403 })
     }
 

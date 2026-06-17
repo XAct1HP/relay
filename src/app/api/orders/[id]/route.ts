@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClientInstance } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { ensureBuyerChallengeCode } from "@/lib/buyer-challenge-code";
 import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
 import { buildPublicMobileFlowUrl } from "@/lib/public-preview-access";
 
@@ -92,8 +93,17 @@ export async function GET(
       }))
     );
 
+    const buyerChallengeCode = await ensureBuyerChallengeCode(adminClient, {
+      orderId: order.id,
+      currentCode: order.buyer_challenge_code,
+      status: order.status,
+      relayTagRequired: order.relay_tag_required,
+      authRequirementsEvaluatedAt: order.auth_requirements_evaluated_at,
+    });
+
     return NextResponse.json({
       ...order,
+      buyer_challenge_code: buyerChallengeCode,
       auth_photos: await resolveSignedMediaList(adminClient, order.auth_photos),
       checkcheck_certificate_url: await resolveSignedMediaValue(adminClient, order.checkcheck_certificate_url),
       dispute_evidence_buyer: await resolveSignedMediaList(adminClient, order.dispute_evidence_buyer),

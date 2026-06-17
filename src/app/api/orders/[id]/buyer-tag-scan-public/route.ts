@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { ensureBuyerChallengeCode } from '@/lib/buyer-challenge-code'
 import { recordBuyerRelayTagScan } from '@/lib/relay-tags'
 import { assertStorageObjectRefForOrder } from '@/lib/secure-storage'
 
@@ -61,7 +62,15 @@ export async function POST(
       )
     }
 
-    if (!order.buyer_challenge_code || order.buyer_challenge_code.toUpperCase() !== challengeCode.toUpperCase()) {
+    const buyerChallengeCode = await ensureBuyerChallengeCode(createAdminClient(), {
+      orderId,
+      currentCode: order.buyer_challenge_code,
+      status: order.status,
+      relayTagRequired: order.relay_tag_required,
+      authRequirementsEvaluatedAt: order.auth_requirements_evaluated_at,
+    })
+
+    if (!buyerChallengeCode || buyerChallengeCode.toUpperCase() !== challengeCode.toUpperCase()) {
       return NextResponse.json({ error: 'Incorrect challenge code.' }, { status: 403 })
     }
 

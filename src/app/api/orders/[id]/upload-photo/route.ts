@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { ensureBuyerChallengeCode } from '@/lib/buyer-challenge-code'
 import { recordCustodyUpload } from '@/lib/relay-tags'
 import { buildStorageObjectRef, createSignedStorageUrl, sanitizeUploadedFileName } from '@/lib/secure-storage'
 
@@ -62,7 +64,7 @@ export async function POST(
     // Verify challenge code
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, challenge_code, buyer_challenge_code, status, seller_id, buyer_id')
+      .select('id, challenge_code, buyer_challenge_code, status, seller_id, buyer_id, relay_tag_required, auth_requirements_evaluated_at')
       .eq('id', orderId)
       .single()
 
@@ -73,8 +75,17 @@ export async function POST(
     const normalizedFileName = sanitizeUploadedFileName(fileName)
     const normalizedInput = challengeCode?.toUpperCase()
     const isBuyerUpload = ['buyer-tag-live.jpg', 'buyer-pair-live.jpg'].includes(normalizedFileName)
+    const buyerChallengeCode = isBuyerUpload
+      ? await ensureBuyerChallengeCode(createAdminClient(), {
+          orderId,
+          currentCode: order.buyer_challenge_code,
+          status: order.status,
+          relayTagRequired: order.relay_tag_required,
+          authRequirementsEvaluatedAt: order.auth_requirements_evaluated_at,
+        })
+      : null
     const expectedCode = isBuyerUpload
-      ? order.buyer_challenge_code?.toUpperCase()
+      ? buyerChallengeCode?.toUpperCase()
       : order.challenge_code?.toUpperCase()
 
     if (!expectedCode || expectedCode !== normalizedInput) {
