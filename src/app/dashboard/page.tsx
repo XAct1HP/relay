@@ -14,7 +14,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
 import useAuth from "@/hooks/useAuth";
 import type { RelayBalanceLedgerEntry, SellerTier, WithdrawalRequest } from "@/types";
 
@@ -40,6 +39,7 @@ interface RecentMessage {
   lastMessage: string;
   time: string;
   avatar: string;
+  avatarUrl?: string | null;
 }
 
 interface SellerBalanceResponse {
@@ -74,6 +74,32 @@ interface SellerBalanceResponse {
       } | null;
     }
   >;
+}
+
+interface DashboardResponse {
+  metrics: {
+    totalRevenue: number;
+    activeListings: number;
+    ordersThisMonth: number;
+    sellerRating: number;
+    totalSales: number;
+    avgOrderValue: number;
+    revenueTrend: { direction: "up" | "down"; value: string };
+    listingsTrend: { direction: "up" | "down"; value: string };
+    ordersTrend: { direction: "up" | "down"; value: string };
+    ratingTrend: { direction: "up" | "down"; value: string };
+    totalConversations: number;
+  };
+  chartData: ChartDataPoint[];
+  recentOrders: Array<{
+    id: string;
+    shoe: string;
+    price: number;
+    buyer: string;
+    date: string;
+    status: string;
+  }>;
+  recentMessages: RecentMessage[];
 }
 
 function formatMoney(value: number) {
@@ -288,7 +314,7 @@ function OrderRow({ order }: any) {
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${order.statusColor}`}>
                   {order.status}
                 </span>
-                <span className="text-white/40 text-xs">{order.date}</span>
+                <span className="text-white/40 text-xs">{formatRelativeTimestamp(order.date)}</span>
               </div>
             </div>
           </div>
@@ -298,7 +324,7 @@ function OrderRow({ order }: any) {
             {order.status}
           </span>
           <span className="text-[#f5f7fb] font-semibold text-sm sm:text-base">{"$"}{order.price.toFixed(0)}</span>
-          <span className="hidden sm:inline text-white/40 text-sm w-20 text-right">{order.date}</span>
+          <span className="hidden sm:inline text-white/40 text-sm w-20 text-right">{formatRelativeTimestamp(order.date)}</span>
           <ExternalLink className="hidden sm:block w-4 h-4 text-white/30 group-hover:text-[#5f8fff] transition-colors" />
         </div>
       </div>
@@ -310,13 +336,21 @@ function MessageRow({ message }: any) {
   return (
     <Link href={`/messages/${message.id}`}>
       <div className="flex items-center gap-3 py-4 px-4 border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer group">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5f8fff] to-[#7ca6ff] flex items-center justify-center text-sm font-semibold text-white flex-shrink-0">
-          {message.avatar}
-        </div>
+        {message.avatarUrl ? (
+          <img
+            src={message.avatarUrl}
+            alt={message.name}
+            className="w-10 h-10 rounded-full object-cover border border-white/10 flex-shrink-0"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5f8fff] to-[#7ca6ff] flex items-center justify-center text-sm font-semibold text-white flex-shrink-0">
+            {message.avatar}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[#f5f7fb] font-medium">{message.name}</p>
-            <span className="text-white/40 text-xs flex-shrink-0">{message.time}</span>
+            <span className="text-white/40 text-xs flex-shrink-0">{formatRelativeTimestamp(message.time)}</span>
           </div>
           <p className="text-white/60 text-sm truncate">{message.lastMessage}</p>
         </div>
@@ -397,186 +431,50 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (!currentUser?.id) {
+    if (!currentUser?.id || currentUser.role !== "seller") {
       setLoading(false);
       return;
     }
 
-    const userId = currentUser!.id;
     async function fetchDashboardData() {
-      const supabase = createClient();
-
       try {
-        // Fetch all orders for this seller
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("*, listing:listings(brand, model), buyer:profiles(full_name)")
-          .eq("seller_id", userId)
-          .order("created_at", { ascending: false });
+        const response = await fetch("/api/seller/dashboard", { cache: "no-store" });
+        const payload: DashboardResponse | { error?: string } = await response.json();
 
-        // Fetch active listings count
-        const { data: listings } = await supabase
-          .from("listings")
-          .select("id")
-          .eq("seller_id", userId)
-          .eq("status", "active");
-
-        // Fetch recent conversations
-        const { data: conversations } = await supabase
-          .from("conversations")
-          .select("*, messages(*, sender:profiles(full_name))")
-          .contains("participant_ids", [userId])
-          .order("last_message_at", { ascending: false })
-          .limit(5);
-
-        // Fetch seller's average rating from reviews
-        const { data: reviews } = await supabase
-          .from("reviews")
-          .select("rating")
-          .eq("seller_id", userId);
-
-        const avgRating = reviews && reviews.length > 0
-          ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-          : 0;
-
-        // Process orders for metrics
-        if (orders && orders.length > 0) {
-          const completed = orders.filter((o) => o.status === "completed");
-          const now = new Date();
-          const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-
-          const thisMonth = orders.filter((o) => new Date(o.created_at) >= thisMonthStart);
-          const lastMonth = orders.filter((o) => {
-            const d = new Date(o.created_at);
-            return d >= lastMonthStart && d <= lastMonthEnd;
-          });
-
-          const totalRev = completed.reduce(
-            (sum, o) => sum + (o.seller_earnings || 0),
-            0
+        if (!response.ok) {
+          throw new Error(
+            payload && "error" in payload && payload.error
+              ? payload.error
+              : "Failed to load dashboard data"
           );
-          const avgVal =
-            completed.length > 0 ? totalRev / completed.length : 0;
-
-          // Revenue trend (this month earnings vs last month)
-          const thisMonthRev = completed
-            .filter((o) => new Date(o.created_at) >= thisMonthStart)
-            .reduce((sum, o) => sum + (o.seller_earnings || 0), 0);
-          const lastMonthRev = completed
-            .filter((o) => { const d = new Date(o.created_at); return d >= lastMonthStart && d <= lastMonthEnd; })
-            .reduce((sum, o) => sum + (o.seller_earnings || 0), 0);
-          const revPct = lastMonthRev > 0 ? ((thisMonthRev - lastMonthRev) / lastMonthRev * 100).toFixed(1) : "0";
-
-          // Orders trend
-          const ordersPct = lastMonth.length > 0
-            ? ((thisMonth.length - lastMonth.length) / lastMonth.length * 100).toFixed(0)
-            : "0";
-
-          // Listings trend: new listings this month
-          const { count: newListingsThisMonth } = await supabase
-            .from("listings")
-            .select("*", { count: "exact", head: true })
-            .eq("seller_id", userId)
-            .eq("status", "active")
-            .gte("created_at", thisMonthStart.toISOString());
-
-          setMetrics({
-            totalRevenue: totalRev,
-            activeListings: listings?.length || 0,
-            ordersThisMonth: thisMonth.length,
-            sellerRating: Math.round(avgRating * 10) / 10,
-            totalSales: completed.length,
-            avgOrderValue: avgVal,
-            revenueTrend: {
-              direction: Number(revPct) >= 0 ? "up" : "down",
-              value: `${Number(revPct) >= 0 ? "+" : ""}${revPct}%`,
-            },
-            listingsTrend: {
-              direction: "up",
-              value: `+${newListingsThisMonth || 0}`,
-            },
-            ordersTrend: {
-              direction: Number(ordersPct) >= 0 ? "up" : "down",
-              value: `${Number(ordersPct) >= 0 ? "+" : ""}${ordersPct}%`,
-            },
-            ratingTrend: {
-              direction: "up",
-              value: reviews?.length ? `${reviews.length} reviews` : "No reviews",
-            },
-            totalConversations: conversations?.length || 0,
-          });
-
-          // Process recent orders
-          const formatted: RecentOrder[] = orders
-            .slice(0, 5)
-            .map((order) => ({
-              id: order.id,
-              shoe: order.listing
-                ? `${order.listing.brand} ${order.listing.model}`
-                : "Unknown Shoe",
-              price: order.price,
-              buyer: order.buyer?.full_name || "Unknown",
-              date: new Date(order.created_at).toLocaleDateString(),
-              status: order.status.replace(/_/g, " "),
-              statusColor:
-                order.status === "delivered" || order.status === "completed"
-                  ? "bg-green-500/20 text-green-300"
-                  : order.status === "shipped"
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "bg-yellow-500/20 text-yellow-300",
-            }));
-
-          setRecentOrders(formatted);
         }
 
-        // Process conversations/messages
-        if (conversations && conversations.length > 0) {
-          const formatted: RecentMessage[] = conversations
-            .map((conv) => ({
-              id: conv.id,
-              name: "Buyer",
-              lastMessage: conv.last_message || "No messages",
-              time: new Date(conv.last_message_at).toLocaleDateString(),
-              avatar: "B",
-            }))
-            .slice(0, 5);
+        const dashboard = payload as DashboardResponse;
 
-          setRecentMessages(formatted);
-        }
-
-        // Build chart data from orders (grouped by month)
-        const monthlyData: { [key: string]: { revenue: number; orders: number } } = {};
-        orders?.forEach((order) => {
-          if (order.status === "completed") {
-            const date = new Date(order.created_at);
-            const key = date.toLocaleDateString("en-US", {
-              month: "short",
-            });
-            if (!monthlyData[key]) {
-              monthlyData[key] = { revenue: 0, orders: 0 };
-            }
-            monthlyData[key].revenue += order.seller_earnings || 0;
-            monthlyData[key].orders += 1;
-          }
-        });
-
-        const chartPoints: ChartDataPoint[] = Object.entries(monthlyData).map(
-          ([month, data]) => ({
-            month,
-            revenue: data.revenue,
-            orders: data.orders,
-          })
-        );
-
+        setMetrics(dashboard.metrics);
         setChartData(
-          chartPoints.length > 0
-            ? chartPoints
+          dashboard.chartData.length > 0
+            ? dashboard.chartData
             : [{ month: "No data", revenue: 0, orders: 0 }]
         );
+        setRecentOrders(
+          dashboard.recentOrders.map((order) => ({
+            ...order,
+            status: order.status.replace(/_/g, " "),
+            statusColor:
+              order.status === "delivered" || order.status === "completed"
+                ? "bg-green-500/20 text-green-300"
+                : order.status === "shipped"
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "bg-yellow-500/20 text-yellow-300",
+          }))
+        );
+        setRecentMessages(dashboard.recentMessages);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
+        setChartData([{ month: "No data", revenue: 0, orders: 0 }]);
+        setRecentOrders([]);
+        setRecentMessages([]);
       } finally {
         setLoading(false);
       }
