@@ -103,9 +103,15 @@ export function resolveTargetRankForTrigger(
     return steps.reduce((max, step) => Math.max(max, step.rank), 0);
   }
 
-  const matchingStep = steps.find((step) => step.triggers.includes(trigger));
+  const matchingRanks = steps
+    .filter((step) => step.triggers.includes(trigger))
+    .map((step) => step.rank);
 
-  return matchingStep?.rank || null;
+  if (matchingRanks.length === 0) {
+    return null;
+  }
+
+  return Math.max(...matchingRanks);
 }
 
 export function calculatePayoutAllocation(

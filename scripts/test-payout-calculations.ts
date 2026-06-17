@@ -87,6 +87,20 @@ function run() {
   assert.equal(
     resolveTargetRankForTrigger(
       "carrier_acceptance_and_delivery_split",
+      "delivery"
+    ),
+    2
+  );
+  assert.equal(
+    resolveTargetRankForTrigger(
+      "carrier_acceptance_and_delivery_split",
+      "carrier_acceptance"
+    ),
+    1
+  );
+  assert.equal(
+    resolveTargetRankForTrigger(
+      "carrier_acceptance_and_delivery_split",
       "manual_override"
     ),
     2

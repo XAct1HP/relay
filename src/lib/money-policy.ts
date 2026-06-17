@@ -391,18 +391,41 @@ export function determineFundsEligibility(
 export function calculateExposure(
   order: MoneyPolicyOrderLike,
   sellerTier: SellerTier,
-  releasedAvailableAmountCents?: number
+  releasedAvailableReleaseKeys?: Set<string>
 ) {
   if (sellerTier === "tier_1") {
     return 0;
   }
 
-  if (!isReviewWindowActive(order, new Date())) {
+  const status = String(order.status || "").trim().toLowerCase();
+  if (["completed", "refunded", "cancelled"].includes(status)) {
     return 0;
   }
 
-  // TODO: replace this released-funds exposure rule with risk-weighted exposure scoring.
-  return Math.max(0, Math.round(releasedAvailableAmountCents || 0));
+  const orderSubtotalCents = resolveOrderSubtotalCents(order);
+  if (orderSubtotalCents <= 0) {
+    return 0;
+  }
+
+  const releaseKeys = releasedAvailableReleaseKeys || new Set<string>();
+
+  if (sellerTier === "tier_2") {
+    return releaseKeys.has("delivery") ? orderSubtotalCents : 0;
+  }
+
+  const carrierExposureCents = Math.round((orderSubtotalCents * 5000) / 10000);
+  const deliveryExposureCents = Math.max(0, orderSubtotalCents - carrierExposureCents);
+
+  let exposureCents = 0;
+  if (releaseKeys.has("carrier_acceptance")) {
+    exposureCents += carrierExposureCents;
+  }
+  if (releaseKeys.has("delivery")) {
+    exposureCents += deliveryExposureCents;
+  }
+
+  // TODO: replace this released-stage exposure rule with risk-weighted exposure scoring.
+  return exposureCents;
 }
 
 async function loadOrderMoneyContext(
@@ -663,13 +686,13 @@ async function getOpenExposureHold(
   return data || null;
 }
 
-async function getReleasedAvailableAmountCentsForOrder(
+async function getReleasedAvailableCreditStateForOrder(
   adminClient: SupabaseAdminClient,
   orderId: string
 ) {
   const { data, error } = await adminClient
     .from("relay_balance_ledger")
-    .select("amount_cents")
+    .select("amount_cents, metadata")
     .eq("order_id", orderId)
     .eq("type", "order_available_credit")
     .in("status", Array.from(ACTIVE_LEDGER_STATUSES));
@@ -678,9 +701,23 @@ async function getReleasedAvailableAmountCentsForOrder(
     throw new Error(error.message || "Failed to load released available credits");
   }
 
-  return (data || []).reduce((sum: number, row: any) => {
+  const releaseKeys = new Set<string>();
+  const releasedAmountCents = (data || []).reduce((sum: number, row: any) => {
+    const releaseKey =
+      row?.metadata && typeof row.metadata.release_key === "string"
+        ? row.metadata.release_key
+        : null;
+    if (releaseKey) {
+      releaseKeys.add(releaseKey);
+    }
+
     return sum + Math.max(0, Number(row.amount_cents || 0));
   }, 0);
+
+  return {
+    releasedAmountCents,
+    releaseKeys,
+  };
 }
 
 function normalizeMoneyAmountCents(value: number) {
@@ -1288,14 +1325,14 @@ export async function createExposureHold(
     await loadOrderMoneyContext(adminClient, orderId)
   );
   const sellerTier = resolveSellerTier(order);
-  const releasedAvailableAmountCents = await getReleasedAvailableAmountCentsForOrder(
+  const releasedAvailableCreditState = await getReleasedAvailableCreditStateForOrder(
     adminClient,
     order.id
   );
   const exposureCents = calculateExposure(
     order,
     sellerTier,
-    releasedAvailableAmountCents
+    releasedAvailableCreditState.releaseKeys
   );
   const existingHold = await getOpenExposureHold(adminClient, order.id);
 
