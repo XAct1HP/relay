@@ -539,16 +539,6 @@ export default function SellerTagsPage() {
                         {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
                         {order.shipping_tracking_number}
                       </span>
-                      {order.shipping_label_url && (
-                        <a
-                          href={order.shipping_label_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#9ab8ff] hover:text-white transition-colors underline underline-offset-2"
-                        >
-                          View label
-                        </a>
-                      )}
                     </div>
                   )}
 
