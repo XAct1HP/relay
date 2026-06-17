@@ -66,11 +66,13 @@ function StatusBadge({
   status: string;
 }) {
   const map: Record<string, string> = {
-    unused: "bg-[#5f8fff]/15 text-[#7ca6ff]",
+    unassigned: "bg-[#5f8fff]/15 text-[#7ca6ff]",
     assigned_to_seller: "bg-[#5f8fff]/15 text-[#7ca6ff]",
-    used: "bg-emerald-500/15 text-emerald-300",
-    in_transit: "bg-amber-500/15 text-amber-300",
-    delivered: "bg-emerald-500/15 text-emerald-300",
+    bound_to_order: "bg-amber-500/15 text-amber-300",
+    submitted_by_seller: "bg-amber-500/15 text-amber-300",
+    shipped: "bg-amber-500/15 text-amber-300",
+    buyer_scanned: "bg-emerald-500/15 text-emerald-300",
+    completed: "bg-emerald-500/15 text-emerald-300",
     voided: "bg-red-500/15 text-red-300",
     disputed: "bg-red-500/15 text-red-300",
   };
@@ -789,8 +791,12 @@ export default function AdminTagsPage() {
                       ? "border-l-red-400"
                       : tag.status === "assigned_to_seller"
                         ? "border-l-[#5f8fff]"
-                        : tag.status === "used"
+                        : tag.status === "buyer_scanned" || tag.status === "completed"
                           ? "border-l-emerald-400"
+                          : tag.status === "bound_to_order" ||
+                              tag.status === "submitted_by_seller" ||
+                              tag.status === "shipped"
+                            ? "border-l-amber-400"
                           : "border-l-white/10";
 
                   return (
