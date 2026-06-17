@@ -76,6 +76,12 @@ Optional direct-request headers for Preview:
 ```powershell
 $PreviewHeaders = @{
   "x-vercel-protection-bypass" = $VercelBypassToken
+  "Content-Type" = "application/json"
+}
+
+$PreviewCronHeaders = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
 }
 ```
 
@@ -95,10 +101,11 @@ Optional cron helper:
 function Invoke-RelayCron {
   param([string]$Path)
 
-  Invoke-RestMethod `
-    -Method GET `
-    -Uri "$BaseUrl$Path" `
-    -Headers @{ Authorization = "Bearer $CronSecret" }
+  $Headers = @{
+    Authorization = "Bearer $CronSecret"
+  }
+
+  Invoke-RestMethod -Method GET -Uri "$BaseUrl$Path" -Headers $Headers
 }
 ```
 
@@ -108,13 +115,12 @@ Optional Preview cron helper:
 function Invoke-RelayPreviewCron {
   param([string]$Path)
 
-  Invoke-RestMethod `
-    -Method GET `
-    -Uri "$PreviewUrl$Path" `
-    -Headers @{
-      Authorization = "Bearer $CronSecret"
-      "x-vercel-protection-bypass" = $VercelBypassToken
-    }
+  $Headers = @{
+    Authorization = "Bearer $CronSecret"
+    "x-vercel-protection-bypass" = $VercelBypassToken
+  }
+
+  Invoke-RestMethod -Method GET -Uri "$PreviewUrl$Path" -Headers $Headers
 }
 ```
 
@@ -127,16 +133,18 @@ function Invoke-RelayShippoTest {
     [string]$TrackingStatus
   )
 
-  Invoke-RestMethod `
-    -Method POST `
-    -Uri "$BaseUrl/api/shippo/webhook" `
-    -ContentType "application/json" `
-    -Body (@{
-      test = $true
-      source = "relay_test_shippo"
-      trackingNumber = $TrackingNumber
-      trackingStatus = $TrackingStatus
-    } | ConvertTo-Json)
+  $Headers = @{
+    "Content-Type" = "application/json"
+  }
+
+  $Body = @{
+    test = $true
+    source = "relay_test_shippo"
+    trackingNumber = $TrackingNumber
+    trackingStatus = $TrackingStatus
+  } | ConvertTo-Json
+
+  Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 }
 ```
 
@@ -149,19 +157,19 @@ function Invoke-RelayPreviewShippoTest {
     [string]$TrackingStatus
   )
 
-  Invoke-RestMethod `
-    -Method POST `
-    -Uri "$PreviewUrl/api/shippo/webhook" `
-    -ContentType "application/json" `
-    -Headers @{
-      "x-vercel-protection-bypass" = $VercelBypassToken
-    } `
-    -Body (@{
-      test = $true
-      source = "relay_test_shippo"
-      trackingNumber = $TrackingNumber
-      trackingStatus = $TrackingStatus
-    } | ConvertTo-Json)
+  $Headers = @{
+    "x-vercel-protection-bypass" = $VercelBypassToken
+    "Content-Type" = "application/json"
+  }
+
+  $Body = @{
+    test = $true
+    source = "relay_test_shippo"
+    trackingNumber = $TrackingNumber
+    trackingStatus = $TrackingStatus
+  } | ConvertTo-Json
+
+  Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 }
 ```
 
@@ -477,37 +485,37 @@ Command:
 
 ```powershell
 $TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
+$Headers = @{
+  "Content-Type" = "application/json"
+}
 
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$BaseUrl/api/shippo/webhook" `
-  -ContentType "application/json" `
-  -Body (@{
-    test = $true
-    source = "relay_test_shippo"
-    trackingNumber = $TrackingNumber
-    trackingStatus = "TRANSIT"
-  } | ConvertTo-Json)
+$Body = @{
+  test = $true
+  source = "relay_test_shippo"
+  trackingNumber = $TrackingNumber
+  trackingStatus = "TRANSIT"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 ```
 
 Preview version:
 
 ```powershell
 $TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
+$Headers = @{
+  "x-vercel-protection-bypass" = $VercelBypassToken
+  "Content-Type" = "application/json"
+}
 
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$PreviewUrl/api/shippo/webhook" `
-  -ContentType "application/json" `
-  -Headers @{
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  } `
-  -Body (@{
-    test = $true
-    source = "relay_test_shippo"
-    trackingNumber = $TrackingNumber
-    trackingStatus = "TRANSIT"
-  } | ConvertTo-Json)
+$Body = @{
+  test = $true
+  source = "relay_test_shippo"
+  trackingNumber = $TrackingNumber
+  trackingStatus = "TRANSIT"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 ```
 
 CLI version:
@@ -526,37 +534,37 @@ vercel curl /api/shippo/webhook `
 
 ```powershell
 $TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
+$Headers = @{
+  "Content-Type" = "application/json"
+}
 
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$BaseUrl/api/shippo/webhook" `
-  -ContentType "application/json" `
-  -Body (@{
-    test = $true
-    source = "relay_test_shippo"
-    trackingNumber = $TrackingNumber
-    trackingStatus = "DELIVERED"
-  } | ConvertTo-Json)
+$Body = @{
+  test = $true
+  source = "relay_test_shippo"
+  trackingNumber = $TrackingNumber
+  trackingStatus = "DELIVERED"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 ```
 
 Preview version:
 
 ```powershell
 $TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
+$Headers = @{
+  "x-vercel-protection-bypass" = $VercelBypassToken
+  "Content-Type" = "application/json"
+}
 
-Invoke-RestMethod `
-  -Method POST `
-  -Uri "$PreviewUrl/api/shippo/webhook" `
-  -ContentType "application/json" `
-  -Headers @{
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  } `
-  -Body (@{
-    test = $true
-    source = "relay_test_shippo"
-    trackingNumber = $TrackingNumber
-    trackingStatus = "DELIVERED"
-  } | ConvertTo-Json)
+$Body = @{
+  test = $true
+  source = "relay_test_shippo"
+  trackingNumber = $TrackingNumber
+  trackingStatus = "DELIVERED"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
 ```
 
 CLI version:
@@ -574,22 +582,22 @@ vercel curl /api/shippo/webhook `
 ### Auto-complete cron
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$BaseUrl/api/cron/auto-complete" `
-  -Headers @{ Authorization = "Bearer $CronSecret" }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+}
+
+Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/auto-complete" -Headers $Headers
 ```
 
 Preview version:
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$PreviewUrl/api/cron/auto-complete" `
-  -Headers @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
+
+Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/auto-complete" -Headers $Headers
 ```
 
 CLI version:
@@ -605,43 +613,43 @@ vercel curl /api/cron/auto-complete `
 ### Trust evaluation cron
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$BaseUrl/api/cron/trust-evaluate" `
-  -Headers @{ Authorization = "Bearer $CronSecret" }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+}
+
+Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/trust-evaluate" -Headers $Headers
 ```
 
 Preview version:
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$PreviewUrl/api/cron/trust-evaluate" `
-  -Headers @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
+
+Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/trust-evaluate" -Headers $Headers
 ```
 
 ### Tag replenishment cron
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$BaseUrl/api/cron/tag-replenishment" `
-  -Headers @{ Authorization = "Bearer $CronSecret" }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+}
+
+Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/tag-replenishment" -Headers $Headers
 ```
 
 Preview version:
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$PreviewUrl/api/cron/tag-replenishment" `
-  -Headers @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
+
+Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/tag-replenishment" -Headers $Headers
 ```
 
 ### Legacy reserve release cron
@@ -649,22 +657,22 @@ Invoke-RestMethod `
 Only run this if you are specifically regression-testing legacy reserve behavior:
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$BaseUrl/api/cron/release-reserves" `
-  -Headers @{ Authorization = "Bearer $CronSecret" }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+}
+
+Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/release-reserves" -Headers $Headers
 ```
 
 Preview version:
 
 ```powershell
-Invoke-RestMethod `
-  -Method GET `
-  -Uri "$PreviewUrl/api/cron/release-reserves" `
-  -Headers @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
+$Headers = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
+
+Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/release-reserves" -Headers $Headers
 ```
 
 ## 14. Minimum Smoke Pass
