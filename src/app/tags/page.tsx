@@ -76,16 +76,71 @@ export default function SellerTagsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("inventory");
   const [showUsed, setShowUsed] = useState(false);
 
-  // Show success message if redirected from Stripe
+  // Recover tag bundle purchases even if Stripe webhook delivery is delayed or missing.
   useEffect(() => {
     const purchased = searchParams.get("purchased");
-    if (purchased) {
-      const bundle = TAG_BUNDLES.find((b) => b.id === purchased);
-      if (bundle) {
-        setSuccess(`Payment confirmed! Your ${bundle.name} pack (${bundle.quantity} tags) is being prepared for shipment.`);
-        setActiveTab("orders");
+    const sessionId = searchParams.get("session_id");
+
+    if (!purchased) {
+      return;
+    }
+
+    const bundle = TAG_BUNDLES.find((b) => b.id === purchased);
+    if (!bundle) {
+      return;
+    }
+    const purchaseSuccessMessage = `Payment confirmed! Your ${bundle.name} pack (${bundle.quantity} tags) is being prepared for shipment.`;
+
+    let cancelled = false;
+
+    async function finalizeTagCheckout() {
+      if (!sessionId) {
+        if (!cancelled) {
+          setSuccess(purchaseSuccessMessage);
+          setActiveTab("orders");
+          void loadOrders();
+        }
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/stripe/checkout/complete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sessionId }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Failed to finalize tag purchase");
+        }
+
+        if (!cancelled) {
+          setSuccess(purchaseSuccessMessage);
+          setError("");
+          setActiveTab("orders");
+          await loadOrders();
+          await loadData();
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Payment succeeded, but Relay could not finish creating the tag order yet."
+          );
+          setActiveTab("orders");
+        }
       }
     }
+
+    void finalizeTagCheckout();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   useEffect(() => {

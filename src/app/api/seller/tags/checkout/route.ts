@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${request.headers.get("origin")}/tags?purchased=${bundle.id}`,
+      success_url: `${request.headers.get("origin")}/tags?purchased=${bundle.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${request.headers.get("origin")}/tags`,
       metadata: {
         type: "tag_bundle_purchase",
