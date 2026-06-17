@@ -332,6 +332,10 @@ export interface TagOrder {
   stripe_payment_intent_id: string | null;
   shipping_tracking_number: string | null;
   shipping_carrier: string | null;
+  shipping_label_url: string | null;
+  shippo_transaction_id?: string | null;
+  shippo_shipment_id?: string | null;
+  shippo_rate_id?: string | null;
   admin_notes: string | null;
   paid_at: string | null;
   shipped_at: string | null;

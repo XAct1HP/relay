@@ -102,8 +102,6 @@ export default function AdminTagsPage() {
 
   // Fulfillment form state
   const [fulfillOrderId, setFulfillOrderId] = useState<string | null>(null);
-  const [fulfillTracking, setFulfillTracking] = useState("");
-  const [fulfillCarrier, setFulfillCarrier] = useState("");
   const [fulfillNotes, setFulfillNotes] = useState("");
 
   // Drag-and-drop from orders to import
@@ -234,10 +232,6 @@ export default function AdminTagsPage() {
 
     try {
       const body: Record<string, unknown> = { status };
-      if (status === "shipped") {
-        body.trackingNumber = fulfillTracking;
-        body.carrier = fulfillCarrier;
-      }
       if (fulfillNotes) {
         body.adminNotes = fulfillNotes;
       }
@@ -255,8 +249,6 @@ export default function AdminTagsPage() {
 
       setSuccess("Tag order updated.");
       setFulfillOrderId(null);
-      setFulfillTracking("");
-      setFulfillCarrier("");
       setFulfillNotes("");
       await loadTagOrders();
     } catch (err) {
@@ -424,11 +416,23 @@ export default function AdminTagsPage() {
                             {sellerLabel(order.seller as any)} / {formatBundlePrice(order.price_cents)} / Paid {formatDate(order.paid_at)}
                           </p>
                           {order.shipping_tracking_number && (
-                            <p className="text-[#7ca6ff] text-xs flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-[#7ca6ff]">
                               <Truck className="w-3.5 h-3.5" />
-                              {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
-                              {order.shipping_tracking_number}
-                            </p>
+                              <span>
+                                {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
+                                {order.shipping_tracking_number}
+                              </span>
+                              {order.shipping_label_url && (
+                                <a
+                                  href={order.shipping_label_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[#9ab8ff] hover:text-white transition-colors underline underline-offset-2"
+                                >
+                                  View label
+                                </a>
+                              )}
+                            </div>
                           )}
                         </div>
 
@@ -447,8 +451,7 @@ export default function AdminTagsPage() {
                               <button
                                 onClick={() => {
                                   setFulfillOrderId(fulfillOrderId === order.id ? null : order.id);
-                                  setFulfillTracking(order.shipping_tracking_number || "");
-                                  setFulfillCarrier(order.shipping_carrier || "");
+                                  setFulfillNotes(order.admin_notes || "");
                                 }}
                                 disabled={saving}
                                 className="relay-button-primary text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
@@ -473,25 +476,11 @@ export default function AdminTagsPage() {
 
                       {/* Inline Shipping Form */}
                       {fulfillOrderId === order.id && (
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
-                          <div className="flex-1">
-                            <label className="block text-xs text-white/40 mb-1">Tracking #</label>
-                            <input
-                              value={fulfillTracking}
-                              onChange={(e) => setFulfillTracking(e.target.value)}
-                              placeholder="1Z999AA10123456784"
-                              className="relay-input w-full text-sm"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="block text-xs text-white/40 mb-1">Carrier</label>
-                            <input
-                              value={fulfillCarrier}
-                              onChange={(e) => setFulfillCarrier(e.target.value)}
-                              placeholder="UPS, USPS, FedEx..."
-                              className="relay-input w-full text-sm"
-                            />
-                          </div>
+                        <div className="mt-3 flex flex-col gap-3">
+                          <p className="text-xs text-white/45">
+                            Relay will purchase a Shippo label from Relay HQ at 411 E Washington St,
+                            Ann Arbor, MI 48104 to the seller&apos;s saved ship-from address.
+                          </p>
                           <div className="flex-1">
                             <label className="block text-xs text-white/40 mb-1">Notes (optional)</label>
                             <input
@@ -504,13 +493,16 @@ export default function AdminTagsPage() {
                           <div className="flex gap-2 flex-shrink-0">
                             <button
                               onClick={() => handleOrderStatusUpdate(order.id, "shipped")}
-                              disabled={saving || !fulfillTracking.trim()}
+                              disabled={saving}
                               className="relay-button-accent text-sm disabled:opacity-50 whitespace-nowrap"
                             >
-                              Confirm
+                              Create Shippo Label
                             </button>
                             <button
-                              onClick={() => setFulfillOrderId(null)}
+                              onClick={() => {
+                                setFulfillOrderId(null);
+                                setFulfillNotes("");
+                              }}
                               className="relay-button-secondary text-sm"
                             >
                               Cancel
@@ -545,6 +537,24 @@ export default function AdminTagsPage() {
                       <p className="text-white/40 text-xs">
                         {formatBundlePrice(order.price_cents)} / Fulfilled {formatDate(order.fulfilled_at)}
                       </p>
+                      {order.shipping_tracking_number && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#7ca6ff]">
+                          <span>
+                            {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
+                            {order.shipping_tracking_number}
+                          </span>
+                          {order.shipping_label_url && (
+                            <a
+                              href={order.shipping_label_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[#9ab8ff] hover:text-white transition-colors underline underline-offset-2"
+                            >
+                              View label
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${orderStatusTone(order.status)}`}>
                       {order.status}
