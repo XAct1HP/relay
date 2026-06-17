@@ -49,6 +49,12 @@ interface MoneyMutationOptions {
   actorUserId?: string | null;
   now?: Date;
   forceReleaseKeys?: FundsReleaseKey[];
+  exposureReleaseKey?: FundsReleaseKey;
+  exposureTrigger?:
+    | "buyer_confirmation"
+    | "review_window_expiry"
+    | "delivery"
+    | "carrier_acceptance";
 }
 
 interface MoneyPolicyOrderLike {
@@ -300,7 +306,9 @@ function buildFundsEligibilityStages(
   const carrierAccepted = hasCarrierAcceptance(order);
 
   if (sellerTier === "tier_3") {
-    const carrierAmountCents = Math.floor(amountBasisCents / 2);
+    // Keep release stages aligned with the payout engine's cumulative rounding
+    // so odd-cent proceeds do not get stranded between carrier acceptance and delivery.
+    const carrierAmountCents = Math.round((amountBasisCents * 5000) / 10000);
     const deliveryAmountCents = Math.max(0, amountBasisCents - carrierAmountCents);
 
     return [
@@ -382,7 +390,8 @@ export function determineFundsEligibility(
 
 export function calculateExposure(
   order: MoneyPolicyOrderLike,
-  sellerTier: SellerTier
+  sellerTier: SellerTier,
+  releasedAvailableAmountCents?: number
 ) {
   if (sellerTier === "tier_1") {
     return 0;
@@ -392,8 +401,8 @@ export function calculateExposure(
     return 0;
   }
 
-  // TODO: replace this flat exposure rule with risk-weighted exposure scoring.
-  return resolveOrderSubtotalCents(order);
+  // TODO: replace this released-funds exposure rule with risk-weighted exposure scoring.
+  return Math.max(0, Math.round(releasedAvailableAmountCents || 0));
 }
 
 async function loadOrderMoneyContext(
@@ -652,6 +661,26 @@ async function getOpenExposureHold(
   }
 
   return data || null;
+}
+
+async function getReleasedAvailableAmountCentsForOrder(
+  adminClient: SupabaseAdminClient,
+  orderId: string
+) {
+  const { data, error } = await adminClient
+    .from("relay_balance_ledger")
+    .select("amount_cents")
+    .eq("order_id", orderId)
+    .eq("type", "order_available_credit")
+    .in("status", Array.from(ACTIVE_LEDGER_STATUSES));
+
+  if (error) {
+    throw new Error(error.message || "Failed to load released available credits");
+  }
+
+  return (data || []).reduce((sum: number, row: any) => {
+    return sum + Math.max(0, Number(row.amount_cents || 0));
+  }, 0);
 }
 
 function normalizeMoneyAmountCents(value: number) {
@@ -1259,28 +1288,35 @@ export async function createExposureHold(
     await loadOrderMoneyContext(adminClient, orderId)
   );
   const sellerTier = resolveSellerTier(order);
-  const exposureCents = calculateExposure(order, sellerTier);
+  const releasedAvailableAmountCents = await getReleasedAvailableAmountCentsForOrder(
+    adminClient,
+    order.id
+  );
+  const exposureCents = calculateExposure(
+    order,
+    sellerTier,
+    releasedAvailableAmountCents
+  );
+  const existingHold = await getOpenExposureHold(adminClient, order.id);
 
   if (exposureCents <= 0) {
     return {
       created: false,
       reason: "no_exposure_required",
       amountCents: 0,
+      hold: existingHold || undefined,
     };
   }
 
-  const existingHold = await getOpenExposureHold(adminClient, order.id);
-  if (existingHold) {
-    return {
-      created: false,
-      reason: "existing_open_hold",
-      amountCents: Number(existingHold.amount_cents || 0),
-      hold: existingHold,
-    };
-  }
+  const existingAmountCents = Number(existingHold?.amount_cents || 0);
+  const deltaExposureCents = Math.max(0, exposureCents - existingAmountCents);
+  const exposureReleaseKey = options?.exposureReleaseKey || options?.exposureTrigger || "delivery";
 
-  const { data: hold, error } = await adminClient
-    .from("exposure_holds")
+  let hold = existingHold;
+
+  if (!existingHold) {
+    const { data: insertedHold, error } = await adminClient
+      .from("exposure_holds")
       .insert({
         seller_id: order.seller_id,
         order_id: order.id,
@@ -1288,52 +1324,83 @@ export async function createExposureHold(
         status: "active",
         reason: `review_window_exposure_${sellerTier}`,
       })
-    .select("*")
-    .single();
+      .select("*")
+      .single();
 
-  if (error) {
-    const recoveredHold = await getOpenExposureHold(adminClient, order.id);
-    if (recoveredHold) {
-      return {
-        created: false,
-        reason: "existing_open_hold",
-        amountCents: Number(recoveredHold.amount_cents || 0),
-        hold: recoveredHold,
-      };
+    if (error) {
+      const recoveredHold = await getOpenExposureHold(adminClient, order.id);
+      if (recoveredHold) {
+        hold = recoveredHold;
+      } else {
+        throw new Error(error.message || "Failed to create exposure hold");
+      }
+    } else {
+      hold = insertedHold;
+    }
+  } else if (existingAmountCents !== exposureCents || existingHold.status !== "active") {
+    const { data: updatedHold, error } = await adminClient
+      .from("exposure_holds")
+      .update({
+        amount_cents: exposureCents,
+        status: "active",
+        reason: `review_window_exposure_${sellerTier}`,
+        released_at: null,
+      })
+      .eq("id", existingHold.id)
+      .select("*")
+      .single();
+
+    if (error || !updatedHold) {
+      throw new Error(error?.message || "Failed to update exposure hold");
     }
 
-    throw new Error(error.message || "Failed to create exposure hold");
+    hold = updatedHold;
   }
 
-  const ledgerWrite = await insertLedgerEntryIdempotently(adminClient, {
-    sellerId: order.seller_id,
-    orderId: order.id,
-    type: "exposure_hold_created",
-    amountCents: exposureCents,
-    idempotencyKey: `money:order:${order.id}:exposure_hold_created`,
-    metadata: {
-      source: "relay_balance_policy",
-      exposure_hold_id: hold.id,
-      hold_status: hold.status,
-    },
-  });
+  let ledgerEntry: any = null;
+  let created = false;
 
-  await logMoneyMovement(adminClient, options, {
-    orderId: order.id,
-    sellerId: order.seller_id,
-    eventType: "money.exposure_hold_created",
-    metadata: {
-      amountCents: exposureCents,
-      exposureHoldId: hold.id,
-      ledgerEntryId: ledgerWrite.entry.id,
-    },
-  });
+  if (deltaExposureCents > 0 && hold) {
+    const ledgerWrite = await insertLedgerEntryIdempotently(adminClient, {
+      sellerId: order.seller_id,
+      orderId: order.id,
+      type: "exposure_hold_created",
+      amountCents: deltaExposureCents,
+      idempotencyKey: `money:order:${order.id}:exposure_hold_created:${exposureReleaseKey}`,
+      metadata: {
+        source: "relay_balance_policy",
+        exposure_hold_id: hold.id,
+        hold_status: hold.status,
+        total_exposure_cents: exposureCents,
+        release_key: exposureReleaseKey,
+        release_trigger: options?.exposureTrigger || exposureReleaseKey,
+      },
+    });
+
+    ledgerEntry = ledgerWrite.entry;
+    created = ledgerWrite.created;
+
+    if (ledgerWrite.created) {
+      await logMoneyMovement(adminClient, options, {
+        orderId: order.id,
+        sellerId: order.seller_id,
+        eventType: "money.exposure_hold_created",
+        metadata: {
+          amountCents: deltaExposureCents,
+          totalExposureCents: exposureCents,
+          exposureHoldId: hold.id,
+          ledgerEntryId: ledgerWrite.entry.id,
+          releaseKey: exposureReleaseKey,
+        },
+      });
+    }
+  }
 
   return {
-    created: true,
+    created,
     amountCents: exposureCents,
     hold,
-    ledgerEntry: ledgerWrite.entry,
+    ledgerEntry,
   };
 }
 

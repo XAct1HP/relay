@@ -279,6 +279,16 @@ async function syncExposureHoldForTrigger(
     forceRelease?: boolean;
   }
 ) {
+  if (input.trigger === "carrier_acceptance" && input.sellerTier === "tier_3") {
+    return createExposureHold(input.orderId, {
+      adminClient,
+      actorUserId: input.actorUserId || null,
+      actorRole: input.actorRole,
+      exposureReleaseKey: "carrier_acceptance",
+      exposureTrigger: "carrier_acceptance",
+    });
+  }
+
   if (
     input.trigger === "delivery" &&
     (input.sellerTier === "tier_2" || input.sellerTier === "tier_3")
@@ -287,6 +297,8 @@ async function syncExposureHoldForTrigger(
       adminClient,
       actorUserId: input.actorUserId || null,
       actorRole: input.actorRole,
+      exposureReleaseKey: "delivery",
+      exposureTrigger: "delivery",
     });
   }
 
