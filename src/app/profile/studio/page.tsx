@@ -199,60 +199,91 @@ export default function ProfileStudioPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="space-y-2 mb-8">
-        <p className="relay-eyebrow text-relay-accent">CUSTOMIZE</p>
-        <h1 className="relay-title">Profile Studio</h1>
+      {/* Page Header with gradient accent */}
+      <div className="relative mb-10 overflow-hidden rounded-[1.5rem] p-8" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.12) 0%, rgba(124, 166, 255, 0.04) 50%, rgba(95, 143, 255, 0.08) 100%)' }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 30% 50%, rgba(95, 143, 255, 0.15) 0%, transparent 70%)' }} />
+        <div className="relative z-10">
+          <p className="relay-eyebrow text-relay-accent tracking-widest mb-2">CUSTOMIZE</p>
+          <h1 className="relay-title text-3xl font-extrabold tracking-tight">Profile Studio</h1>
+          <p className="text-white/50 text-sm mt-2">Make your shop stand out.</p>
+        </div>
+        <Sparkles size={64} className="absolute right-8 top-1/2 -translate-y-1/2 text-relay-accent/10" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Section 1 - Branding */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Camera size={24} className="text-relay-accent" /> Branding</h2>
-            <div className="mb-8">
-              <label className="block text-sm font-semibold mb-3">Banner Image</label>
-              <div className="relative w-full aspect-video rounded-xl border-2 border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-colors flex items-center justify-center overflow-hidden group" onClick={() => bannerInputRef.current?.click()}>
-                {bannerPreview ? (<img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />) : (
-                  <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.1) 0%, rgba(124, 166, 255, 0.05) 100%)' }}>
-                    <div className="text-center"><Upload className="mx-auto mb-3 text-relay-accent" size={32} /><p className="text-sm font-semibold">Click to upload banner</p><p className="text-xs text-white/50">16:5 aspect ratio recommended</p></div>
-                  </div>
-                )}
-                <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
-              </div>
-            </div>
-            <div className="mb-8">
-              <label className="block text-sm font-semibold mb-3">Avatar</label>
-              <div className="flex items-center gap-6">
-                <div className="relative h-32 w-32 rounded-full border-4 border-white/10 bg-gradient-to-br from-relay-accent-light to-relay-accent flex-shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity overflow-hidden group" onClick={() => avatarInputRef.current?.click()}>
-                  {avatarPreview ? (<img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />) : (<div className="text-3xl font-bold text-relay-bg">PK</div>)}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera size={32} className="text-white" /></div>
-                  <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+          <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
+            {/* Gradient top accent bar */}
+            <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, ' + activeTheme.accent + ' 0%, ' + activeTheme.accentLight + ' 50%, transparent 100%)' }} />
+            <div className="p-8">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Camera size={22} className="text-relay-accent" /> Branding</h2>
+              <div className="mb-8">
+                <label className="block text-sm font-semibold mb-3 text-white/70">Banner Image</label>
+                <div className="relative w-full aspect-video rounded-xl border-2 border-dashed border-white/15 cursor-pointer transition-all hover:border-relay-accent/40 hover:shadow-lg hover:shadow-relay-accent/5 flex items-center justify-center overflow-hidden group" onClick={() => bannerInputRef.current?.click()}>
+                  {bannerPreview ? (
+                    <>
+                      <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="bg-white/10 backdrop-blur-md rounded-xl px-4 py-2 flex items-center gap-2">
+                          <Camera size={18} className="text-white" />
+                          <span className="text-sm font-medium text-white">Change Banner</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center relative">
+                      <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.12) 0%, rgba(124, 166, 255, 0.03) 40%, rgba(95, 143, 255, 0.08) 100%)' }} />
+                      <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 80%, rgba(95, 143, 255, 0.1) 0%, transparent 60%)' }} />
+                      <div className="relative text-center z-10">
+                        <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-relay-accent/10 border border-relay-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                          <Upload className="text-relay-accent" size={28} />
+                        </div>
+                        <p className="text-sm font-semibold text-white/80">Drop your banner here or click to upload</p>
+                        <p className="text-xs text-white/40 mt-1">16:5 aspect ratio recommended</p>
+                      </div>
+                    </div>
+                  )}
+                  <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
                 </div>
-                <div><p className="text-sm text-white/60">Square image recommended (128px)</p><p className="text-xs text-white/40 mt-2">Click to change your profile picture</p></div>
               </div>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2">Display Name</label>
-              <input type="text" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" placeholder="Your display name" />
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2">Shop Name</label>
-              <input type="text" value={shopName} onChange={(e) => { setShopName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" placeholder="Your shop name" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-2">Bio</label>
-              <textarea value={bio} onChange={(e) => { setBio(e.target.value.slice(0, 200)); setHasChanges(true); }} maxLength={200} rows={3} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors resize-none" placeholder="Tell buyers about your shop..." />
-              <p className="text-xs text-white/50 mt-2">{bio.length}/200 characters</p>
+              <div className="mb-8">
+                <label className="block text-sm font-semibold mb-3 text-white/70">Avatar</label>
+                <div className="flex items-center gap-6">
+                  <div className="relative h-28 w-28 rounded-full border-4 border-white/10 bg-gradient-to-br from-relay-accent-light to-relay-accent flex-shrink-0 flex items-center justify-center cursor-pointer hover:border-relay-accent/40 transition-all hover:shadow-lg hover:shadow-relay-accent/20 overflow-hidden group" onClick={() => avatarInputRef.current?.click()}>
+                    {avatarPreview ? (<img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />) : (<div className="text-3xl font-bold text-relay-bg">PK</div>)}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Camera size={28} className="text-white" /></div>
+                    <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white/60">Square image recommended</p>
+                    <p className="text-xs text-white/35 mt-1">Click to change your profile picture</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mb-5">
+                <label className="block text-sm font-semibold mb-2 text-white/70">Display Name</label>
+                <input type="text" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" placeholder="Your display name" />
+              </div>
+              <div className="mb-5">
+                <label className="block text-sm font-semibold mb-2 text-white/70">Shop Name</label>
+                <input type="text" value={shopName} onChange={(e) => { setShopName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" placeholder="Your shop name" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-white/70">Bio</label>
+                <textarea value={bio} onChange={(e) => { setBio(e.target.value.slice(0, 200)); setHasChanges(true); }} maxLength={200} rows={3} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all resize-none" placeholder="Tell buyers about your shop..." />
+                <p className="text-xs text-white/40 mt-1.5">{bio.length}/200 characters</p>
+              </div>
             </div>
           </div>
 
           {/* Section 2 - Account */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><User size={24} className="text-relay-accent" /> Account</h2>
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2">Username</label>
+          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8 hover:border-white/15 transition-colors">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><User size={22} className="text-relay-accent" /> Account</h2>
+            <div className="mb-5">
+              <label className="block text-sm font-semibold mb-2 text-white/70">Username</label>
               <div className="relative">
-                <input type="text" value={username} onChange={(e) => handleUsernameChange(e.target.value)} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 pr-10 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" placeholder="username" />
+                <input type="text" value={username} onChange={(e) => handleUsernameChange(e.target.value)} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 pr-10 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" placeholder="username" />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   {usernameAvailable === true && <Check size={20} className="text-green-400" />}
                   {usernameAvailable === false && <X size={20} className="text-red-400" />}
@@ -260,147 +291,245 @@ export default function ProfileStudioPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-2">Email</label>
-              <input type="email" value={email} disabled className="w-full bg-white/[0.02] border border-white/10 rounded-lg px-4 py-2 text-white/50 cursor-not-allowed opacity-60" />
-              <p className="text-xs text-white/50 mt-2">Contact support to change email</p>
+              <label className="block text-sm font-semibold mb-2 text-white/70">Email</label>
+              <input type="email" value={email} disabled className="w-full bg-white/[0.02] border border-white/10 rounded-xl px-4 py-2.5 text-white/40 cursor-not-allowed opacity-60" />
+              <p className="text-xs text-white/40 mt-1.5">Contact support to change email</p>
             </div>
           </div>
 
           {/* Section 3 - Color Theme */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Palette size={24} className="text-relay-accent" /> Color Theme</h2>
+          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8 hover:border-white/15 transition-colors">
+            <h2 className="text-xl font-bold mb-2 flex items-center gap-3"><Palette size={22} className="text-relay-accent" /> Color Theme</h2>
+            <p className="text-sm text-white/40 mb-6">Pick a vibe for your storefront</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {THEMES.map((theme) => (
-                <button key={theme.id} onClick={() => handleThemeSelect(theme.id)} className={"relative p-3 rounded-xl border-2 transition-all " + (selectedTheme === theme.id ? 'border-white/40 bg-white/[0.08]' : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]')} style={selectedTheme === theme.id ? { borderColor: theme.accent } : undefined}>
+                <button
+                  key={theme.id}
+                  onClick={() => handleThemeSelect(theme.id)}
+                  className={"relative p-3 rounded-xl border-2 transition-all duration-200 hover:scale-105 " + (selectedTheme === theme.id ? 'bg-white/[0.08] scale-[1.02]' : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06]')}
+                  style={selectedTheme === theme.id ? { borderColor: theme.accent, boxShadow: '0 0 20px ' + theme.accent + '30, 0 0 40px ' + theme.accent + '10' } : undefined}
+                >
                   <div className="rounded-lg overflow-hidden mb-2" style={{ background: theme.bannerGradient, height: '28px' }} />
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-5 h-5 rounded-full" style={{ backgroundColor: theme.accent }} />
+                    <div className="w-5 h-5 rounded-full transition-transform duration-200" style={{ backgroundColor: theme.accent }} />
                     <div className="flex-1 h-2 rounded" style={{ backgroundColor: theme.cardBg, border: '1px solid ' + theme.cardBorder }} />
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.accentLight }} />
                     <p className="text-xs font-semibold" style={{ color: theme.textHighlight }}>{theme.name}</p>
                   </div>
-                  {selectedTheme === theme.id && <div className="absolute top-1.5 right-1.5"><Check size={16} style={{ color: theme.accent }} /></div>}
+                  {selectedTheme === theme.id && (
+                    <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.accent }}>
+                      <Check size={14} className="text-white" />
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Section 4 - Ship From Address */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><MapPin size={24} className="text-relay-accent" /> Ship From Address</h2>
+          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8 hover:border-white/15 transition-colors">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><MapPin size={22} className="text-relay-accent" /> Ship From Address</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <input type="text" value={address.street} onChange={(e) => handleAddressChange('street', e.target.value)} placeholder="Street address" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
-              <input type="text" value={address.street2} onChange={(e) => handleAddressChange('street2', e.target.value)} placeholder="Apt, Suite, etc. (optional)" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
+              <input type="text" value={address.street} onChange={(e) => handleAddressChange('street', e.target.value)} placeholder="Street address" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
+              <input type="text" value={address.street2} onChange={(e) => handleAddressChange('street2', e.target.value)} placeholder="Apt, Suite, etc. (optional)" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <input type="text" value={address.city} onChange={(e) => handleAddressChange('city', e.target.value)} placeholder="City" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
-              <input type="text" value={address.state} onChange={(e) => handleAddressChange('state', e.target.value)} placeholder="State" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
-              <input type="text" value={address.zip} onChange={(e) => handleAddressChange('zip', e.target.value)} placeholder="ZIP code" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
-              <input type="text" value={address.country} onChange={(e) => handleAddressChange('country', e.target.value)} placeholder="Country" className="bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors" />
+              <input type="text" value={address.city} onChange={(e) => handleAddressChange('city', e.target.value)} placeholder="City" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
+              <input type="text" value={address.state} onChange={(e) => handleAddressChange('state', e.target.value)} placeholder="State" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
+              <input type="text" value={address.zip} onChange={(e) => handleAddressChange('zip', e.target.value)} placeholder="ZIP code" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
+              <input type="text" value={address.country} onChange={(e) => handleAddressChange('country', e.target.value)} placeholder="Country" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 focus:bg-white/[0.07] transition-all" />
             </div>
           </div>
 
-          {/* Section 5 - Create Post */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-8">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Edit3 size={24} className="text-relay-accent" /> Create Post</h2>
+          {/* Section 5 - Create Post (social media composer style) */}
+          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:border-white/15 transition-colors">
+            <div className="p-8 pb-0">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Edit3 size={22} className="text-relay-accent" /> Create Post</h2>
 
-            {postSuccess && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-center mb-6">
-                <p className="text-sm text-emerald-400 font-medium">Post published!</p>
-              </div>
-            )}
+              {postSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center mb-6 flex items-center justify-center gap-2">
+                  <Check size={16} className="text-emerald-400" />
+                  <p className="text-sm text-emerald-400 font-medium">Post published!</p>
+                </div>
+              )}
 
-            <div className="mb-6">
-              <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="Share what's new with your customers..." rows={4} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent transition-colors resize-none" />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-3">Images (up to 4)</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[0, 1, 2, 3].map((index) => (
-                  <div key={index} className="aspect-square rounded-lg border-2 border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition-colors flex items-center justify-center relative overflow-hidden" onClick={() => !postImages[index] && postImageInputRefs.current[index]?.click()}>
-                    {postImages[index] ? (
-                      <>
-                        <img src={postImages[index]} alt={"Post image " + (index + 1)} className="w-full h-full object-cover" />
-                        <button onClick={(e) => { e.stopPropagation(); removePostImage(index); }} className="absolute top-1 right-1 p-1 rounded-full bg-black/60 hover:bg-black/80 transition-colors">
-                          <Trash2 size={14} className="text-white" />
-                        </button>
-                      </>
-                    ) : (
-                      <div className="text-center"><Upload size={24} className="mx-auto mb-2 text-white/50" /><p className="text-xs text-white/50">Image {index + 1}</p></div>
-                    )}
-                    <input ref={(el) => { postImageInputRefs.current[index] = el; }} type="file" accept="image/*" onChange={(e) => handlePostImageUpload(e, index)} className="hidden" />
+              {/* Composer area */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden mb-6">
+                <div className="flex items-start gap-3 p-4">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-sm font-bold text-relay-bg">PK</span>)}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2 flex items-center gap-2"><LinkIcon size={16} className="text-relay-accent" /> Link a Listing (optional)</label>
-              <select value={selectedListingId} onChange={(e) => setSelectedListingId(e.target.value)} className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2.5 text-relay-text focus:outline-none focus:border-relay-accent transition-colors appearance-none cursor-pointer">
-                <option value="" className="bg-[#1a1a2e]">No listing linked</option>
-                {sellerListings.map((listing) => (
-                  <option key={listing.id} value={listing.id} className="bg-[#1a1a2e]">{listing.brand} {listing.model}{listing.nickname ? ' "' + listing.nickname + '"' : ''}</option>
-                ))}
-              </select>
-            </div>
-
-            {isCustomBrand && (
-              <div className="mb-6 p-4 bg-relay-accent/10 border border-relay-accent/30 rounded-lg flex items-center gap-3">
-                <Sparkles size={18} className="text-relay-accent flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-relay-accent">Independent Brand Boost Active</p>
-                  <p className="text-xs text-white/50 mt-0.5">This post will get boosted visibility because it&apos;s linked to an approved independent brand listing.</p>
+                  <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="Share what's new with your customers..." rows={3} className="flex-1 bg-transparent border-none text-relay-text placeholder-white/30 focus:outline-none resize-none text-sm leading-relaxed pt-1.5" />
+                </div>
+                {/* Post images inline preview */}
+                {postImages.length > 0 && (
+                  <div className="px-4 pb-3">
+                    <div className="flex gap-2">
+                      {postImages.map((img, index) => (
+                        <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                          <img src={img} alt={"Post image " + (index + 1)} className="w-full h-full object-cover" />
+                          <button onClick={(e) => { e.stopPropagation(); removePostImage(index); }} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
+                            <X size={10} className="text-white" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Bottom toolbar */}
+                <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    {[0, 1, 2, 3].map((index) => (
+                      <button
+                        key={index}
+                        onClick={() => !postImages[index] && postImageInputRefs.current[index]?.click()}
+                        className={"p-2 rounded-lg transition-colors " + (postImages[index] ? 'text-relay-accent bg-relay-accent/10' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]')}
+                        title={"Image " + (index + 1)}
+                      >
+                        <Upload size={16} />
+                        <input ref={(el) => { postImageInputRefs.current[index] = el; }} type="file" accept="image/*" onChange={(e) => handlePostImageUpload(e, index)} className="hidden" />
+                      </button>
+                    ))}
+                    <div className="w-px h-5 bg-white/10 mx-1" />
+                    <div className="relative">
+                      <select value={selectedListingId} onChange={(e) => setSelectedListingId(e.target.value)} className="appearance-none bg-transparent text-white/40 hover:text-white/70 p-2 rounded-lg hover:bg-white/[0.06] transition-colors cursor-pointer text-xs pr-6 focus:outline-none">
+                        <option value="" className="bg-[#1a1a2e]">Link listing</option>
+                        {sellerListings.map((listing) => (
+                          <option key={listing.id} value={listing.id} className="bg-[#1a1a2e]">{listing.brand} {listing.model}{listing.nickname ? ' "' + listing.nickname + '"' : ''}</option>
+                        ))}
+                      </select>
+                      <LinkIcon size={14} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none text-white/40" />
+                    </div>
+                  </div>
+                  <span className="text-xs text-white/25">{postContent.length > 0 ? postContent.length + ' chars' : ''}</span>
                 </div>
               </div>
-            )}
 
-            <div className="p-4 bg-white/[0.02] border border-white/10 rounded-lg mb-6">
-              <p className="text-xs text-white/60">Posts appear on your profile and in buyer feeds where they can help drive traffic to your listings. Link an approved independent brand listing to get extra visibility.</p>
+              {isCustomBrand && (
+                <div className="mb-6 p-4 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.08) 0%, rgba(52, 211, 153, 0.06) 100%)', border: '1px solid rgba(95, 143, 255, 0.2)' }}>
+                  <Sparkles size={18} className="text-relay-accent flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-relay-accent">Independent Brand Boost Active</p>
+                    <p className="text-xs text-white/50 mt-0.5">This post will get boosted visibility because it&apos;s linked to an approved independent brand listing.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent hover:bg-relay-accent-light disabled:opacity-50 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-lg transition-colors">
-              {publishingPost ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Publish Post</>)}
-            </button>
+            <div className="px-8 pb-8">
+              <div className="p-3 bg-white/[0.02] rounded-xl mb-5">
+                <p className="text-xs text-white/50">Posts appear on your profile and in buyer feeds. Link an approved independent brand listing to get extra visibility.</p>
+              </div>
+
+              <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent hover:bg-relay-accent-light disabled:opacity-40 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-xl transition-all hover:shadow-lg hover:shadow-relay-accent/20">
+                {publishingPost ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Publish Post</>)}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right Section - Preview */}
+        {/* Right Section - Profile Preview Card */}
         <div className="lg:col-span-1">
-          <div className="sticky top-24">
-            <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-6 mb-6">
-              <div className="flex items-center gap-2 mb-6"><Eye size={20} className="text-relay-accent" /><h3 className="font-semibold">Profile Preview</h3></div>
-              <div className="h-24 w-full rounded-lg mb-4 bg-gradient-to-br" style={{ backgroundImage: bannerPreview ? 'url(' + bannerPreview + ')' : 'linear-gradient(135deg, rgba(95, 143, 255, 0.1) 0%, rgba(124, 166, 255, 0.05) 100%)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
-              <div className="flex items-end gap-3 mb-4 -mt-4 relative z-10">
-                <div className="h-16 w-16 rounded-full border-3 border-relay-bg bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0">
-                  {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-2xl font-bold text-relay-bg">PK</span>)}
+          <div className="sticky top-24 space-y-4">
+            {/* Live Preview Card */}
+            <div
+              className="backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden transition-shadow duration-500"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+                boxShadow: '0 8px 40px rgba(0,0,0,0.3), 0 0 60px ' + activeTheme.accent + '08',
+              }}
+            >
+              {/* Live Preview badge */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-white/60 tracking-wide uppercase">Live Preview</span>
+                </div>
+                <Eye size={14} className="text-white/30" />
+              </div>
+
+              {/* Banner blending into avatar area */}
+              <div className="relative">
+                <div className="h-28 w-full" style={{ backgroundImage: bannerPreview ? 'url(' + bannerPreview + ')' : activeTheme.bannerGradient, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+                {/* Fade overlay at bottom of banner */}
+                <div className="absolute bottom-0 left-0 right-0 h-12" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%)' }} />
+                {/* Avatar overlapping banner */}
+                <div className="absolute -bottom-8 left-5">
+                  <div className="h-16 w-16 rounded-full border-[3px] bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 shadow-lg" style={{ borderColor: 'rgba(20,20,40,0.9)' }}>
+                    {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-xl font-bold text-relay-bg">PK</span>)}
+                  </div>
                 </div>
               </div>
-              <h4 className="font-bold text-sm mb-1">{displayName || 'Shop Name'}</h4>
-              <p className="text-xs text-white/50 mb-3">@{username || 'username'}</p>
-              <p className="text-xs text-relay-text line-clamp-3 mb-4">{bio}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                <div className="bg-white/[0.04] rounded-lg p-2"><p className="text-xs text-white/50">Rating</p><p className="text-sm font-bold">4.9/5</p></div>
-                <div className="bg-white/[0.04] rounded-lg p-2"><p className="text-xs text-white/50">Sales</p><p className="text-sm font-bold">847</p></div>
-              </div>
-              <div className="space-y-2">
-                <div className="h-6 w-full rounded-lg" style={{ backgroundColor: activeTheme.accent }} />
-                <div className="h-6 w-full rounded-lg" style={{ background: activeTheme.bannerGradient }} />
-                <div className="flex gap-2">
-                  <div className="flex-1 h-6 rounded-lg" style={{ backgroundColor: activeTheme.cardBg, border: '1px solid ' + activeTheme.cardBorder }} />
-                  <div className="flex-1 h-6 rounded-lg" style={{ backgroundColor: activeTheme.accentLight }} />
+
+              {/* Profile info */}
+              <div className="px-5 pt-12 pb-5">
+                <h4 className="font-bold text-base mb-0.5" style={{ color: activeTheme.textHighlight }}>{displayName || 'Shop Name'}</h4>
+                <p className="text-xs text-white/40 mb-3">@{username || 'username'}</p>
+                {bio && <p className="text-xs text-white/60 line-clamp-2 mb-4 leading-relaxed">{bio}</p>}
+
+                {/* Stats row */}
+                <div className="flex gap-2 mb-4">
+                  <div className="flex-1 rounded-xl p-2.5 text-center" style={{ backgroundColor: activeTheme.cardBg, border: '1px solid ' + activeTheme.cardBorder }}>
+                    <p className="text-xs text-white/40">Rating</p>
+                    <p className="text-sm font-bold" style={{ color: activeTheme.textHighlight }}>4.9/5</p>
+                  </div>
+                  <div className="flex-1 rounded-xl p-2.5 text-center" style={{ backgroundColor: activeTheme.cardBg, border: '1px solid ' + activeTheme.cardBorder }}>
+                    <p className="text-xs text-white/40">Sales</p>
+                    <p className="text-sm font-bold" style={{ color: activeTheme.textHighlight }}>847</p>
+                  </div>
                 </div>
+
+                {/* Mini listing card preview using theme colors */}
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid ' + activeTheme.cardBorder, backgroundColor: activeTheme.cardBg }}>
+                  <div className="h-14 w-full" style={{ background: activeTheme.bannerGradient }} />
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: activeTheme.accent + '20' }} />
+                      <div className="flex-1">
+                        <div className="h-2 w-16 rounded-full mb-1" style={{ backgroundColor: activeTheme.accent + '40' }} />
+                        <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: activeTheme.accentLight + '30' }} />
+                      </div>
+                      <div className="px-2 py-1 rounded-md text-[10px] font-bold" style={{ backgroundColor: activeTheme.accent, color: '#0a0a1a' }}>$180</div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <div className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: activeTheme.accent + '25' }} />
+                      <div className="h-1.5 w-8 rounded-full" style={{ backgroundColor: activeTheme.accentLight + '25' }} />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] mt-3 text-center font-medium tracking-wide uppercase" style={{ color: activeTheme.textHighlight + '90' }}>{activeTheme.name} theme</p>
               </div>
-              <p className="text-xs mt-2 text-center font-medium" style={{ color: activeTheme.textHighlight }}>{activeTheme.name} theme</p>
             </div>
+
+            {/* Action buttons */}
             <div className="space-y-3">
-              {saveSuccess && (<div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-center"><p className="text-sm text-emerald-400 font-medium">Changes saved!</p></div>)}
-              <button onClick={handleSaveChanges} disabled={!hasChanges || saving} className="w-full bg-relay-accent hover:bg-relay-accent-light disabled:opacity-50 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-lg transition-colors">{saving ? 'Saving...' : 'Save Changes'}</button>
-              <button onClick={handleDiscardChanges} disabled={!hasChanges || saving} className="w-full bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 rounded-lg transition-colors">Discard Changes</button>
-              {username && (<a href={'/profile/' + username} className="block w-full text-center bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] font-semibold py-3 rounded-lg transition-colors text-relay-accent">View Public Profile</a>)}
+              {saveSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center flex items-center justify-center gap-2">
+                  <Check size={16} className="text-emerald-400" />
+                  <p className="text-sm text-emerald-400 font-medium">Changes saved!</p>
+                </div>
+              )}
+              <button
+                onClick={handleSaveChanges}
+                disabled={!hasChanges || saving}
+                className={"w-full text-relay-bg font-semibold py-3 rounded-xl transition-all duration-300 " + (hasChanges && !saving ? 'shadow-lg shadow-relay-accent/25' : 'disabled:opacity-40 disabled:cursor-not-allowed')}
+                style={hasChanges && !saving ? { background: 'linear-gradient(135deg, ' + activeTheme.accent + ' 0%, ' + activeTheme.accentLight + ' 100%)', animation: 'pulse 2s ease-in-out infinite' } : { backgroundColor: activeTheme.accent }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button onClick={handleDiscardChanges} disabled={!hasChanges || saving} className="w-full bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed font-semibold py-3 rounded-xl transition-colors">Discard Changes</button>
+              {username && (<a href={'/profile/' + username} className="block w-full text-center border font-semibold py-3 rounded-xl transition-all hover:bg-white/[0.06]" style={{ borderColor: activeTheme.accent + '40', color: activeTheme.accent }}>View Public Profile</a>)}
             </div>
+
+            {/* Pulse keyframes */}
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { box-shadow: 0 4px 20px ${activeTheme.accent}30; }
+                50% { box-shadow: 0 4px 30px ${activeTheme.accent}50, 0 0 40px ${activeTheme.accent}20; }
+              }
+            `}</style>
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, RefreshCw, Upload, ArrowRight, Hash, DollarSign, Ruler, Package } from "lucide-react";
 import { commitBulkInventoryImportAction, previewBulkInventoryImportAction } from "@/app/inventory/actions";
 import { useAuth } from "@/hooks/useAuth";
 import type { InventoryImportReport } from "@/lib/inventory-import";
@@ -79,6 +79,15 @@ export default function BulkImportPage() {
     });
   };
 
+  /* Determine current step for stepper: 1=Upload, 2=Preview, 3=Import */
+  const currentStep = report?.outcome === "committed" || report?.outcome === "partial_failure"
+    ? 3
+    : report
+    ? 2
+    : selectedFile
+    ? 1.5
+    : 1;
+
   if (isLoading) {
     return <div className="relay-empty text-center">Loading...</div>;
   }
@@ -96,12 +105,16 @@ export default function BulkImportPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="space-y-2">
-        <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
-        <h1 className="relay-title">Bulk Import</h1>
-        <p className="text-relay-subtle max-w-3xl">
-          Upload a CSV of SKU inventory to preview validation results, then import it into your existing Relay SKU listings.
-        </p>
+      {/* Page header with gradient accent */}
+      <div className="relative overflow-hidden rounded-2xl p-6" style={{ background: "linear-gradient(135deg, rgba(95,143,255,0.12) 0%, rgba(124,166,255,0.06) 50%, rgba(245,247,251,0.03) 100%)" }}>
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #5f8fff 0%, transparent 70%)", transform: "translate(30%, -40%)" }} />
+        <div className="relative space-y-2">
+          <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
+          <h1 className="relay-title">Bulk Import</h1>
+          <p className="text-relay-subtle max-w-3xl">
+            Upload a CSV of SKU inventory to preview validation results, then import it into your existing Relay SKU listings.
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -113,7 +126,65 @@ export default function BulkImportPage() {
         </Link>
       </div>
 
+      {/* Horizontal stepper */}
+      <div className="relay-card p-5">
+        <div className="flex items-center justify-center gap-0">
+          {[
+            { step: 1, label: "Upload" },
+            { step: 2, label: "Preview" },
+            { step: 3, label: "Import" },
+          ].map((s, i) => {
+            const isActive = currentStep >= s.step;
+            const isCurrent = Math.ceil(currentStep) === s.step;
+            return (
+              <div key={s.step} className="flex items-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300"
+                    style={{
+                      background: isActive
+                        ? "linear-gradient(135deg, #5f8fff, #7ca6ff)"
+                        : "rgba(255,255,255,0.06)",
+                      border: isCurrent
+                        ? "2px solid #7ca6ff"
+                        : isActive
+                        ? "2px solid transparent"
+                        : "2px solid rgba(255,255,255,0.1)",
+                      color: isActive ? "#fff" : "rgba(255,255,255,0.35)",
+                      boxShadow: isCurrent ? "0 0 12px rgba(95,143,255,0.4)" : "none",
+                    }}
+                  >
+                    {isActive && currentStep > s.step ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      s.step
+                    )}
+                  </div>
+                  <span
+                    className="text-xs font-medium tracking-wide transition-colors duration-300"
+                    style={{ color: isActive ? "#7ca6ff" : "rgba(255,255,255,0.35)" }}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+                {i < 2 && (
+                  <div
+                    className="w-16 sm:w-24 h-0.5 mx-3 mb-6 rounded-full transition-colors duration-500"
+                    style={{
+                      background: currentStep > s.step
+                        ? "linear-gradient(90deg, #5f8fff, #7ca6ff)"
+                        : "rgba(255,255,255,0.08)",
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-6">
+        {/* Main upload card */}
         <div className="relay-card p-6 space-y-6">
           <div className="flex items-start gap-3">
             <div className="p-3 rounded-2xl bg-relay-accent/10 border border-relay-accent/20">
@@ -127,28 +198,71 @@ export default function BulkImportPage() {
             </div>
           </div>
 
+          {/* Dramatic drop zone */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full rounded-[1.5rem] border border-dashed border-white/15 bg-white/[0.03] hover:bg-white/[0.05] transition-colors p-8 text-left"
+            className="group w-full rounded-[1.5rem] p-1 text-left transition-all duration-300"
+            style={{
+              background: selectedFile
+                ? "linear-gradient(135deg, rgba(52,211,153,0.25), rgba(52,211,153,0.08))"
+                : "linear-gradient(135deg, rgba(95,143,255,0.15), rgba(124,166,255,0.05))",
+            }}
           >
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center">
-                <Upload className="w-6 h-6 text-relay-accent" />
-              </div>
-              <div className="flex-1">
-                <p className="text-relay-text font-semibold">
-                  {selectedFile ? selectedFile.name : "Choose a CSV file"}
-                </p>
-                <p className="text-sm text-relay-subtle mt-1">
-                  Accepted format: `.csv`
-                </p>
-                {selectedFile && (
-                  <p className="text-xs text-white/45 mt-2">
-                    {(selectedFile.size / 1024).toFixed(1)} KB
-                  </p>
-                )}
-              </div>
+            <div
+              className="w-full rounded-[1.25rem] border-2 border-dashed transition-all duration-300 p-8"
+              style={{
+                borderColor: selectedFile
+                  ? "rgba(52,211,153,0.4)"
+                  : "rgba(95,143,255,0.2)",
+                background: selectedFile
+                  ? "rgba(52,211,153,0.04)"
+                  : "rgba(95,143,255,0.03)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = selectedFile
+                  ? "rgba(52,211,153,0.7)"
+                  : "rgba(95,143,255,0.5)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = selectedFile
+                  ? "rgba(52,211,153,0.4)"
+                  : "rgba(95,143,255,0.2)";
+              }}
+            >
+              {selectedFile ? (
+                <div className="flex flex-col items-center gap-4 py-2">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))", border: "2px solid rgba(52,211,153,0.3)" }}>
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-relay-text font-bold text-lg">{selectedFile.name}</p>
+                    <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium" style={{ background: "rgba(52,211,153,0.15)", color: "rgb(110,231,183)" }}>
+                      <FileSpreadsheet className="w-3 h-3" />
+                      {(selectedFile.size / 1024).toFixed(1)} KB
+                    </div>
+                  </div>
+                  <p className="text-xs text-white/40">Click to choose a different file</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(95,143,255,0.15), rgba(124,166,255,0.05))",
+                      border: "1.5px solid rgba(95,143,255,0.2)",
+                    }}
+                  >
+                    <Upload className="w-9 h-9 text-[#5f8fff]" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-relay-text font-semibold text-lg">
+                      Drop your CSV here or click to browse
+                    </p>
+                    <p className="text-sm text-relay-subtle mt-1">Accepted format: .csv</p>
+                  </div>
+                </div>
+              )}
             </div>
           </button>
 
@@ -161,7 +275,8 @@ export default function BulkImportPage() {
           />
 
           {errorMessage && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
               {errorMessage}
             </div>
           )}
@@ -204,6 +319,7 @@ export default function BulkImportPage() {
           </div>
         </div>
 
+        {/* Required Format sidebar */}
         <div className="relay-card p-6 space-y-5">
           <div className="flex items-start gap-3">
             <div className="p-3 rounded-2xl bg-white/[0.05] border border-white/10">
@@ -217,44 +333,118 @@ export default function BulkImportPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-black/20 overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/10 text-xs uppercase tracking-[0.24em] text-white/45">
-              Example CSV
+          {/* Column header chips */}
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-white/40 mb-3">Required Columns</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { name: "SKU", icon: Hash },
+                { name: "Size", icon: Ruler },
+                { name: "Quantity", icon: Package },
+                { name: "Price", icon: DollarSign },
+              ].map((col) => (
+                <div
+                  key={col.name}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+                  style={{
+                    background: "rgba(95,143,255,0.1)",
+                    border: "1px solid rgba(95,143,255,0.2)",
+                    color: "#7ca6ff",
+                  }}
+                >
+                  <col.icon className="w-3.5 h-3.5" />
+                  {col.name}
+                </div>
+              ))}
             </div>
-            <pre className="p-4 text-sm text-relay-text overflow-x-auto whitespace-pre-wrap">{EXAMPLE_CSV}</pre>
           </div>
 
-          <div className="space-y-2 text-sm text-relay-subtle">
-            <p>`SKU`, `Size`, `Quantity`, and `Price` are required.</p>
-            <p>Supported aliases include `style_id`, `styleId`, `shoe_size`, `qty`, and `list_price`.</p>
-            <p>Quantity must be an integer `0` or greater. Price must be greater than `0`.</p>
+          {/* Syntax-highlighted CSV example */}
+          <div className="rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
+                <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
+                <div className="w-2.5 h-2.5 rounded-full bg-white/10" />
+              </div>
+              <span className="text-xs uppercase tracking-[0.24em] text-white/45 ml-1">Example CSV</span>
+            </div>
+            <pre className="p-4 text-sm overflow-x-auto whitespace-pre-wrap">
+              <span style={{ color: "#7ca6ff", fontWeight: 600 }}>SKU</span>
+              <span className="text-white/30">,</span>
+              <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Size</span>
+              <span className="text-white/30">,</span>
+              <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Quantity</span>
+              <span className="text-white/30">,</span>
+              <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Price</span>
+              {"\n"}
+              <span className="text-relay-text">DZ5485-612</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">10</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">1</span>
+              <span className="text-white/30">,</span>
+              <span className="text-emerald-400">350</span>
+            </pre>
+          </div>
+
+          {/* Format rules as mini table */}
+          <div className="space-y-2.5">
+            {[
+              { rule: "SKU, Size, Quantity, and Price are required columns." },
+              { rule: "Aliases supported: style_id, styleId, shoe_size, qty, list_price." },
+              { rule: "Quantity must be an integer 0 or greater. Price must be greater than 0." },
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-2.5 text-sm text-relay-subtle">
+                <ArrowRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#5f8fff]" />
+                <span>{item.rule}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
+      {/* Report section */}
       {report && (
         <div className="relay-card p-6 space-y-6">
+          {/* Summary banner */}
           <div
-            className={`rounded-2xl border px-4 py-4 ${
-              reportTone === "success"
-                ? "border-emerald-500/30 bg-emerald-500/10"
-                : reportTone === "warning"
-                ? "border-amber-500/30 bg-amber-500/10"
-                : reportTone === "error"
-                ? "border-red-500/30 bg-red-500/10"
-                : "border-white/10 bg-white/[0.03]"
-            }`}
+            className="rounded-2xl border px-5 py-5"
+            style={{
+              borderColor:
+                reportTone === "success"
+                  ? "rgba(52,211,153,0.3)"
+                  : reportTone === "warning"
+                  ? "rgba(245,158,11,0.3)"
+                  : reportTone === "error"
+                  ? "rgba(239,68,68,0.3)"
+                  : "rgba(255,255,255,0.1)",
+              background:
+                reportTone === "success"
+                  ? "linear-gradient(135deg, rgba(52,211,153,0.12), rgba(52,211,153,0.04))"
+                  : reportTone === "warning"
+                  ? "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))"
+                  : reportTone === "error"
+                  ? "linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.04))"
+                  : "rgba(255,255,255,0.03)",
+            }}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-4">
               {reportTone === "success" ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center animate-pulse" style={{ background: "rgba(52,211,153,0.15)" }}>
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                </div>
               ) : reportTone === "warning" || reportTone === "error" ? (
-                <AlertTriangle className={`w-5 h-5 mt-0.5 ${reportTone === "warning" ? "text-amber-300" : "text-red-300"}`} />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: reportTone === "warning" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)" }}>
+                  <AlertTriangle className={`w-6 h-6 ${reportTone === "warning" ? "text-amber-300" : "text-red-300"}`} />
+                </div>
               ) : (
-                <FileSpreadsheet className="w-5 h-5 text-relay-accent mt-0.5" />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(95,143,255,0.15)" }}>
+                  <FileSpreadsheet className="w-6 h-6 text-relay-accent" />
+                </div>
               )}
               <div>
-                <h2 className="text-lg font-semibold text-relay-text">
+                <h2 className="text-xl font-bold text-relay-text">
                   {report.outcome === "committed"
                     ? "Import Complete"
                     : report.outcome === "preview"
@@ -263,18 +453,19 @@ export default function BulkImportPage() {
                     ? "Import Partially Applied"
                     : "Import Blocked"}
                 </h2>
-                {report.message && <p className="text-sm text-relay-subtle mt-1">{report.message}</p>}
+                {report.message && <p className="text-sm text-relay-subtle mt-1.5">{report.message}</p>}
               </div>
             </div>
           </div>
 
+          {/* Metric cards with colored top borders */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <MetricCard label="Rows Read" value={report.rows_read} />
-            <MetricCard label="Valid Rows" value={report.rows_valid} />
-            <MetricCard label="Invalid Rows" value={report.rows_invalid} />
-            <MetricCard label="Created Listings / New Variants" value={report.rows_created} />
-            <MetricCard label="Updated Variants" value={report.rows_updated} />
-            <MetricCard label="SKUs Processed" value={report.skus_processed} />
+            <MetricCard label="Rows Read" value={report.rows_read} color="#5f8fff" />
+            <MetricCard label="Valid Rows" value={report.rows_valid} color="#34d399" />
+            <MetricCard label="Invalid Rows" value={report.rows_invalid} color="#ef4444" />
+            <MetricCard label="Created / New" value={report.rows_created} color="#34d399" />
+            <MetricCard label="Updated" value={report.rows_updated} color="#5f8fff" />
+            <MetricCard label="SKUs Processed" value={report.skus_processed} color="#7ca6ff" />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] gap-6">
@@ -311,11 +502,14 @@ export default function BulkImportPage() {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
+function MetricCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div
+      className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:bg-white/[0.06] hover:border-white/15"
+      style={{ borderTop: `3px solid ${color}` }}
+    >
       <p className="text-xs uppercase tracking-[0.18em] text-white/40">{label}</p>
-      <p className="text-2xl font-semibold text-relay-text mt-3">{value}</p>
+      <p className="text-2xl font-bold text-relay-text mt-3">{value}</p>
     </div>
   );
 }

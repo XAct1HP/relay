@@ -60,29 +60,25 @@ function orderStatusTone(status: string) {
   return "bg-white/10 text-white/60";
 }
 
-function Metric({
-  label,
-  value,
-  tone = "blue",
+function StatusBadge({
+  status,
 }: {
-  label: string;
-  value: string | number;
-  tone?: "blue" | "amber" | "red" | "green";
+  status: string;
 }) {
-  const tones = {
-    blue: "border-[#5f8fff]/20 bg-[#5f8fff]/10 text-[#7ca6ff]",
-    amber: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-    red: "border-red-500/20 bg-red-500/10 text-red-300",
-    green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+  const map: Record<string, string> = {
+    unused: "bg-[#5f8fff]/15 text-[#7ca6ff]",
+    assigned_to_seller: "bg-[#5f8fff]/15 text-[#7ca6ff]",
+    used: "bg-emerald-500/15 text-emerald-300",
+    in_transit: "bg-amber-500/15 text-amber-300",
+    delivered: "bg-emerald-500/15 text-emerald-300",
+    voided: "bg-red-500/15 text-red-300",
+    disputed: "bg-red-500/15 text-red-300",
   };
-
+  const cls = map[status] || "bg-white/10 text-white/60";
   return (
-    <div className="relay-card p-4 sm:p-5">
-      <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
-      <div className={`inline-flex px-3 py-2 rounded-xl border text-lg font-semibold ${tones[tone]}`}>
-        {value}
-      </div>
-    </div>
+    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
+      {status.replace(/_/g, " ")}
+    </span>
   );
 }
 
@@ -287,12 +283,25 @@ export default function AdminTagsPage() {
     );
   }, [data, search]);
 
-  const reviewQueue = filteredTags.filter(
-    (tag) => tag.photo_verification_status === "admin_review" && tag.assigned_order_id
+  const reviewQueue = useMemo(
+    () =>
+      filteredTags.filter(
+        (tag) => tag.photo_verification_status === "admin_review" && tag.assigned_order_id
+      ),
+    [filteredTags]
   );
 
-  const actionableOrders = tagOrders.filter(
-    (o) => o.status === "paid" || o.status === "processing" || o.status === "shipped"
+  const actionableOrders = useMemo(
+    () =>
+      tagOrders.filter(
+        (o) => o.status === "paid" || o.status === "processing" || o.status === "shipped"
+      ),
+    [tagOrders]
+  );
+
+  const completedOrders = useMemo(
+    () => tagOrders.filter((o) => o.status === "fulfilled"),
+    [tagOrders]
   );
 
   if (isLoading || loading) {
@@ -303,14 +312,17 @@ export default function AdminTagsPage() {
     return null;
   }
 
+  const totalTags = data ? data.counts.unused + data.counts.assigned + data.counts.used + data.counts.disputed + data.counts.voided : 0;
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Page Header */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-2">
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Relay Tags</h1>
-          <p className="text-white/50 max-w-2xl">
-            Import tags, assign to sellers, fulfill purchase orders, and review custody submissions.
+          <p className="text-white/40 text-sm max-w-2xl">
+            Import, assign, fulfill, and review tags across the marketplace.
           </p>
         </div>
 
@@ -323,6 +335,7 @@ export default function AdminTagsPage() {
         </button>
       </div>
 
+      {/* Alerts */}
       {(error || success) && (
         <div className={`relay-card p-4 border ${error ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"}`}>
           {error || success}
@@ -331,22 +344,44 @@ export default function AdminTagsPage() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
-            <Metric label="Unused" value={data.counts.unused} />
-            <Metric label="Assigned" value={data.counts.assigned} tone="green" />
-            <Metric label="Used" value={data.counts.used} />
-            <Metric label="Disputed" value={data.counts.disputed} tone="red" />
-            <Metric label="Voided" value={data.counts.voided} tone="amber" />
+          {/* Compact Metrics Summary Bar */}
+          <div className="relay-card px-5 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-white/40 text-xs uppercase tracking-[0.14em] mr-1">Tags</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#5f8fff]/15 text-[#7ca6ff] border border-[#5f8fff]/10">
+                <Tag className="w-3 h-3" />
+                {totalTags} total
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/10">
+                {data.counts.assigned} assigned
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/10">
+                {data.counts.unused} unassigned
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#5f8fff]/10 text-[#7ca6ff]/80 border border-[#5f8fff]/10">
+                {data.counts.used} used
+              </span>
+              {data.counts.disputed > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/15 text-red-300 border border-red-500/10">
+                  {data.counts.disputed} disputed
+                </span>
+              )}
+              {data.counts.voided > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-300/70 border border-red-500/10">
+                  {data.counts.voided} voided
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Tag Orders Fulfillment */}
+          {/* Tag Order Fulfillment */}
           {actionableOrders.length > 0 && (
             <div className="relay-card overflow-hidden">
               <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-lg font-semibold text-[#f5f7fb]">Tag Orders to Fulfill</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-xs font-semibold ml-2">
+                  <h2 className="text-lg font-semibold text-[#f5f7fb]">Pending Orders</h2>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-xs font-semibold ml-1">
                     {actionableOrders.length}
                   </span>
                 </div>
@@ -354,82 +389,91 @@ export default function AdminTagsPage() {
               </div>
 
               <div className="divide-y divide-white/5">
-                {actionableOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="px-5 py-4 cursor-grab active:cursor-grabbing"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("application/relay-order", JSON.stringify(order));
-                      e.dataTransfer.effectAllowed = "link";
-                    }}
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <GripVertical className="w-4 h-4 text-white/20 flex-shrink-0 hidden sm:block" />
-                          <p className="text-[#f5f7fb] font-semibold">
-                            {order.bundle_name} Pack · {order.quantity} tags
+                {actionableOrders.map((order) => {
+                  const statusBorder =
+                    order.status === "shipped"
+                      ? "border-l-[3px] border-l-[#5f8fff]"
+                      : order.status === "processing"
+                        ? "border-l-[3px] border-l-amber-400"
+                        : "border-l-[3px] border-l-white/10";
+
+                  return (
+                    <div
+                      key={order.id}
+                      className={`px-5 py-4 cursor-grab active:cursor-grabbing ${statusBorder}`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/relay-order", JSON.stringify(order));
+                        e.dataTransfer.effectAllowed = "link";
+                      }}
+                    >
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <GripVertical className="w-4 h-4 text-white/20 flex-shrink-0 hidden sm:block" />
+                            <p className="text-[#f5f7fb] font-semibold">
+                              {order.bundle_name} Pack / {order.quantity} tags
+                            </p>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${orderStatusTone(order.status)}`}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <p className="text-white/45 text-sm">
+                            {sellerLabel(order.seller as any)} / {formatBundlePrice(order.price_cents)} / Paid {formatDate(order.paid_at)}
                           </p>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${orderStatusTone(order.status)}`}>
-                            {order.status}
-                          </span>
+                          {order.shipping_tracking_number && (
+                            <p className="text-[#7ca6ff] text-xs flex items-center gap-1">
+                              <Truck className="w-3.5 h-3.5" />
+                              {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
+                              {order.shipping_tracking_number}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-white/45 text-sm">
-                          {sellerLabel(order.seller as any)} · {formatBundlePrice(order.price_cents)} · Paid {formatDate(order.paid_at)}
-                        </p>
-                        {order.shipping_tracking_number && (
-                          <p className="text-[#7ca6ff] text-xs flex items-center gap-1">
-                            <Truck className="w-3.5 h-3.5" />
-                            {order.shipping_carrier ? `${order.shipping_carrier}: ` : ""}
-                            {order.shipping_tracking_number}
-                          </p>
-                        )}
+
+                        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                          {order.status === "paid" && (
+                            <button
+                              onClick={() => handleOrderStatusUpdate(order.id, "processing")}
+                              disabled={saving}
+                              className="relay-button-secondary text-sm disabled:opacity-50"
+                            >
+                              Start Processing
+                            </button>
+                          )}
+                          {(order.status === "paid" || order.status === "processing") && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setFulfillOrderId(fulfillOrderId === order.id ? null : order.id);
+                                  setFulfillTracking(order.shipping_tracking_number || "");
+                                  setFulfillCarrier(order.shipping_carrier || "");
+                                }}
+                                disabled={saving}
+                                className="relay-button-primary text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                Ship
+                              </button>
+                            </>
+                          )}
+                          {order.status === "shipped" && (
+                            <button
+                              onClick={() => handleOrderStatusUpdate(order.id, "fulfilled")}
+                              disabled={saving}
+                              className="relay-button-primary text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Mark Fulfilled
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 flex-shrink-0">
-                        {order.status === "paid" && (
-                          <button
-                            onClick={() => handleOrderStatusUpdate(order.id, "processing")}
-                            disabled={saving}
-                            className="relay-button-secondary text-sm disabled:opacity-50"
-                          >
-                            Start Processing
-                          </button>
-                        )}
-                        {(order.status === "paid" || order.status === "processing") && (
-                          <button
-                            onClick={() => {
-                              setFulfillOrderId(fulfillOrderId === order.id ? null : order.id);
-                              setFulfillTracking(order.shipping_tracking_number || "");
-                              setFulfillCarrier(order.shipping_carrier || "");
-                            }}
-                            disabled={saving}
-                            className="relay-button-primary text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
-                          >
-                            <Truck className="w-3.5 h-3.5" />
-                            Ship
-                          </button>
-                        )}
-                        {order.status === "shipped" && (
-                          <button
-                            onClick={() => handleOrderStatusUpdate(order.id, "fulfilled")}
-                            disabled={saving}
-                            className="relay-button-primary text-sm disabled:opacity-50 inline-flex items-center gap-1.5"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Mark Fulfilled
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Shipping form */}
-                    {fulfillOrderId === order.id && (
-                      <div className="mt-4 p-4 rounded-xl border border-white/10 bg-white/[0.02] space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs text-white/50 mb-1">Tracking Number</label>
+                      {/* Inline Shipping Form */}
+                      {fulfillOrderId === order.id && (
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+                          <div className="flex-1">
+                            <label className="block text-xs text-white/40 mb-1">Tracking #</label>
                             <input
                               value={fulfillTracking}
                               onChange={(e) => setFulfillTracking(e.target.value)}
@@ -437,8 +481,8 @@ export default function AdminTagsPage() {
                               className="relay-input w-full text-sm"
                             />
                           </div>
-                          <div>
-                            <label className="block text-xs text-white/50 mb-1">Carrier</label>
+                          <div className="flex-1">
+                            <label className="block text-xs text-white/40 mb-1">Carrier</label>
                             <input
                               value={fulfillCarrier}
                               onChange={(e) => setFulfillCarrier(e.target.value)}
@@ -446,343 +490,366 @@ export default function AdminTagsPage() {
                               className="relay-input w-full text-sm"
                             />
                           </div>
+                          <div className="flex-1">
+                            <label className="block text-xs text-white/40 mb-1">Notes (optional)</label>
+                            <input
+                              value={fulfillNotes}
+                              onChange={(e) => setFulfillNotes(e.target.value)}
+                              placeholder="Any notes"
+                              className="relay-input w-full text-sm"
+                            />
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleOrderStatusUpdate(order.id, "shipped")}
+                              disabled={saving || !fulfillTracking.trim()}
+                              className="relay-button-accent text-sm disabled:opacity-50 whitespace-nowrap"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setFulfillOrderId(null)}
+                              className="relay-button-secondary text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs text-white/50 mb-1">Admin Notes (optional)</label>
-                          <input
-                            value={fulfillNotes}
-                            onChange={(e) => setFulfillNotes(e.target.value)}
-                            placeholder="Any notes for this order"
-                            className="relay-input w-full text-sm"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleOrderStatusUpdate(order.id, "shipped")}
-                            disabled={saving || !fulfillTracking.trim()}
-                            className="relay-button-accent text-sm disabled:opacity-50"
-                          >
-                            Confirm Shipment
-                          </button>
-                          <button
-                            onClick={() => setFulfillOrderId(null)}
-                            className="relay-button-secondary text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Completed Orders (collapsed section) */}
+          {completedOrders.length > 0 && (
+            <div className="relay-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <h2 className="font-semibold text-[#f5f7fb]">Completed Orders</h2>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-xs font-semibold ml-1">
+                  {completedOrders.length}
+                </span>
+              </div>
+              <div className="divide-y divide-white/5">
+                {completedOrders.slice(0, 20).map((order) => (
+                  <div key={order.id} className="px-5 py-3 border-l-[3px] border-l-emerald-500/40 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[#f5f7fb] font-medium text-sm">
+                        {order.bundle_name} / {order.quantity} tags / {sellerLabel(order.seller as any)}
+                      </p>
+                      <p className="text-white/40 text-xs">
+                        {formatBundlePrice(order.price_cents)} / Fulfilled {formatDate(order.fulfilled_at)}
+                      </p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${orderStatusTone(order.status)}`}>
+                      {order.status}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr,1fr] gap-6">
-            {/* Create / Import Tags */}
-            <div
-              ref={importRef}
-              className={`relay-card p-5 space-y-4 transition-all ${
-                importDropHighlight
-                  ? "ring-2 ring-[#5f8fff] border-[#5f8fff]/40 bg-[#5f8fff]/[0.04]"
-                  : ""
-              }`}
-              onDragOver={(e) => {
-                if (e.dataTransfer.types.includes("application/relay-order")) {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "link";
-                  setImportDropHighlight(true);
-                }
-              }}
-              onDragLeave={(e) => {
-                if (importRef.current && !importRef.current.contains(e.relatedTarget as Node)) {
-                  setImportDropHighlight(false);
-                }
-              }}
-              onDrop={(e) => {
+          {/* Create / Import Tags -- side-by-side card with vertical divider */}
+          <div
+            ref={importRef}
+            className={`relay-card overflow-hidden transition-all ${
+              importDropHighlight
+                ? "ring-2 ring-[#5f8fff] border-[#5f8fff]/40 bg-[#5f8fff]/[0.04]"
+                : ""
+            }`}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes("application/relay-order")) {
                 e.preventDefault();
+                e.dataTransfer.dropEffect = "link";
+                setImportDropHighlight(true);
+              }
+            }}
+            onDragLeave={(e) => {
+              if (importRef.current && !importRef.current.contains(e.relatedTarget as Node)) {
                 setImportDropHighlight(false);
-                try {
-                  const orderData = JSON.parse(e.dataTransfer.getData("application/relay-order"));
-                  if (orderData.seller_id) {
-                    setSelectedSellerId(orderData.seller_id);
-                  }
-                  const label = `Order ${orderData.id?.slice(0, 8).toUpperCase() || "N/A"} - ${orderData.bundle_name} (${orderData.quantity} tags)`;
-                  setBatchLabel(label);
-                  setLinkedOrder(orderData);
-                  setSuccess(`Import linked to ${orderData.bundle_name} order for ${sellerLabel(orderData.seller)}. Scan ${orderData.quantity} tags.`);
-                } catch {}
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <Tag className="w-5 h-5 text-[#7ca6ff]" />
-                <h2 className="text-lg font-semibold text-[#f5f7fb]">Create or Import Tags</h2>
-              </div>
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setImportDropHighlight(false);
+              try {
+                const orderData = JSON.parse(e.dataTransfer.getData("application/relay-order"));
+                if (orderData.seller_id) {
+                  setSelectedSellerId(orderData.seller_id);
+                }
+                const label = `Order ${orderData.id?.slice(0, 8).toUpperCase() || "N/A"} - ${orderData.bundle_name} (${orderData.quantity} tags)`;
+                setBatchLabel(label);
+                setLinkedOrder(orderData);
+                setSuccess(`Import linked to ${orderData.bundle_name} order for ${sellerLabel(orderData.seller)}. Scan ${orderData.quantity} tags.`);
+              } catch {}
+            }}
+          >
+            {/* Card Header */}
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Tag className="w-5 h-5 text-[#7ca6ff]" />
+              <h2 className="text-lg font-semibold text-[#f5f7fb]">Create or Import Tags</h2>
+            </div>
 
-              {linkedOrder && (
-                <div className="rounded-xl border border-[#5f8fff]/20 bg-[#5f8fff]/[0.06] p-3 flex items-center justify-between">
-                  <div className="text-sm">
-                    <p className="text-[#7ca6ff] font-medium">
-                      Linked to {linkedOrder.bundle_name} order ({linkedOrder.quantity} tags)
-                    </p>
-                    <p className="text-white/45 text-xs">
-                      {sellerLabel(linkedOrder.seller as any)} · {formatBundlePrice(linkedOrder.price_cents)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setLinkedOrder(null);
-                      setSelectedSellerId("");
-                      setBatchLabel("");
-                    }}
-                    className="text-white/40 hover:text-white/60 text-xs px-2 py-1"
-                  >
-                    Unlink
-                  </button>
+            {/* Linked order banner */}
+            {linkedOrder && (
+              <div className="mx-5 mt-4 rounded-xl border border-[#5f8fff]/20 bg-[#5f8fff]/[0.06] p-3 flex items-center justify-between">
+                <div className="text-sm">
+                  <p className="text-[#7ca6ff] font-medium">
+                    Linked to {linkedOrder.bundle_name} order ({linkedOrder.quantity} tags)
+                  </p>
+                  <p className="text-white/45 text-xs">
+                    {sellerLabel(linkedOrder.seller as any)} / {formatBundlePrice(linkedOrder.price_cents)}
+                  </p>
                 </div>
-              )}
+                <button
+                  onClick={() => {
+                    setLinkedOrder(null);
+                    setSelectedSellerId("");
+                    setBatchLabel("");
+                  }}
+                  className="text-white/40 hover:text-white/60 text-xs px-2 py-1"
+                >
+                  Unlink
+                </button>
+              </div>
+            )}
 
+            {/* Shared controls */}
+            <div className="px-5 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-white/60 mb-2">Assign seller</label>
+                <label className="block text-xs text-white/50 mb-1">Assign seller</label>
                 <select
                   value={selectedSellerId}
                   onChange={(e) => setSelectedSellerId(e.target.value)}
-                  className="relay-select w-full"
+                  className="relay-select w-full text-sm"
                 >
                   <option value="">No seller assigned</option>
                   {data.sellers.map((seller) => (
                     <option key={seller.id} value={seller.id}>
-                      {sellerLabel(seller)} · {seller.seller_tier.replace("tier_", "Tier ")}
+                      {sellerLabel(seller)} / {seller.seller_tier.replace("tier_", "Tier ")}
                     </option>
                   ))}
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm text-white/60 mb-2">Batch label</label>
+                <label className="block text-xs text-white/50 mb-1">Batch label</label>
                 <input
                   value={batchLabel}
                   onChange={(e) => setBatchLabel(e.target.value)}
                   placeholder="June 2026 batch"
-                  className="relay-input w-full"
+                  className="relay-input w-full text-sm"
                 />
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-[1fr,1fr,auto] gap-3">
+            {/* Two-column: Create Single | Bulk Import */}
+            <div className="p-5 grid grid-cols-1 xl:grid-cols-[1fr,auto,1fr] gap-0">
+              {/* Left: Create Single Tag */}
+              <div className="space-y-3 pr-0 xl:pr-5">
+                <p className="text-white/50 text-xs uppercase tracking-[0.14em]">Create Single Tag</p>
                 <input
                   value={singleSerial}
                   onChange={(e) => setSingleSerial(e.target.value)}
                   placeholder="Tag serial"
-                  className="relay-input"
+                  className="relay-input w-full text-sm"
                 />
                 <input
                   value={singleBarcode}
                   onChange={(e) => setSingleBarcode(e.target.value)}
                   placeholder="Barcode value"
-                  className="relay-input"
+                  className="relay-input w-full text-sm"
                 />
                 <button
                   onClick={handleCreateSingleTag}
                   disabled={saving}
-                  className="relay-button-primary whitespace-nowrap disabled:opacity-50"
+                  className="relay-button-primary w-full whitespace-nowrap disabled:opacity-50 text-sm"
                 >
                   Create Tag
                 </button>
               </div>
 
-              <div>
-                <label className="block text-sm text-white/60 mb-2">Bulk import</label>
+              {/* Vertical divider */}
+              <div className="hidden xl:block w-px bg-white/5 mx-0" />
+              <div className="block xl:hidden h-px bg-white/5 my-4" />
+
+              {/* Right: Bulk Import */}
+              <div className="space-y-3 pl-0 xl:pl-5">
+                <p className="text-white/50 text-xs uppercase tracking-[0.14em]">Bulk Import</p>
                 <textarea
                   value={bulkInput}
                   onChange={(e) => setBulkInput(e.target.value)}
-                  rows={6}
+                  rows={4}
                   placeholder={"SERIAL001,BARCODE001\nSERIAL002,BARCODE002\nSERIAL003"}
-                  className="relay-input w-full resize-none"
+                  className="relay-input w-full resize-none text-sm"
                 />
-                <p className="text-white/35 text-xs mt-2">
-                  Newline-delimited serials or CSV rows with serial and optional barcode.
+                <p className="text-white/30 text-xs">
+                  Newline-delimited serials or CSV rows (serial, barcode).
                 </p>
+                <button
+                  onClick={handleBulkImport}
+                  disabled={saving}
+                  className="relay-button-secondary w-full disabled:opacity-50 text-sm"
+                >
+                  Import Batch
+                </button>
               </div>
+            </div>
+          </div>
 
-              <button
-                onClick={handleBulkImport}
-                disabled={saving}
-                className="relay-button-secondary w-full disabled:opacity-50"
-              >
-                Import Batch
-              </button>
+          {/* Review Queue */}
+          <div className="relay-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-[#7ca6ff]" />
+              <h2 className="text-lg font-semibold text-[#f5f7fb]">Review Queue</h2>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ml-1 ${
+                reviewQueue.length > 0
+                  ? "bg-amber-500/15 text-amber-300"
+                  : "bg-white/5 text-white/30"
+              }`}>
+                {reviewQueue.length}
+              </span>
             </div>
 
-            {/* Review Queue */}
-            <div className="relay-card p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[#7ca6ff]" />
-                <h2 className="text-lg font-semibold text-[#f5f7fb]">Review Queue</h2>
+            {reviewQueue.length === 0 ? (
+              <div className="px-5 py-6 text-white/40 text-sm">
+                No tag submissions waiting on admin review.
               </div>
-
-              {reviewQueue.length === 0 ? (
-                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 text-white/45 text-sm">
-                  No tag submissions are waiting on admin review.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {reviewQueue.slice(0, 10).map((tag) => (
-                    <div key={tag.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {reviewQueue.slice(0, 10).map((tag) => (
+                  <div key={tag.id} className="px-5 py-4 border-l-[3px] border-l-amber-400">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
                           <p className="text-[#f5f7fb] font-semibold">{tag.tag_serial_number}</p>
-                          <p className="text-white/45 text-sm">
-                            Seller: {sellerLabel(tag.seller)} · Order {tag.order?.id?.slice(0, 8).toUpperCase()}
-                          </p>
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300">
+                            manual review
+                          </span>
                         </div>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300">
-                          manual review
-                        </span>
+                        <p className="text-white/45 text-sm">
+                          Seller: {sellerLabel(tag.seller)} / Order {tag.order?.id?.slice(0, 8).toUpperCase()}
+                        </p>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-2 flex-shrink-0">
                         <button
                           onClick={() => tag.assigned_order_id && handleCustodyReview(tag.assigned_order_id, true)}
                           disabled={saving || !tag.assigned_order_id}
-                          className="relay-button-primary inline-flex items-center gap-2 disabled:opacity-50"
+                          className="relay-button-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
                         >
-                          <CheckCircle2 className="w-4 h-4" />
+                          <CheckCircle2 className="w-3.5 h-3.5" />
                           Approve
                         </button>
                         <button
                           onClick={() => tag.assigned_order_id && handleCustodyReview(tag.assigned_order_id, false)}
                           disabled={saving || !tag.assigned_order_id}
-                          className="relay-button-danger inline-flex items-center gap-2 disabled:opacity-50"
+                          className="relay-button-danger inline-flex items-center gap-1.5 text-sm disabled:opacity-50"
                         >
-                          <XCircle className="w-4 h-4" />
+                          <XCircle className="w-3.5 h-3.5" />
                           Reject
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Full Inventory */}
-          <div className="relay-card p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-4">
+          {/* Full Tag Inventory */}
+          <div className="relay-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-[#f5f7fb]">Inventory</h2>
-                <p className="text-white/45 text-sm">Search by serial, barcode, seller, order, or batch label.</p>
+                <h2 className="text-lg font-semibold text-[#f5f7fb]">Tag Inventory</h2>
+                <p className="text-white/40 text-xs mt-0.5">Search by serial, barcode, seller, order, or batch label.</p>
               </div>
-              <div className="relative w-full md:w-80">
+              <div className="relative w-full md:w-72">
                 <Search className="w-4 h-4 text-white/30 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search tags"
-                  className="relay-input w-full pl-9"
+                  className="relay-input w-full pl-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="space-y-3">
-              {filteredTags.length === 0 ? (
-                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 text-white/45 text-sm">
-                  No tags matched this search.
-                </div>
-              ) : (
-                filteredTags.slice(0, 100).map((tag) => (
-                  <div key={tag.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <p className="text-[#f5f7fb] font-semibold">{tag.tag_serial_number}</p>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            tag.status === "voided"
-                              ? "bg-red-500/15 text-red-300"
-                              : tag.status === "assigned_to_seller"
-                                ? "bg-emerald-500/15 text-emerald-300"
-                                : "bg-[#5f8fff]/15 text-[#7ca6ff]"
-                          }`}>
-                            {tag.status.replace(/_/g, " ")}
-                          </span>
-                          {tag.photo_verification_status === "admin_review" && (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300">
-                              admin review
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-white/45 text-sm">
-                          Barcode: {tag.barcode_value || "None"} · Seller: {sellerLabel(tag.seller)} · Order {tag.order?.id?.slice(0, 8).toUpperCase() || "N/A"}
-                        </p>
-                        <p className="text-white/30 text-xs mt-1">
-                          Batch {tag.source_batch_label || "N/A"} · Imported {formatDate(tag.imported_at)} · Bound {formatDate(tag.bound_to_order_at)}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <select
-                          value={tag.assigned_seller_id || ""}
-                          onChange={(e) => {
-                            const sellerId = e.target.value;
-                            if (!sellerId) {
-                              void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "unassign" });
-                              return;
-                            }
-                            void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "assign", sellerId });
-                          }}
-                          disabled={saving || tag.status === "voided"}
-                          className="relay-select text-sm"
-                        >
-                          <option value="">Unassigned</option>
-                          {data.sellers.map((seller) => (
-                            <option key={seller.id} value={seller.id}>
-                              {sellerLabel(seller)}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "void", reason: "Voided by admin" })}
-                          disabled={saving || tag.status === "voided"}
-                          className="relay-button-danger disabled:opacity-50"
-                        >
-                          Void
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Completed Orders History */}
-          {tagOrders.filter((o) => o.status === "fulfilled").length > 0 && (
-            <div className="relay-card overflow-hidden">
-              <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <h2 className="font-semibold text-[#f5f7fb]">Completed Tag Orders</h2>
+            {filteredTags.length === 0 ? (
+              <div className="px-5 py-6 text-white/40 text-sm">
+                No tags matched this search.
               </div>
+            ) : (
               <div className="divide-y divide-white/5">
-                {tagOrders
-                  .filter((o) => o.status === "fulfilled")
-                  .slice(0, 20)
-                  .map((order) => (
-                    <div key={order.id} className="px-5 py-3 flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-[#f5f7fb] font-medium text-sm">
-                          {order.bundle_name} · {order.quantity} tags · {sellerLabel(order.seller as any)}
-                        </p>
-                        <p className="text-white/40 text-xs">
-                          {formatBundlePrice(order.price_cents)} · Fulfilled {formatDate(order.fulfilled_at)}
-                        </p>
+                {filteredTags.slice(0, 100).map((tag) => {
+                  const borderColor =
+                    tag.status === "voided"
+                      ? "border-l-red-400"
+                      : tag.status === "assigned_to_seller"
+                        ? "border-l-[#5f8fff]"
+                        : tag.status === "used"
+                          ? "border-l-emerald-400"
+                          : "border-l-white/10";
+
+                  return (
+                    <div key={tag.id} className={`px-5 py-3.5 border-l-[3px] ${borderColor}`}>
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                            <p className="text-[#f5f7fb] font-semibold text-sm">{tag.tag_serial_number}</p>
+                            <StatusBadge status={tag.status} />
+                            {tag.photo_verification_status === "admin_review" && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300">
+                                admin review
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-white/40 text-xs">
+                            Barcode: {tag.barcode_value || "None"} / {sellerLabel(tag.seller)} / Order {tag.order?.id?.slice(0, 8).toUpperCase() || "N/A"}
+                            <span className="text-white/25 ml-2">
+                              Batch {tag.source_batch_label || "N/A"} / Imported {formatDate(tag.imported_at)} / Bound {formatDate(tag.bound_to_order_at)}
+                            </span>
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 flex-shrink-0">
+                          <select
+                            value={tag.assigned_seller_id || ""}
+                            onChange={(e) => {
+                              const sellerId = e.target.value;
+                              if (!sellerId) {
+                                void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "unassign" });
+                                return;
+                              }
+                              void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "assign", sellerId });
+                            }}
+                            disabled={saving || tag.status === "voided"}
+                            className="relay-select text-sm"
+                          >
+                            <option value="">Unassigned</option>
+                            {data.sellers.map((seller) => (
+                              <option key={seller.id} value={seller.id}>
+                                {sellerLabel(seller)}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => void submitTagAction(`/api/admin/tags/${tag.id}`, { action: "void", reason: "Voided by admin" })}
+                            disabled={saving || tag.status === "voided"}
+                            className="relay-button-danger disabled:opacity-50 text-sm"
+                          >
+                            Void
+                          </button>
+                        </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${orderStatusTone(order.status)}`}>
-                        {order.status}
-                      </span>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
     </div>

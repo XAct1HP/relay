@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Shield, Lock, Star, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
+import { Lock, Star, AlertTriangle, RefreshCw } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
 import type { SellerTier } from "@/types";
 
@@ -69,30 +69,16 @@ function formatMoney(cents: number) {
   }).format((cents || 0) / 100);
 }
 
-function MetricCard({
-  label,
-  value,
-  tone = "blue",
-}: {
-  label: string;
-  value: string | number;
-  tone?: "blue" | "green" | "amber" | "red";
-}) {
-  const tones = {
-    blue: "border-[#5f8fff]/20 bg-[#5f8fff]/10 text-[#7ca6ff]",
-    green: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
-    amber: "border-amber-500/20 bg-amber-500/10 text-amber-300",
-    red: "border-red-500/20 bg-red-500/10 text-red-300",
-  };
+function trustScoreColor(score: number): string {
+  if (score >= 70) return "text-emerald-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-red-400";
+}
 
-  return (
-    <div className="relay-card p-4 sm:p-5">
-      <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
-      <div className={`inline-flex px-3 py-2 rounded-xl border text-lg font-semibold ${tones[tone]}`}>
-        {value}
-      </div>
-    </div>
-  );
+function trustScoreDot(score: number): string {
+  if (score >= 70) return "bg-emerald-400";
+  if (score >= 40) return "bg-amber-400";
+  return "bg-red-400";
 }
 
 export default function AdminTrustDashboardPage() {
@@ -161,6 +147,27 @@ export default function AdminTrustDashboardPage() {
     }
   }
 
+  // Memoized counts - placed above early returns to avoid hooks-order violations
+  const totalReviewCount = useMemo(() => {
+    if (!data) return 0;
+    return data.metrics.custodyReviewCount + data.metrics.checkcheckReviewCount + data.metrics.tagReviewCount;
+  }, [data]);
+
+  const tierMismatchCount = useMemo(() => {
+    if (!data) return 0;
+    return data.sellers.filter((s) => s.seller_tier !== s.recommended_seller_tier).length;
+  }, [data]);
+
+  const tierBarSegments = useMemo(() => {
+    if (!data || data.metrics.sellerCount === 0) return { t1: 0, t2: 0, t3: 0 };
+    const total = data.metrics.sellerCount;
+    return {
+      t1: (data.metrics.tier1Count / total) * 100,
+      t2: (data.metrics.tier2Count / total) * 100,
+      t3: (data.metrics.tier3Count / total) * 100,
+    };
+  }, [data]);
+
   if (isLoading || loading) {
     return (
       <div className="py-12 text-center text-white/40">
@@ -180,17 +187,25 @@ export default function AdminTrustDashboardPage() {
           <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
           <h1 className="relay-title">Seller Trust</h1>
           <p className="text-white/50 max-w-2xl">
-            Review automated trust scores, promotion gates, Relay Balance exposure, tag inventory, and sellers who need manual attention.
+            Trust scores, tier distribution, and sellers who need manual attention.
           </p>
         </div>
 
         <button
           onClick={evaluateAll}
           disabled={evaluating}
-          className="relay-button-secondary inline-flex items-center gap-2"
+          className={`inline-flex items-center gap-2 ${
+            tierMismatchCount > 0
+              ? "relay-button-primary"
+              : "relay-button-secondary"
+          }`}
         >
           <RefreshCw className={`w-4 h-4 ${evaluating ? "animate-spin" : ""}`} />
-          {evaluating ? "Evaluating..." : "Run Evaluation"}
+          {evaluating
+            ? "Evaluating..."
+            : tierMismatchCount > 0
+              ? `Run Evaluation (${tierMismatchCount} pending)`
+              : "Run Evaluation"}
         </button>
       </div>
 
@@ -202,26 +217,92 @@ export default function AdminTrustDashboardPage() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-            <MetricCard label="Sellers" value={data.metrics.sellerCount} />
-            <MetricCard label="Pending Tier 3 Approval" value={data.metrics.pendingTier3Approvals} tone="amber" />
-            <MetricCard label="Locked Tiers" value={data.metrics.lockedCount} tone="green" />
-            <MetricCard label="Banned Sellers" value={data.metrics.bannedSellerCount} tone="red" />
-            <MetricCard label="Tier 1 / 2 / 3" value={`${data.metrics.tier1Count} / ${data.metrics.tier2Count} / ${data.metrics.tier3Count}`} />
-            <MetricCard label="Orders Requiring Review" value={data.metrics.custodyReviewCount + data.metrics.checkcheckReviewCount + data.metrics.tagReviewCount} tone="amber" />
-            <MetricCard label="Total Pending Balance" value={formatMoney(data.metrics.totalPendingBalanceCents)} tone="blue" />
-            <MetricCard label="Total Available Balance" value={formatMoney(data.metrics.totalAvailableBalanceCents)} tone="green" />
-            <MetricCard label="Total Current Exposure" value={formatMoney(data.metrics.totalExposureCents)} tone="amber" />
-            <MetricCard label="Total Withdrawable" value={formatMoney(data.metrics.totalWithdrawableBalanceCents)} tone="green" />
-            <MetricCard label="Assigned Tag Inventory" value={data.metrics.totalTagInventory} />
+          {/* Hero row: seller count + tier distribution bar */}
+          <div className="relay-card p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+              <div className="shrink-0">
+                <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-1">Total Sellers</p>
+                <p className="text-3xl font-bold text-[#f5f7fb]">{data.metrics.sellerCount}</p>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">Tier Distribution</p>
+                <div className="flex h-3 rounded-full overflow-hidden bg-white/5">
+                  {tierBarSegments.t1 > 0 && (
+                    <div
+                      className="bg-white/30 transition-all"
+                      style={{ width: `${tierBarSegments.t1}%` }}
+                    />
+                  )}
+                  {tierBarSegments.t2 > 0 && (
+                    <div
+                      className="bg-[#5f8fff] transition-all"
+                      style={{ width: `${tierBarSegments.t2}%` }}
+                    />
+                  )}
+                  {tierBarSegments.t3 > 0 && (
+                    <div
+                      className="bg-emerald-400 transition-all"
+                      style={{ width: `${tierBarSegments.t3}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex gap-5 mt-2 text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white/30" />
+                    <span className="text-white/50">T1</span>
+                    <span className="text-[#f5f7fb] font-semibold">{data.metrics.tier1Count}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]" />
+                    <span className="text-white/50">T2</span>
+                    <span className="text-[#f5f7fb] font-semibold">{data.metrics.tier2Count}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                    <span className="text-white/50">T3</span>
+                    <span className="text-[#f5f7fb] font-semibold">{data.metrics.tier3Count}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
+          {/* Attention row: actionable items only, shown when count > 0 */}
+          {(data.metrics.pendingTier3Approvals > 0 ||
+            data.metrics.bannedSellerCount > 0 ||
+            data.metrics.lockedCount > 0 ||
+            totalReviewCount > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {data.metrics.pendingTier3Approvals > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border border-amber-500/20 bg-amber-500/10 text-amber-300">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {data.metrics.pendingTier3Approvals} Pending T3 Approval{data.metrics.pendingTier3Approvals !== 1 ? "s" : ""}
+                </span>
+              )}
+              {data.metrics.bannedSellerCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border border-red-500/20 bg-red-500/10 text-red-300">
+                  {data.metrics.bannedSellerCount} Banned
+                </span>
+              )}
+              {data.metrics.lockedCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
+                  <Lock className="w-3.5 h-3.5" />
+                  {data.metrics.lockedCount} Locked
+                </span>
+              )}
+              {totalReviewCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border border-amber-500/20 bg-amber-500/10 text-amber-300">
+                  {totalReviewCount} Order{totalReviewCount !== 1 ? "s" : ""} to Review
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Seller queue */}
           <div className="relay-card p-0 overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-[#f5f7fb]">Seller Queue</h2>
-                <p className="text-white/45 text-sm">Current tier, automated recommendation, Relay Balance status, and review load.</p>
-              </div>
+            <div className="px-5 py-4 border-b border-white/5">
+              <h2 className="text-lg font-semibold text-[#f5f7fb]">Seller Queue</h2>
+              <p className="text-white/45 text-sm">Tier status, trust scores, and review load.</p>
             </div>
 
             <div className="divide-y divide-white/5">
@@ -229,20 +310,23 @@ export default function AdminTrustDashboardPage() {
                 <Link
                   key={seller.id}
                   href={`/admin/trust/${seller.id}`}
-                  className="block px-5 py-4 hover:bg-white/[0.02] transition-colors"
+                  className="block px-5 py-4 hover:bg-white/[0.02] transition-colors group"
                 >
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="min-w-0">
+                  <div className="flex items-center gap-4">
+                    {/* Left: name + badges */}
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <p className="text-[#f5f7fb] font-semibold truncate">
+                        <p className="text-[#f5f7fb] font-semibold truncate group-hover:text-[#7ca6ff] transition-colors">
                           {seller.display_name || seller.full_name || seller.username || seller.email}
                         </p>
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#5f8fff]/15 text-[#7ca6ff]">
                           {formatTier(seller.seller_tier)}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white/5 text-white/60">
-                          Recommended {formatTier(seller.recommended_seller_tier)}
-                        </span>
+                        {seller.seller_tier !== seller.recommended_seller_tier && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300">
+                            Rec. {formatTier(seller.recommended_seller_tier)}
+                          </span>
+                        )}
                         {seller.tier_locked && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300">
                             <Lock className="w-3 h-3" />
@@ -261,62 +345,46 @@ export default function AdminTrustDashboardPage() {
                             Banned
                           </span>
                         )}
+                        {seller.review_queue_count > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-300">
+                            {seller.review_queue_count} to review
+                          </span>
+                        )}
                       </div>
                       <p className="text-white/40 text-sm truncate">
                         @{seller.username || "no-username"} · {seller.email}
                       </p>
                     </div>
 
-                    {/* Desktop: grid layout / Mobile: compact inline stats */}
-                    <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-7 gap-3 xl:min-w-[920px]">
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Score</p>
-                        <p className="text-[#f5f7fb] font-semibold">{seller.trust_score}</p>
+                    {/* Right: key stats inline */}
+                    <div className="hidden sm:flex items-center gap-5 shrink-0 text-sm">
+                      <div className="text-center">
+                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-0.5">Score</p>
+                        <span className="flex items-center justify-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${trustScoreDot(seller.trust_score)}`} />
+                          <span className={`font-bold text-base ${trustScoreColor(seller.trust_score)}`}>
+                            {seller.trust_score}
+                          </span>
+                        </span>
                       </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">GMV</p>
+                      <div className="text-center">
+                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-0.5">GMV</p>
                         <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.lifetime_gmv_cents)}</p>
                       </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Completed</p>
+                      <div className="text-center">
+                        <p className="text-white/40 text-[11px] uppercase tracking-[0.14em] mb-0.5">Orders</p>
                         <p className="text-[#f5f7fb] font-semibold">{seller.completed_order_count}</p>
                       </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Buyer Completion</p>
-                        <p className="text-[#f5f7fb] font-semibold">{((seller.buyer_completion_rate_bps || 0) / 100).toFixed(1)}%</p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Pending</p>
-                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.pending_balance_cents)}</p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Available</p>
-                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.available_balance_cents)}</p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Exposure</p>
-                        <p className="text-[#f5f7fb] font-semibold">{formatMoney(seller.exposure_cents)}</p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                        <p className="text-white/50 text-[11px] uppercase tracking-[0.14em] mb-1">Review Queue</p>
-                        <p className="text-[#f5f7fb] font-semibold">{seller.review_queue_count}</p>
-                      </div>
-                    </div>
-                    <div className="md:hidden flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                      <span className="text-white/50">Score <span className="text-[#f5f7fb] font-semibold">{seller.trust_score}</span></span>
-                      <span className="text-white/50">GMV <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.lifetime_gmv_cents)}</span></span>
-                      <span className="text-white/50">Orders <span className="text-[#f5f7fb] font-semibold">{seller.completed_order_count}</span></span>
-                      <span className="text-white/50">Pending <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.pending_balance_cents)}</span></span>
-                      <span className="text-white/50">Available <span className="text-[#f5f7fb] font-semibold">{formatMoney(seller.available_balance_cents)}</span></span>
-                      {seller.review_queue_count > 0 && (
-                        <span className="text-amber-300 font-semibold">{seller.review_queue_count} to review</span>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-[#7ca6ff] text-sm font-medium">
-                      <Shield className="w-4 h-4" />
-                      Review Seller
-                      <ChevronRight className="w-4 h-4" />
+                    {/* Mobile: compact stats */}
+                    <div className="sm:hidden flex items-center gap-3 shrink-0 text-sm">
+                      <span className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${trustScoreDot(seller.trust_score)}`} />
+                        <span className={`font-bold ${trustScoreColor(seller.trust_score)}`}>
+                          {seller.trust_score}
+                        </span>
+                      </span>
                     </div>
                   </div>
                 </Link>
