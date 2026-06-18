@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import {
-  runCompletedOrderFundsAvailabilityJob,
+  runPayoutSettlementReconciliationJob,
   runReserveReleaseJob,
 } from "@/lib/background-jobs";
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient();
     const [reserveResult, fundsResult] = await Promise.all([
       runReserveReleaseJob(adminClient),
-      runCompletedOrderFundsAvailabilityJob(adminClient, {
+      runPayoutSettlementReconciliationJob(adminClient, {
         actorRole: "system",
       }),
     ]);
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       success: true,
       reserveResult,
       fundsResult,
+      reconciliationResult: fundsResult,
     });
   } catch (error) {
     return NextResponse.json(

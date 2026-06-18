@@ -580,7 +580,8 @@ export async function processOrderPayoutTrigger(
     });
 
     const payoutStatusForRow =
-      releaseResult.releasedAmountCents >= allocation.netPaidCents
+      releaseResult.releasedAmountCents + releaseResult.alreadyReleasedCents >=
+      allocation.netPaidCents
         ? "paid"
         : "pending";
 

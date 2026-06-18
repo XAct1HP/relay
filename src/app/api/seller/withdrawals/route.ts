@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCompletedOrderFundsAvailabilityJob } from "@/lib/background-jobs";
+import { runPayoutSettlementReconciliationJob } from "@/lib/background-jobs";
 import { createSellerWithdrawalRequest } from "@/lib/money-policy";
 import { requireSellerSession } from "@/lib/seller-access";
 
@@ -33,7 +33,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { user, adminClient } = await requireSellerSession();
-    await runCompletedOrderFundsAvailabilityJob(adminClient, {
+    await runPayoutSettlementReconciliationJob(adminClient, {
       sellerId: user.id,
       actorRole: "seller",
       actorUserId: user.id,

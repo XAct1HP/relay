@@ -5,6 +5,7 @@ import {
   finalizeOrderReviewCompletion,
   loadBuyerOrderReviewContext,
 } from "@/lib/buyer-order-review";
+import { evaluateOrderFundsReconciliationState } from "@/lib/money-policy";
 import { getOrderFulfillmentGateStatus } from "@/lib/order-auth";
 import { releaseEligibleReserveEntries, processOrderPayoutTrigger } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
@@ -358,51 +359,194 @@ export async function runCompletedOrderFundsAvailabilityJob(
     nowIso?: string;
   }
 ) {
+  return runPayoutSettlementReconciliationJob(adminClient, input);
+}
+
+export async function runPayoutSettlementReconciliationJob(
+  adminClient: SupabaseAdminClient,
+  input?: {
+    sellerId?: string;
+    actorRole?: "system" | "admin" | "seller";
+    actorUserId?: string | null;
+    nowIso?: string;
+  }
+) {
   const nowIso = input?.nowIso || new Date().toISOString();
   let query = adminClient
-    .from("orders")
-    .select("id, review_window_ends_at, review_deadline")
-    .eq("status", "completed")
-    .in("balance_credit_status", ["not_started", "pending"]);
+    .from("order_payouts")
+    .select(`
+      id,
+      order_id,
+      seller_id,
+      payout_step,
+      status,
+      created_at
+    `)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
 
   if (input?.sellerId) {
     query = query.eq("seller_id", input.sellerId);
   }
 
-  const { data: candidateOrders, error } = await query;
+  const { data: candidatePayouts, error } = await query;
 
   if (error) {
-    throw new Error(error.message || "Failed to query completed orders for fund availability");
+    throw new Error(error.message || "Failed to query pending payout records for reconciliation");
   }
 
-  const results: { orderId: string; status: string; error?: string }[] = [];
+  const results: Array<{
+    payoutId: string;
+    orderId: string;
+    sellerId: string;
+    status: string;
+    reason?: string;
+    detail?: string;
+  }> = [];
 
-  for (const candidate of candidateOrders || []) {
+  const processedOrders = new Set<string>();
+
+  for (const candidate of candidatePayouts || []) {
+    if (processedOrders.has(candidate.order_id)) {
+      results.push({
+        payoutId: candidate.id,
+        orderId: candidate.order_id,
+        sellerId: candidate.seller_id,
+        status: "skipped_duplicate_order",
+        reason: "order_already_processed_in_run",
+        detail: "Another pending payout row for this order was already reconciled in this run.",
+      });
+      continue;
+    }
+
+    processedOrders.add(candidate.order_id);
+
     try {
-      const reviewDeadline =
-        candidate.review_window_ends_at || candidate.review_deadline || null;
-      const trigger =
-        reviewDeadline && new Date(reviewDeadline).getTime() <= new Date(nowIso).getTime()
-          ? "review_window_expiry"
-          : "buyer_confirmation";
+      const state = await evaluateOrderFundsReconciliationState(candidate.order_id, {
+        adminClient,
+        actorRole: input?.actorRole || "system",
+        actorUserId: input?.actorUserId || null,
+        now: new Date(nowIso),
+      });
+
+      if (!state.canRelease && state.skipReason !== "already_released") {
+        await logRelayAuditEvent(adminClient, {
+          actorRole: input?.actorRole || "system",
+          actorUserId: input?.actorUserId || null,
+          orderId: candidate.order_id,
+          sellerId: candidate.seller_id,
+          eventType: "money.payout_settlement_reconciliation_skipped",
+          metadata: {
+            payoutId: candidate.id,
+            payoutStep: candidate.payout_step,
+            reason: state.skipReason,
+            detail: state.skipDetail,
+            paymentFundingSource: state.paymentFundingSource,
+            stripeSettlementStatus: state.stripeSettlementStatus,
+            stripeFundsAvailableOn: state.stripeFundsAvailableOn,
+            balanceCreditStatus: state.balanceCreditStatus,
+            nowIso,
+          },
+        });
+
+        results.push({
+          payoutId: candidate.id,
+          orderId: candidate.order_id,
+          sellerId: candidate.seller_id,
+          status: "skipped",
+          reason: state.skipReason || "not_eligible",
+          detail: state.skipDetail || undefined,
+        });
+        continue;
+      }
+
       const payoutResult = await processOrderPayoutTrigger(adminClient, {
-        orderId: candidate.id,
-        trigger,
+        orderId: candidate.order_id,
+        trigger: state.releaseTrigger,
         actorRole: input?.actorRole || "system",
         actorUserId: input?.actorUserId || null,
       });
 
+      const released =
+        payoutResult.processedSteps.length > 0 &&
+        payoutResult.processedSteps.some((step) => step.id === candidate.id);
+      const repairedAlreadyReleased =
+        state.skipReason === "already_released" &&
+        payoutResult.processedSteps.some((step) => step.id === candidate.id);
+
+      await logRelayAuditEvent(adminClient, {
+        actorRole: input?.actorRole || "system",
+        actorUserId: input?.actorUserId || null,
+        orderId: candidate.order_id,
+        sellerId: candidate.seller_id,
+        eventType: released || repairedAlreadyReleased
+          ? "money.payout_settlement_reconciliation_released"
+          : "money.payout_settlement_reconciliation_skipped",
+        metadata: {
+          payoutId: candidate.id,
+          payoutStep: candidate.payout_step,
+          reason:
+            released || repairedAlreadyReleased
+              ? state.skipReason === "already_released"
+                ? "payout_row_repaired_from_existing_ledger_credit"
+                : "eligible_and_released"
+              : payoutResult.blocked || state.skipReason || "no_pending_step_updated",
+          detail:
+            released || repairedAlreadyReleased
+              ? state.skipReason === "already_released"
+                ? "Pending payout row was marked released because the order was already credited."
+                : "Pending seller funds were moved to available balance through the internal ledger."
+              : state.skipDetail,
+          paymentFundingSource: state.paymentFundingSource,
+          stripeSettlementStatus: state.stripeSettlementStatus,
+          stripeFundsAvailableOn: state.stripeFundsAvailableOn,
+          balanceCreditStatus: state.balanceCreditStatus,
+          releasedStepCount: payoutResult.processedSteps.length,
+          nowIso,
+        },
+      });
+
       results.push({
-        orderId: candidate.id,
+        payoutId: candidate.id,
+        orderId: candidate.order_id,
+        sellerId: candidate.seller_id,
         status:
-          payoutResult.processedSteps.length > 0 ? "released" : payoutResult.blocked ? "blocked" : "pending",
-        error: payoutResult.blocked,
+          released || repairedAlreadyReleased
+            ? "released"
+            : payoutResult.blocked
+              ? "blocked"
+              : "pending",
+        reason:
+          repairedAlreadyReleased
+            ? "payout_row_repaired_from_existing_ledger_credit"
+            : payoutResult.blocked || state.skipReason || undefined,
+        detail:
+          repairedAlreadyReleased
+            ? "Pending payout row was updated to released without creating a second credit."
+            : state.skipDetail || undefined,
       });
     } catch (jobError) {
+      await logRelayAuditEvent(adminClient, {
+        actorRole: input?.actorRole || "system",
+        actorUserId: input?.actorUserId || null,
+        orderId: candidate.order_id,
+        sellerId: candidate.seller_id,
+        eventType: "money.payout_settlement_reconciliation_error",
+        metadata: {
+          payoutId: candidate.id,
+          payoutStep: candidate.payout_step,
+          error: jobError instanceof Error ? jobError.message : "Unknown error",
+          nowIso,
+        },
+      });
+
       results.push({
-        orderId: candidate.id,
+        payoutId: candidate.id,
+        orderId: candidate.order_id,
+        sellerId: candidate.seller_id,
         status: "error",
-        error: jobError instanceof Error ? jobError.message : "Unknown error",
+        reason: "reconciliation_error",
+        detail: jobError instanceof Error ? jobError.message : "Unknown error",
       });
     }
   }
@@ -410,8 +554,14 @@ export async function runCompletedOrderFundsAvailabilityJob(
   return {
     processed: results.length,
     released: results.filter((result) => result.status === "released").length,
+    skipped: results.filter(
+      (result) =>
+        result.status === "skipped" || result.status === "skipped_duplicate_order"
+    ).length,
     pending: results.filter((result) => result.status === "pending").length,
-    failed: results.filter((result) => result.status === "blocked" || result.status === "error").length,
+    failed: results.filter(
+      (result) => result.status === "blocked" || result.status === "error"
+    ).length,
     results,
   };
 }

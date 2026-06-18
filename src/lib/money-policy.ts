@@ -147,6 +147,25 @@ export interface OrderFundsReleaseResult extends RelayBalanceMutationResult {
   ledgerEntries: any[];
 }
 
+export interface OrderFundsReconciliationState {
+  orderId: string;
+  sellerId: string;
+  orderStatus: string | null;
+  balanceCreditStatus: BalanceCreditStatus | null;
+  paymentFundingSource: PaymentFundingSource;
+  stripeSettlementStatus: StripeSettlementStatus | null;
+  stripeFundsAvailableOn: string | null;
+  stripeFundsSettledAt: string | null;
+  sellerProceedsCents: number;
+  eligibleAmountCents: number;
+  alreadyReleasedCents: number;
+  unreleasedEligibleAmountCents: number;
+  releaseTrigger: "buyer_confirmation" | "review_window_expiry";
+  canRelease: boolean;
+  skipReason: string | null;
+  skipDetail: string | null;
+}
+
 export interface ExposureHoldResult extends RelayBalanceMutationResult {
   amountCents: number;
   hold?: any;
@@ -1350,6 +1369,81 @@ export async function releaseOrderFundsToAvailable(
     releasedAmountCents,
     pendingAmountCents: Math.max(0, sellerProceedsCents - updatedReleasedCents),
     ledgerEntries: createdEntries,
+  };
+}
+
+export async function evaluateOrderFundsReconciliationState(
+  orderId: string,
+  options?: MoneyMutationOptions
+): Promise<OrderFundsReconciliationState> {
+  const adminClient = getAdminClient(options);
+  const now = getNow(options);
+  const order = await ensureOrderMoneySnapshot(
+    adminClient,
+    await loadOrderMoneyContext(adminClient, orderId)
+  );
+  const sellerTier = resolveSellerTier(order);
+  const sellerProceedsCents = Math.max(0, order.seller_proceeds_cents || 0);
+  const fundingSource = resolvePaymentFundingSource(order);
+  const settlementSatisfied =
+    fundingSource === "relay_balance" ? true : isStripeSettlementCleared(order, now);
+  const orderCompleted = isOrderCompletedForFundsRelease(order);
+  const eligibility = determineFundsEligibility(order, sellerTier);
+  const releasedState = await getReleasedAvailableCreditStateForOrder(adminClient, order.id);
+  const unreleasedEligibleAmountCents = eligibility.stages.reduce((sum, stage) => {
+    if (!stage.eligible || releasedState.releaseKeys.has(stage.releaseKey)) {
+      return sum;
+    }
+
+    return sum + stage.amountCents;
+  }, 0);
+  const releaseTrigger =
+    eligibility.reviewWindowExpired ? "review_window_expiry" : "buyer_confirmation";
+
+  let skipReason: string | null = null;
+  let skipDetail: string | null = null;
+
+  if (!orderCompleted) {
+    skipReason = "order_not_completed";
+    skipDetail = "Order must be completed in Relay before seller funds can move to available.";
+  } else if (fundingSource === "card" && !settlementSatisfied) {
+    if (order.stripe_settlement_status === "pending_settlement_unknown") {
+      skipReason = "stripe_settlement_unknown";
+      skipDetail = "Stripe settlement metadata is still missing and needs webhook or reconciliation backfill.";
+    } else if (order.stripe_funds_available_on) {
+      skipReason = "stripe_available_on_not_reached";
+      skipDetail = `Stripe funds are not available in the platform balance until ${order.stripe_funds_available_on}.`;
+    } else {
+      skipReason = "stripe_settlement_not_confirmed";
+      skipDetail = "Stripe has not confirmed that card-funded proceeds are available in the platform balance yet.";
+    }
+  } else if (unreleasedEligibleAmountCents <= 0) {
+    if (releasedState.releasedAmountCents >= sellerProceedsCents && sellerProceedsCents > 0) {
+      skipReason = "already_released";
+      skipDetail = "Available-credit ledger entries already cover this order.";
+    } else {
+      skipReason = "no_eligible_unreleased_funds";
+      skipDetail = "There are no unreleased eligible funds left for this order.";
+    }
+  }
+
+  return {
+    orderId: order.id,
+    sellerId: order.seller_id,
+    orderStatus: order.status || null,
+    balanceCreditStatus: order.balance_credit_status || null,
+    paymentFundingSource: fundingSource,
+    stripeSettlementStatus: order.stripe_settlement_status || null,
+    stripeFundsAvailableOn: order.stripe_funds_available_on || null,
+    stripeFundsSettledAt: order.stripe_funds_settled_at || null,
+    sellerProceedsCents,
+    eligibleAmountCents: eligibility.eligibleAmountCents,
+    alreadyReleasedCents: releasedState.releasedAmountCents,
+    unreleasedEligibleAmountCents,
+    releaseTrigger,
+    canRelease: unreleasedEligibleAmountCents > 0,
+    skipReason,
+    skipDetail,
   };
 }
 
