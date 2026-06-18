@@ -45,8 +45,13 @@ export async function POST(request: NextRequest) {
         : typeof body?.amountDollars === "number"
           ? Math.round(body.amountDollars * 100)
           : NaN;
-    const idempotencyKey =
-      typeof body?.idempotencyKey === "string" ? body.idempotencyKey : undefined;
+    const idempotencyKey = [
+      typeof body?.idempotencyKey === "string" ? body.idempotencyKey : null,
+      request.headers.get("idempotency-key"),
+      request.headers.get("x-idempotency-key"),
+    ]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .find((value) => value.length > 0);
 
     if (!Number.isFinite(amountCents)) {
       return NextResponse.json({ error: "Invalid withdrawal amount" }, { status: 400 });
@@ -58,6 +63,17 @@ export async function POST(request: NextRequest) {
       actorUserId: user.id,
       idempotencyKey,
     });
+
+    if (result.withdrawalRequest?.status === "failed") {
+      return NextResponse.json(
+        {
+          error:
+            result.withdrawalRequest.failure_reason || "Failed to create withdrawal",
+          result,
+        },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(result);
   } catch (error) {

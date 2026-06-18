@@ -64,6 +64,16 @@ interface MoneyMutationOptions {
     | "carrier_acceptance";
 }
 
+class WithdrawalTransferPreflightError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "WithdrawalTransferPreflightError";
+    this.code = code;
+  }
+}
+
 interface MoneyPolicyOrderLike {
   status?: string | null;
   tracking_status?: string | null;
@@ -230,6 +240,28 @@ function toCents(value: number | string | null | undefined) {
   }
 
   return Math.max(0, Math.round(numericValue * 100));
+}
+
+function sumStripeBalanceAmountCents(
+  balances:
+    | Array<{
+        amount: number;
+        currency: string;
+      }>
+    | null
+    | undefined,
+  currency = "usd"
+) {
+  const normalizedCurrency = currency.trim().toLowerCase();
+
+  return (balances || []).reduce((sum, entry) => {
+    if (String(entry.currency || "").trim().toLowerCase() !== normalizedCurrency) {
+      return sum;
+    }
+
+    const amount = Number(entry.amount || 0);
+    return Number.isFinite(amount) ? sum + amount : sum;
+  }, 0);
 }
 
 function resolvePaymentFundingSource(order: MoneyPolicyOrderLike): PaymentFundingSource {
@@ -956,6 +988,117 @@ async function loadWithdrawalRequest(
   return {
     ...(data as any),
     seller: seller || null,
+  };
+}
+
+async function getWithdrawalRequestedLedgerEntry(
+  adminClient: SupabaseAdminClient,
+  sellerId: string,
+  withdrawalRequestId: string
+) {
+  const { data, error } = await adminClient
+    .from("relay_balance_ledger")
+    .select("id")
+    .eq("seller_id", sellerId)
+    .eq("type", "withdrawal_requested")
+    .contains("metadata", {
+      withdrawal_request_id: withdrawalRequestId,
+    })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "Failed to load withdrawal reserve ledger entry");
+  }
+
+  return data || null;
+}
+
+function getStripeTransferDestinationFailureReason(
+  account: Stripe.Account | Stripe.DeletedAccount
+) {
+  if ("deleted" in account && account.deleted) {
+    return "Connected Stripe account was deleted.";
+  }
+
+  const transferCapability =
+    typeof account.capabilities?.transfers === "string"
+      ? account.capabilities.transfers
+      : null;
+  const disabledReason =
+    account.requirements?.disabled_reason ||
+    account.future_requirements?.disabled_reason ||
+    null;
+
+  if (transferCapability && transferCapability !== "active") {
+    return `Connected Stripe account cannot receive transfers yet (${transferCapability}).`;
+  }
+
+  if (account.payouts_enabled !== true) {
+    return "Connected Stripe account cannot receive transfers until payouts are enabled.";
+  }
+
+  if (disabledReason) {
+    return `Connected Stripe account is restricted: ${disabledReason}.`;
+  }
+
+  return null;
+}
+
+async function verifyWithdrawalTransferPreflight(
+  adminClient: SupabaseAdminClient,
+  request: any,
+  netTransferAmountCents: number
+) {
+  const stripeAccountId = request.seller?.stripe_account_id;
+
+  if (!stripeAccountId) {
+    throw new WithdrawalTransferPreflightError(
+      "missing_stripe_account",
+      "Seller does not have a connected Stripe account."
+    );
+  }
+
+  const [account, platformBalance, reserveLedgerEntry] = await Promise.all([
+    stripe.accounts.retrieve(stripeAccountId),
+    stripe.balance.retrieve(),
+    getWithdrawalRequestedLedgerEntry(adminClient, request.seller_id, request.id).catch(
+      (error) => {
+        console.warn("Withdrawal reserve ledger lookup failed:", {
+          withdrawalRequestId: request.id,
+          sellerId: request.seller_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        return null;
+      }
+    ),
+  ]);
+
+  const destinationFailureReason = getStripeTransferDestinationFailureReason(account);
+  if (destinationFailureReason) {
+    throw new WithdrawalTransferPreflightError(
+      "stripe_account_not_transfer_ready",
+      destinationFailureReason
+    );
+  }
+
+  const platformAvailableBalanceCents = sumStripeBalanceAmountCents(
+    platformBalance.available,
+    "usd"
+  );
+
+  if (platformAvailableBalanceCents < netTransferAmountCents) {
+    throw new WithdrawalTransferPreflightError(
+      "platform_balance_insufficient",
+      `Relay platform Stripe balance does not have enough available USD funds for this withdrawal. Available: ${(platformAvailableBalanceCents / 100).toFixed(2)}, required: ${(netTransferAmountCents / 100).toFixed(2)}.`
+    );
+  }
+
+  return {
+    reserveLedgerEntryId: reserveLedgerEntry?.id || null,
+    platformAvailableBalanceCents,
   };
 }
 
@@ -1848,7 +1991,18 @@ export async function createSellerWithdrawalRequest(
   }
 
   if (existingRequest) {
-    const relayBalance = await getRelayBalanceSnapshot(sellerId, {
+    if (
+      existingRequest.status === "processing" ||
+      (existingRequest.status === "pending" &&
+        (!existingRequest.review_required || existingRequest.reviewed_at))
+    ) {
+      return processSellerWithdrawalRequest(existingRequest.id, {
+        ...options,
+        adminClient,
+      });
+    }
+
+    const existingRelayBalance = await getRelayBalanceSnapshot(sellerId, {
       ...options,
       adminClient,
     });
@@ -1857,7 +2011,7 @@ export async function createSellerWithdrawalRequest(
       created: false,
       reason: "existing_withdrawal_request",
       withdrawalRequest: existingRequest,
-      relayBalance,
+      relayBalance: existingRelayBalance,
       transferFeeCents,
       netTransferAmountCents: calculateNetWithdrawalAmountCents(
         Number(existingRequest.amount_cents || 0),
@@ -1877,13 +2031,10 @@ export async function createSellerWithdrawalRequest(
         : "Withdrawals are temporarily frozen by Relay admin review."
     );
   }
-  const withdrawableBalanceCents = await calculateWithdrawableBalance(sellerId, {
-    ...options,
-    adminClient,
-  });
+  const availableForWithdrawalCents = relayBalance.availableBalanceCents;
 
-  if (normalizedAmountCents > withdrawableBalanceCents) {
-    throw new Error("Withdrawal amount exceeds withdrawable balance.");
+  if (normalizedAmountCents > availableForWithdrawalCents) {
+    throw new Error("Withdrawal amount exceeds available balance.");
   }
 
   const reviewRequired =
@@ -1989,6 +2140,7 @@ export async function processSellerWithdrawalRequest(
     normalizedAmountCents,
     transferFeeCents
   );
+  let reserveLedgerEntryId: string | null = null;
 
   if (!request.seller?.stripe_account_id) {
     const failedRequest = await restoreWithdrawalBalance(adminClient, request, options, {
@@ -2073,6 +2225,13 @@ export async function processSellerWithdrawalRequest(
   let transfer: Stripe.Response<Stripe.Transfer> | null = null;
 
   try {
+    const preflight = await verifyWithdrawalTransferPreflight(
+      adminClient,
+      request,
+      netTransferAmountCents
+    );
+    reserveLedgerEntryId = preflight.reserveLedgerEntryId;
+
     transfer = await stripe.transfers.create(
       {
         amount: netTransferAmountCents,
@@ -2081,6 +2240,7 @@ export async function processSellerWithdrawalRequest(
         metadata: {
           withdrawal_request_id: request.id,
           seller_id: request.seller_id,
+          ledger_entry_id: reserveLedgerEntryId || "",
           gross_amount_cents: String(normalizedAmountCents),
           transfer_fee_cents: String(transferFeeCents),
         },
@@ -2118,6 +2278,7 @@ export async function processSellerWithdrawalRequest(
         source: "relay_balance_policy",
         withdrawal_request_id: request.id,
         stripe_transfer_id: transfer.id,
+        reserve_ledger_entry_id: reserveLedgerEntryId,
         gross_amount_cents: normalizedAmountCents,
         transfer_fee_cents: transferFeeCents,
         net_transfer_amount_cents: netTransferAmountCents,
@@ -2133,6 +2294,7 @@ export async function processSellerWithdrawalRequest(
         amountCents: normalizedAmountCents,
         transferFeeCents,
         netTransferAmountCents,
+        reserveLedgerEntryId,
         ledgerEntryId: completionLedger.entry.id,
       },
     });
@@ -2149,6 +2311,13 @@ export async function processSellerWithdrawalRequest(
     };
   } catch (error) {
     if (transfer) {
+      console.error("Withdrawal transfer created but local finalization failed:", {
+        withdrawalRequestId,
+        sellerId: request.seller_id,
+        stripeTransferId: transfer.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       return {
         created: false,
         reason: "stripe_transfer_created_pending_reconcile",
@@ -2164,6 +2333,37 @@ export async function processSellerWithdrawalRequest(
 
     const failureReason =
       error instanceof Error ? error.message : "Failed to create Stripe transfer";
+    const failureCode =
+      error instanceof WithdrawalTransferPreflightError
+        ? error.code
+        : "stripe_transfer_failed";
+
+    console.error("Withdrawal transfer failed before completion:", {
+      withdrawalRequestId,
+      sellerId: request.seller_id,
+      failureCode,
+      failureReason,
+    });
+
+    try {
+      await logMoneyMovement(adminClient, options, {
+        sellerId: request.seller_id,
+        eventType: "money.withdrawal_preflight_failed",
+        metadata: {
+          withdrawalRequestId: request.id,
+          failureCode,
+          failureReason,
+          reserveLedgerEntryId,
+        },
+      });
+    } catch (auditError) {
+      console.error("Failed to log withdrawal preflight failure:", {
+        withdrawalRequestId,
+        sellerId: request.seller_id,
+        error: auditError instanceof Error ? auditError.message : String(auditError),
+      });
+    }
+
     const failedRequest = await restoreWithdrawalBalance(adminClient, request, options, {
       status: "failed",
       failureReason,
@@ -2172,7 +2372,7 @@ export async function processSellerWithdrawalRequest(
 
     return {
       created: false,
-      reason: "stripe_transfer_failed",
+      reason: failureCode,
       withdrawalRequest: failedRequest,
       relayBalance: await getRelayBalanceSnapshot(request.seller_id, {
         ...options,

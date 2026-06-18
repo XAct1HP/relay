@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote } from "lucide-react";
 import {
   LineChart,
@@ -375,6 +375,8 @@ export default function DashboardPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
   const [withdrawFeedback, setWithdrawFeedback] = useState("");
+  const withdrawSubmitLockRef = useRef(false);
+  const withdrawalIdempotencyKeyRef = useRef<string | null>(null);
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
     activeListings: 0,
@@ -488,12 +490,14 @@ export default function DashboardPage() {
   }, [currentUser?.id, currentUser?.role]);
 
   async function handleWithdrawalSubmit() {
-    if (!balanceData) {
+    if (!balanceData || withdrawSubmitLockRef.current) {
       return;
     }
 
+    withdrawSubmitLockRef.current = true;
     setWithdrawSubmitting(true);
     setWithdrawFeedback("");
+    let shouldResetIdempotencyKey = false;
 
     try {
       if (withdrawalAmountCents <= 0) {
@@ -509,13 +513,16 @@ export default function DashboardPage() {
       }
 
       const idempotencyKey =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
+        withdrawalIdempotencyKeyRef.current ||
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
-          : `withdrawal-${Date.now()}`;
+          : `withdrawal-${Date.now()}`);
+      withdrawalIdempotencyKeyRef.current = idempotencyKey;
       const response = await fetch("/api/seller/withdrawals", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify({
           amountCents: withdrawalAmountCents,
@@ -523,6 +530,7 @@ export default function DashboardPage() {
         }),
       });
       const payload = await response.json();
+      shouldResetIdempotencyKey = true;
 
       if (!response.ok) {
         throw new Error(payload.error || "Failed to create withdrawal");
@@ -542,6 +550,10 @@ export default function DashboardPage() {
       );
     } finally {
       setWithdrawSubmitting(false);
+      withdrawSubmitLockRef.current = false;
+      if (shouldResetIdempotencyKey) {
+        withdrawalIdempotencyKeyRef.current = null;
+      }
     }
   }
 
