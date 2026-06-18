@@ -418,33 +418,11 @@ export function determineReservePolicyForTier(sellerTier: SellerTier): ReservePo
     reservePercentageBps: 0,
     holdDurationDays: null,
     minimumReserveBalanceCents: 0,
-    releasePolicy:
-      sellerTier === "tier_1"
-        ? "buyer_confirmation_or_review_expiry"
-        : "delivery",
+    releasePolicy: "buyer_confirmation_or_review_expiry",
   };
 }
 
 export function determinePayoutPolicyForTier(sellerTier: SellerTier): PayoutPolicy {
-  if (sellerTier === "tier_3") {
-    return {
-      sellerTier,
-      schedule: "carrier_acceptance_and_delivery_split",
-      releaseSteps: [
-        { trigger: "carrier_acceptance", percentageBps: 5000 },
-        { trigger: "delivery", percentageBps: 5000 },
-      ],
-    };
-  }
-
-  if (sellerTier === "tier_2") {
-    return {
-      sellerTier,
-      schedule: "delivery",
-      releaseSteps: [{ trigger: "delivery", percentageBps: 10000 }],
-    };
-  }
-
   return {
     sellerTier,
     schedule: "buyer_confirmation_or_review_expiry",

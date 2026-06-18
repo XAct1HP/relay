@@ -349,6 +349,73 @@ export async function runAutoCompleteReviewWindowJob(
   };
 }
 
+export async function runCompletedOrderFundsAvailabilityJob(
+  adminClient: SupabaseAdminClient,
+  input?: {
+    sellerId?: string;
+    actorRole?: "system" | "admin" | "seller";
+    actorUserId?: string | null;
+    nowIso?: string;
+  }
+) {
+  const nowIso = input?.nowIso || new Date().toISOString();
+  let query = adminClient
+    .from("orders")
+    .select("id, review_window_ends_at, review_deadline")
+    .eq("status", "completed")
+    .in("balance_credit_status", ["not_started", "pending"]);
+
+  if (input?.sellerId) {
+    query = query.eq("seller_id", input.sellerId);
+  }
+
+  const { data: candidateOrders, error } = await query;
+
+  if (error) {
+    throw new Error(error.message || "Failed to query completed orders for fund availability");
+  }
+
+  const results: { orderId: string; status: string; error?: string }[] = [];
+
+  for (const candidate of candidateOrders || []) {
+    try {
+      const reviewDeadline =
+        candidate.review_window_ends_at || candidate.review_deadline || null;
+      const trigger =
+        reviewDeadline && new Date(reviewDeadline).getTime() <= new Date(nowIso).getTime()
+          ? "review_window_expiry"
+          : "buyer_confirmation";
+      const payoutResult = await processOrderPayoutTrigger(adminClient, {
+        orderId: candidate.id,
+        trigger,
+        actorRole: input?.actorRole || "system",
+        actorUserId: input?.actorUserId || null,
+      });
+
+      results.push({
+        orderId: candidate.id,
+        status:
+          payoutResult.processedSteps.length > 0 ? "released" : payoutResult.blocked ? "blocked" : "pending",
+        error: payoutResult.blocked,
+      });
+    } catch (jobError) {
+      results.push({
+        orderId: candidate.id,
+        status: "error",
+        error: jobError instanceof Error ? jobError.message : "Unknown error",
+      });
+    }
+  }
+
+  return {
+    processed: results.length,
+    released: results.filter((result) => result.status === "released").length,
+    pending: results.filter((result) => result.status === "pending").length,
+    failed: results.filter((result) => result.status === "blocked" || result.status === "error").length,
+    results,
+  };
+}
+
 export async function runReserveReleaseJob(
   adminClient: SupabaseAdminClient,
   nowIso = new Date().toISOString()

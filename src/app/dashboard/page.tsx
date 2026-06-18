@@ -155,15 +155,8 @@ function formatRelativeTimestamp(value: string) {
 }
 
 function getTierAvailabilityMessage(sellerTier: SellerTier) {
-  if (sellerTier === "tier_2") {
-    return "Funds become available on delivery. Recent delivered orders may temporarily reduce your withdrawable balance during the buyer review window.";
-  }
-
-  if (sellerTier === "tier_3") {
-    return "50% becomes available when the carrier accepts the package. The remaining 50% becomes available on delivery.";
-  }
-
-  return "Funds become available after buyer confirmation or after the 48-hour review window.";
+  void sellerTier;
+  return "Funds move from pending to available after the order is completed. Card-funded orders also wait for Stripe settlement to clear before becoming available.";
 }
 
 function getLedgerActivitySummary(
@@ -181,7 +174,7 @@ function getLedgerActivitySummary(
     case "order_pending_credit":
       return {
         title: "Pending funds added",
-        detail: `${listingLabel} is pending until order requirements clear.`,
+        detail: `${listingLabel} is pending until the order is completed and funding requirements clear.`,
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "blue" as const,
       };
@@ -215,15 +208,15 @@ function getLedgerActivitySummary(
       };
     case "exposure_hold_created":
       return {
-        title: "Exposure updated",
-        detail: `${listingLabel} is still inside the buyer review window.`,
+        title: "Legacy exposure hold",
+        detail: `${listingLabel} has an older exposure record from pre-launch payout rules.`,
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "amber" as const,
       };
     case "exposure_hold_released":
       return {
-        title: "Exposure released",
-        detail: `${listingLabel} is no longer reducing your withdrawable balance.`,
+        title: "Legacy exposure released",
+        detail: `${listingLabel} had an older exposure record cleared.`,
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "green" as const,
       };
@@ -712,8 +705,8 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
                       <div className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]/60 flex-shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-white/45 text-xs">Exposure hold</p>
-                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(currentExposureCents)}</p>
+                        <p className="text-white/45 text-xs">Withdrawable</p>
+                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(withdrawableBalanceCents)}</p>
                       </div>
                     </div>
                   </div>
@@ -787,7 +780,7 @@ export default function DashboardPage() {
                       className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
                     />
                     <p className="text-xs text-white/35">
-                      Max {formatMoneyFromCents(withdrawableBalanceCents)}. Pending, exposure, and disputed amounts excluded.
+                      Max {formatMoneyFromCents(withdrawableBalanceCents)}. Pending and disputed amounts are excluded.
                     </p>
                   </div>
 

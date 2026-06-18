@@ -585,13 +585,6 @@ export async function finalizeOrderReviewCompletion(
     );
   }
 
-  const payoutResult = await processOrderPayoutTrigger(adminClient, {
-    orderId: input.orderId,
-    trigger: input.completionSource,
-    actorUserId: input.actorUserId || null,
-    actorRole: input.actorRole,
-  });
-
   const { data: order, error: orderError } = await adminClient
     .from("orders")
     .select("id, seller_id, relay_tag_id")
@@ -624,6 +617,13 @@ export async function finalizeOrderReviewCompletion(
   if (updateError) {
     throw new Error(updateError.message || "Failed to update order");
   }
+
+  const payoutResult = await processOrderPayoutTrigger(adminClient, {
+    orderId: input.orderId,
+    trigger: input.completionSource,
+    actorUserId: input.actorUserId || null,
+    actorRole: input.actorRole,
+  });
 
   await markOrderTagCompleted(adminClient, {
     relayTagId: order.relay_tag_id,

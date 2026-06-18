@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { assertCronAuthorized } from "@/lib/cron-auth";
-import { runReserveReleaseJob } from "@/lib/background-jobs";
+import {
+  runCompletedOrderFundsAvailabilityJob,
+  runReserveReleaseJob,
+} from "@/lib/background-jobs";
 
 export async function GET(request: NextRequest) {
   try {
     assertCronAuthorized(request);
-    const result = await runReserveReleaseJob(createAdminClient());
+    const adminClient = createAdminClient();
+    const [reserveResult, fundsResult] = await Promise.all([
+      runReserveReleaseJob(adminClient),
+      runCompletedOrderFundsAvailabilityJob(adminClient, {
+        actorRole: "system",
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
-      ...result,
+      reserveResult,
+      fundsResult,
     });
   } catch (error) {
     return NextResponse.json(

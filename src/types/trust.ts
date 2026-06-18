@@ -17,6 +17,8 @@ export type RelayBalanceCreditStatus =
   | "failed"
   | "reversed";
 
+export type PaymentFundingSource = "card" | "relay_balance";
+
 export type RelayBalanceLedgerType =
   | "order_pending_credit"
   | "order_available_credit"

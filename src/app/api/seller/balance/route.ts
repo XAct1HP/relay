@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { getRelayBalanceSnapshot, WITHDRAWAL_TRANSFER_FEE_CENTS } from "@/lib/money-policy";
+import { runCompletedOrderFundsAvailabilityJob } from "@/lib/background-jobs";
 import { requireSellerSession } from "@/lib/seller-access";
 
 export async function GET() {
   try {
     const { user, profile, adminClient } = await requireSellerSession();
+    await runCompletedOrderFundsAvailabilityJob(adminClient, {
+      sellerId: user.id,
+      actorRole: "seller",
+      actorUserId: user.id,
+    });
     const relayBalance = await getRelayBalanceSnapshot(user.id, {
       adminClient,
       actorRole: "seller",

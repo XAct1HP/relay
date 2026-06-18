@@ -3,7 +3,11 @@ import "server-only";
 import Stripe from "stripe";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { createAdminClient } from "@/lib/supabase-admin";
-import type { AuditActorRole, SellerTier } from "@/types/trust";
+import type {
+  AuditActorRole,
+  PaymentFundingSource,
+  SellerTier,
+} from "@/types/trust";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
@@ -68,6 +72,12 @@ interface MoneyPolicyOrderLike {
   review_window_ends_at?: string | null;
   delivered_at?: string | null;
   shipped_at?: string | null;
+  stripe_payment_intent_id?: string | null;
+  payment_funding_source?: PaymentFundingSource | null;
+  stripe_charge_id?: string | null;
+  stripe_balance_transaction_id?: string | null;
+  stripe_funds_available_on?: string | null;
+  stripe_funds_settled_at?: string | null;
 }
 
 interface MoneyPolicyOrderContext extends MoneyPolicyOrderLike {
@@ -81,6 +91,12 @@ interface MoneyPolicyOrderContext extends MoneyPolicyOrderLike {
   funds_available_at?: string | null;
   seller_funds_frozen?: boolean | null;
   payout_status?: string | null;
+  stripe_payment_intent_id?: string | null;
+  payment_funding_source?: PaymentFundingSource | null;
+  stripe_charge_id?: string | null;
+  stripe_balance_transaction_id?: string | null;
+  stripe_funds_available_on?: string | null;
+  stripe_funds_settled_at?: string | null;
   seller?: {
     id: string;
     seller_tier: SellerTier | null;
@@ -192,6 +208,32 @@ function toCents(value: number | string | null | undefined) {
   return Math.max(0, Math.round(numericValue * 100));
 }
 
+function resolvePaymentFundingSource(order: MoneyPolicyOrderLike): PaymentFundingSource {
+  if (order.payment_funding_source === "relay_balance") {
+    return "relay_balance";
+  }
+
+  if (order.payment_funding_source === "card") {
+    return "card";
+  }
+
+  return order.stripe_payment_intent_id ? "card" : "relay_balance";
+}
+
+function isOrderCompletedForFundsRelease(order: MoneyPolicyOrderLike) {
+  return String(order.status || "").trim().toLowerCase() === "completed";
+}
+
+function isStripeSettlementCleared(order: MoneyPolicyOrderLike, now = new Date()) {
+  const settledAt = coerceDate(order.stripe_funds_settled_at);
+  if (settledAt) {
+    return settledAt.getTime() <= now.getTime();
+  }
+
+  const availableOn = coerceDate(order.stripe_funds_available_on);
+  return Boolean(availableOn && availableOn.getTime() <= now.getTime());
+}
+
 function isDeliveredOrder(order: MoneyPolicyOrderLike) {
   const trackingStatus = normalizeTrackingStatus(order.tracking_status);
   const status = String(order.status || "").trim().toLowerCase();
@@ -296,67 +338,32 @@ export function calculateSellerProceeds(
 
 function buildFundsEligibilityStages(
   order: MoneyPolicyOrderLike,
-  sellerTier: SellerTier,
+  _sellerTier: SellerTier,
   amountBasisCents: number,
   now = new Date()
 ): FundsEligibilityStage[] {
   const reviewWindowExpired = isReviewWindowExpired(order, now);
-  const buyerConfirmed = String(order.status || "").trim().toLowerCase() === "completed";
-  const delivered = isDeliveredOrder(order);
-  const carrierAccepted = hasCarrierAcceptance(order);
-
-  if (sellerTier === "tier_3") {
-    // Keep release stages aligned with the payout engine's cumulative rounding
-    // so odd-cent proceeds do not get stranded between carrier acceptance and delivery.
-    const carrierAmountCents = Math.round((amountBasisCents * 5000) / 10000);
-    const deliveryAmountCents = Math.max(0, amountBasisCents - carrierAmountCents);
-
-    return [
-      {
-        releaseKey: "carrier_acceptance",
-        trigger: "carrier_acceptance",
-        amountCents: carrierAmountCents,
-        eligible: carrierAccepted,
-        reason: carrierAccepted
-          ? "Carrier acceptance has been recorded for this order."
-          : "Carrier acceptance has not been recorded yet.",
-      },
-      {
-        releaseKey: "delivery",
-        trigger: "delivery",
-        amountCents: deliveryAmountCents,
-        eligible: delivered,
-        reason: delivered
-          ? "Delivery has been recorded for this order."
-          : "Delivery has not been recorded yet.",
-      },
-    ];
-  }
-
-  if (sellerTier === "tier_2") {
-    return [
-      {
-        releaseKey: "delivery",
-        trigger: "delivery",
-        amountCents: amountBasisCents,
-        eligible: delivered,
-        reason: delivered
-          ? "Delivery has been recorded for this order."
-          : "Delivery has not been recorded yet.",
-      },
-    ];
-  }
+  const completed = isOrderCompletedForFundsRelease(order);
+  const fundingSource = resolvePaymentFundingSource(order);
+  const settlementCleared =
+    fundingSource === "relay_balance" ? true : isStripeSettlementCleared(order, now);
+  const eligible = completed && settlementCleared;
+  const trigger = reviewWindowExpired ? "review_window_expiry" : "buyer_confirmation";
+  const reason = !completed
+    ? "Funds stay pending until the order is completed in Relay."
+    : fundingSource === "relay_balance"
+      ? "Relay-balance-funded order is complete, so funds can move to available balance."
+      : settlementCleared
+        ? "Card-funded order is complete and Stripe settlement has cleared."
+        : "Card-funded order is complete, but Stripe settlement has not cleared yet.";
 
   return [
     {
       releaseKey: "buyer_confirmation_or_review_expiry",
-      trigger: buyerConfirmed ? "buyer_confirmation" : "review_window_expiry",
+      trigger,
       amountCents: amountBasisCents,
-      eligible: buyerConfirmed || reviewWindowExpired,
-      reason:
-        buyerConfirmed || reviewWindowExpired
-          ? "Buyer confirmation or review-window expiry has resolved this order."
-          : "Tier 1 funds stay pending until buyer confirmation or review-window expiry.",
+      eligible,
+      reason,
     },
   ];
 }
@@ -393,39 +400,10 @@ export function calculateExposure(
   sellerTier: SellerTier,
   releasedAvailableReleaseKeys?: Set<string>
 ) {
-  if (sellerTier === "tier_1") {
-    return 0;
-  }
-
-  const status = String(order.status || "").trim().toLowerCase();
-  if (["completed", "refunded", "cancelled"].includes(status)) {
-    return 0;
-  }
-
-  const orderSubtotalCents = resolveOrderSubtotalCents(order);
-  if (orderSubtotalCents <= 0) {
-    return 0;
-  }
-
-  const releaseKeys = releasedAvailableReleaseKeys || new Set<string>();
-
-  if (sellerTier === "tier_2") {
-    return releaseKeys.has("delivery") ? orderSubtotalCents : 0;
-  }
-
-  const carrierExposureCents = Math.round((orderSubtotalCents * 5000) / 10000);
-  const deliveryExposureCents = Math.max(0, orderSubtotalCents - carrierExposureCents);
-
-  let exposureCents = 0;
-  if (releaseKeys.has("carrier_acceptance")) {
-    exposureCents += carrierExposureCents;
-  }
-  if (releaseKeys.has("delivery")) {
-    exposureCents += deliveryExposureCents;
-  }
-
-  // TODO: replace this released-stage exposure rule with risk-weighted exposure scoring.
-  return exposureCents;
+  void order;
+  void sellerTier;
+  void releasedAvailableReleaseKeys;
+  return 0;
 }
 
 async function loadOrderMoneyContext(
@@ -445,6 +423,12 @@ async function loadOrderMoneyContext(
       relay_fee_cents,
       stripe_fee_estimate_cents,
       seller_proceeds_cents,
+      payment_funding_source,
+      stripe_payment_intent_id,
+      stripe_charge_id,
+      stripe_balance_transaction_id,
+      stripe_funds_available_on,
+      stripe_funds_settled_at,
       balance_credit_status,
       review_deadline,
       review_window_ends_at,
@@ -496,68 +480,183 @@ async function updateOrderIfNeeded(
   }
 }
 
+async function syncCardOrderSettlementSnapshot(
+  adminClient: SupabaseAdminClient,
+  order: MoneyPolicyOrderContext
+) {
+  const now = new Date();
+  const fundingSource = resolvePaymentFundingSource(order);
+
+  if (fundingSource !== "card") {
+    return {
+      ...order,
+      payment_funding_source: fundingSource,
+    };
+  }
+
+  const knownAvailableOn = coerceDate(order.stripe_funds_available_on);
+  const knownSettledAt = coerceDate(order.stripe_funds_settled_at);
+
+  if (knownAvailableOn) {
+    const settledAtIso =
+      knownSettledAt || knownAvailableOn.getTime() > now.getTime()
+        ? order.stripe_funds_settled_at || null
+        : knownAvailableOn.toISOString();
+
+    if (!knownSettledAt && settledAtIso) {
+      await updateOrderIfNeeded(adminClient, order.id, {
+        stripe_funds_settled_at: settledAtIso,
+      });
+    }
+
+    return {
+      ...order,
+      payment_funding_source: fundingSource,
+      stripe_funds_settled_at: settledAtIso,
+    };
+  }
+
+  if (!order.stripe_payment_intent_id) {
+    return {
+      ...order,
+      payment_funding_source: fundingSource,
+    };
+  }
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      order.stripe_payment_intent_id,
+      {
+        expand: ["latest_charge.balance_transaction"],
+      }
+    );
+
+    const latestCharge =
+      paymentIntent.latest_charge &&
+      typeof paymentIntent.latest_charge === "object"
+        ? (paymentIntent.latest_charge as any)
+        : null;
+    const balanceTransaction =
+      latestCharge?.balance_transaction &&
+      typeof latestCharge.balance_transaction === "object"
+        ? latestCharge.balance_transaction
+        : null;
+    const availableOnUnix =
+      typeof balanceTransaction?.available_on === "number"
+        ? balanceTransaction.available_on
+        : null;
+    const availableOnIso =
+      availableOnUnix !== null
+        ? new Date(availableOnUnix * 1000).toISOString()
+        : null;
+    const settledAtIso =
+      availableOnIso && new Date(availableOnIso).getTime() <= now.getTime()
+        ? availableOnIso
+        : null;
+
+    const updatePayload: Record<string, unknown> = {};
+    if (order.payment_funding_source !== fundingSource) {
+      updatePayload.payment_funding_source = fundingSource;
+    }
+    if ((order.stripe_charge_id || null) !== (latestCharge?.id || null)) {
+      updatePayload.stripe_charge_id = latestCharge?.id || null;
+    }
+    if (
+      (order.stripe_balance_transaction_id || null) !==
+      (balanceTransaction?.id || null)
+    ) {
+      updatePayload.stripe_balance_transaction_id = balanceTransaction?.id || null;
+    }
+    if ((order.stripe_funds_available_on || null) !== availableOnIso) {
+      updatePayload.stripe_funds_available_on = availableOnIso;
+    }
+    if ((order.stripe_funds_settled_at || null) !== settledAtIso) {
+      updatePayload.stripe_funds_settled_at = settledAtIso;
+    }
+
+    await updateOrderIfNeeded(adminClient, order.id, updatePayload);
+
+    return {
+      ...order,
+      payment_funding_source: fundingSource,
+      stripe_charge_id: latestCharge?.id || null,
+      stripe_balance_transaction_id: balanceTransaction?.id || null,
+      stripe_funds_available_on: availableOnIso,
+      stripe_funds_settled_at: settledAtIso,
+    };
+  } catch (error) {
+    console.error("Failed to sync Stripe settlement snapshot:", error);
+    return {
+      ...order,
+      payment_funding_source: fundingSource,
+    };
+  }
+}
+
 async function ensureOrderMoneySnapshot(
   adminClient: SupabaseAdminClient,
   order: MoneyPolicyOrderContext
 ) {
-  const sellerTier = resolveSellerTier(order);
+  const settlementSyncedOrder = await syncCardOrderSettlementSnapshot(
+    adminClient,
+    order
+  );
+  const sellerTier = resolveSellerTier(settlementSyncedOrder);
   const orderSubtotalCents = resolveOrderSubtotalCents(order);
   const stripeFeeEstimateCents =
-    typeof order.stripe_fee_estimate_cents === "number"
-      ? Math.max(0, order.stripe_fee_estimate_cents)
-      : order.stripe_fee !== null && order.stripe_fee !== undefined
-        ? toCents(order.stripe_fee)
+    typeof settlementSyncedOrder.stripe_fee_estimate_cents === "number"
+      ? Math.max(0, settlementSyncedOrder.stripe_fee_estimate_cents)
+      : settlementSyncedOrder.stripe_fee !== null &&
+          settlementSyncedOrder.stripe_fee !== undefined
+        ? toCents(settlementSyncedOrder.stripe_fee)
         : calculateStripeFeeEstimateCents(orderSubtotalCents);
   const relayFeeCents =
-    typeof order.relay_fee_cents === "number"
-      ? Math.max(0, order.relay_fee_cents)
-      : order.platform_fee !== null && order.platform_fee !== undefined
-        ? toCents(order.platform_fee)
+    typeof settlementSyncedOrder.relay_fee_cents === "number"
+      ? Math.max(0, settlementSyncedOrder.relay_fee_cents)
+      : settlementSyncedOrder.platform_fee !== null &&
+          settlementSyncedOrder.platform_fee !== undefined
+        ? toCents(settlementSyncedOrder.platform_fee)
         : calculateRelayFee(orderSubtotalCents);
   const sellerProceedsCents =
-    typeof order.seller_proceeds_cents === "number"
-      ? Math.max(0, order.seller_proceeds_cents)
-      : order.seller_earnings !== null && order.seller_earnings !== undefined
-        ? toCents(order.seller_earnings)
+    typeof settlementSyncedOrder.seller_proceeds_cents === "number"
+      ? Math.max(0, settlementSyncedOrder.seller_proceeds_cents)
+      : settlementSyncedOrder.seller_earnings !== null &&
+          settlementSyncedOrder.seller_earnings !== undefined
+        ? toCents(settlementSyncedOrder.seller_earnings)
         : calculateSellerProceeds(orderSubtotalCents, stripeFeeEstimateCents);
-  const reviewWindowEndsAt = order.review_window_ends_at || order.review_deadline || null;
-  const predictedFundsAvailableAt =
-    sellerTier === "tier_1"
-      ? reviewWindowEndsAt
-      : sellerTier === "tier_2"
-        ? order.delivered_at || null
-        : order.shipped_at || order.delivered_at || null;
+  const reviewWindowEndsAt =
+    settlementSyncedOrder.review_window_ends_at ||
+    settlementSyncedOrder.review_deadline ||
+    null;
+  const fundingSource = resolvePaymentFundingSource(settlementSyncedOrder);
 
   const updatePayload: Record<string, unknown> = {};
-  if (order.relay_fee_cents !== relayFeeCents) {
+  if (settlementSyncedOrder.relay_fee_cents !== relayFeeCents) {
     updatePayload.relay_fee_cents = relayFeeCents;
   }
-  if (order.stripe_fee_estimate_cents !== stripeFeeEstimateCents) {
+  if (settlementSyncedOrder.stripe_fee_estimate_cents !== stripeFeeEstimateCents) {
     updatePayload.stripe_fee_estimate_cents = stripeFeeEstimateCents;
   }
-  if (order.seller_proceeds_cents !== sellerProceedsCents) {
+  if (settlementSyncedOrder.seller_proceeds_cents !== sellerProceedsCents) {
     updatePayload.seller_proceeds_cents = sellerProceedsCents;
   }
-  if (order.review_window_ends_at !== reviewWindowEndsAt) {
+  if (settlementSyncedOrder.review_window_ends_at !== reviewWindowEndsAt) {
     updatePayload.review_window_ends_at = reviewWindowEndsAt;
   }
-  if (!order.funds_available_at && predictedFundsAvailableAt) {
-    updatePayload.funds_available_at = predictedFundsAvailableAt;
+  if (settlementSyncedOrder.payment_funding_source !== fundingSource) {
+    updatePayload.payment_funding_source = fundingSource;
   }
 
-  await updateOrderIfNeeded(adminClient, order.id, updatePayload);
+  await updateOrderIfNeeded(adminClient, settlementSyncedOrder.id, updatePayload);
 
   return {
-    ...order,
+    ...settlementSyncedOrder,
     relay_fee_cents: relayFeeCents,
     stripe_fee_estimate_cents: stripeFeeEstimateCents,
     seller_proceeds_cents: sellerProceedsCents,
     review_window_ends_at: reviewWindowEndsAt,
-    funds_available_at:
-      (updatePayload.funds_available_at as string | undefined) ||
-      order.funds_available_at ||
-      predictedFundsAvailableAt ||
-      null,
+    funds_available_at: settlementSyncedOrder.funds_available_at || null,
+    payment_funding_source: fundingSource,
     seller_tier_snapshot: sellerTier,
   };
 }
@@ -1127,6 +1226,7 @@ export async function createOrderPendingCredit(
     metadata: {
       source: "relay_balance_policy",
       seller_tier: resolveSellerTier(order),
+      payment_funding_source: resolvePaymentFundingSource(order),
     },
   });
 
@@ -1213,22 +1313,8 @@ export async function releaseOrderFundsToAvailable(
   const unreleasedEligibleStages = eligibleStages.filter(
     (stage) => !existingReleaseKeys.has(stage.releaseKey)
   );
-  const forcedReleaseKeys = new Set(options?.forceReleaseKeys || []);
-  const unreleasedForcedStages = stages.filter(
-    (stage) =>
-      forcedReleaseKeys.has(stage.releaseKey) &&
-      stage.amountCents > 0 &&
-      !existingReleaseKeys.has(stage.releaseKey)
-  );
-  const stagesToRelease = [
-    ...unreleasedEligibleStages,
-    ...unreleasedForcedStages.filter(
-      (forcedStage) =>
-        !unreleasedEligibleStages.some(
-          (eligibleStage) => eligibleStage.releaseKey === forcedStage.releaseKey
-        )
-    ),
-  ];
+  const forcedReleaseKeys = new Set<FundsReleaseKey>();
+  const stagesToRelease = unreleasedEligibleStages;
 
   if (stagesToRelease.length === 0) {
     return {
@@ -1263,6 +1349,7 @@ export async function releaseOrderFundsToAvailable(
         release_trigger: stage.trigger,
         forced_release: forcedReleaseKeys.has(stage.releaseKey),
         seller_tier: sellerTier,
+        payment_funding_source: resolvePaymentFundingSource(order),
       },
     });
 

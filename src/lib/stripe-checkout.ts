@@ -405,6 +405,7 @@ async function finalizeShoeOrderPurchase(
       relay_fee_cents: relayFeeCents,
       stripe_fee_estimate_cents: stripeFeeCents,
       seller_proceeds_cents: sellerProceedsCents,
+      payment_funding_source: "card",
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId,
       challenge_code: challengeCode,

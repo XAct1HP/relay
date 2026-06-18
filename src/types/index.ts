@@ -187,6 +187,11 @@ export interface Order {
   relay_fee_cents?: number | null;
   stripe_fee_estimate_cents?: number | null;
   seller_proceeds_cents?: number | null;
+  payment_funding_source?: import("./trust").PaymentFundingSource | null;
+  stripe_charge_id?: string | null;
+  stripe_balance_transaction_id?: string | null;
+  stripe_funds_available_on?: string | null;
+  stripe_funds_settled_at?: string | null;
   balance_credit_status?: import("./trust").RelayBalanceCreditStatus | null;
   review_window_ends_at?: string | null;
   funds_available_at?: string | null;

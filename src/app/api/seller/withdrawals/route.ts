@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runCompletedOrderFundsAvailabilityJob } from "@/lib/background-jobs";
 import { createSellerWithdrawalRequest } from "@/lib/money-policy";
 import { requireSellerSession } from "@/lib/seller-access";
 
@@ -32,6 +33,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { user, adminClient } = await requireSellerSession();
+    await runCompletedOrderFundsAvailabilityJob(adminClient, {
+      sellerId: user.id,
+      actorRole: "seller",
+      actorUserId: user.id,
+    });
     const body = await request.json();
     const amountCents =
       typeof body?.amountCents === "number"

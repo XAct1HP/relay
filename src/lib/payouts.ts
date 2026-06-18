@@ -3,13 +3,11 @@ import "server-only";
 import Stripe from "stripe";
 import { logRelayAuditEvent } from "./relay-audit";
 import {
-  createExposureHold,
   createOrderPendingCredit,
   calculateStripeFeeEstimateCents,
   debitSellerForDispute,
   freezeFundsForDispute,
   releaseOrderFundsToAvailable,
-  releaseExposureHold,
 } from "./money-policy";
 import { determinePayoutPolicyForTier } from "./seller-trust";
 import { evaluateSellerTrustById, recordSellerViolation } from "./seller-trust-admin";
@@ -190,26 +188,17 @@ async function ensureOrderPayoutSnapshot(
   adminClient: SupabaseAdminClient,
   order: OrderPayoutContext
 ) {
-  const snapshot =
-    order.seller_tier_snapshot &&
-    order.payout_schedule &&
-    order.reserve_percentage_bps_snapshot !== null &&
-    order.minimum_reserve_balance_cents_snapshot !== null
-      ? {
-          sellerTierSnapshot: order.seller_tier_snapshot,
-          payoutSchedule: order.payout_schedule,
-          reservePercentageBps: order.reserve_percentage_bps_snapshot,
-          reserveHoldDurationDays: order.reserve_hold_duration_days_snapshot,
-          minimumReserveBalanceCents:
-            order.minimum_reserve_balance_cents_snapshot,
-        }
-      : buildOrderPayoutSnapshotForTier(order.seller?.seller_tier || "tier_1");
+  const snapshot = buildOrderPayoutSnapshotForTier(
+    order.seller_tier_snapshot || order.seller?.seller_tier || "tier_1"
+  );
 
   const shouldPersist =
-    !order.seller_tier_snapshot ||
-    !order.payout_schedule ||
-    order.reserve_percentage_bps_snapshot === null ||
-    order.minimum_reserve_balance_cents_snapshot === null;
+    order.seller_tier_snapshot !== snapshot.sellerTierSnapshot ||
+    order.payout_schedule !== snapshot.payoutSchedule ||
+    order.reserve_percentage_bps_snapshot !== snapshot.reservePercentageBps ||
+    order.reserve_hold_duration_days_snapshot !== snapshot.reserveHoldDurationDays ||
+    order.minimum_reserve_balance_cents_snapshot !==
+      snapshot.minimumReserveBalanceCents;
 
   if (shouldPersist) {
     await adminClient
@@ -249,23 +238,9 @@ function getForcedReleaseKeysForTrigger(
   snapshot: OrderPayoutSnapshotResult,
   trigger: OrderPayoutTrigger
 ): Array<"buyer_confirmation_or_review_expiry" | "delivery" | "carrier_acceptance"> {
-  if (trigger === "buyer_confirmation") {
-    return ["buyer_confirmation_or_review_expiry"];
-  }
-
-  if (trigger !== "manual_override") {
-    return [];
-  }
-
-  if (snapshot.payoutSchedule === "carrier_acceptance_and_delivery_split") {
-    return ["carrier_acceptance", "delivery"];
-  }
-
-  if (snapshot.payoutSchedule === "delivery") {
-    return ["delivery"];
-  }
-
-  return ["buyer_confirmation_or_review_expiry"];
+  void snapshot;
+  void trigger;
+  return [];
 }
 
 async function syncExposureHoldForTrigger(
@@ -279,41 +254,8 @@ async function syncExposureHoldForTrigger(
     forceRelease?: boolean;
   }
 ) {
-  if (input.trigger === "carrier_acceptance" && input.sellerTier === "tier_3") {
-    return createExposureHold(input.orderId, {
-      adminClient,
-      actorUserId: input.actorUserId || null,
-      actorRole: input.actorRole,
-      exposureReleaseKey: "carrier_acceptance",
-      exposureTrigger: "carrier_acceptance",
-    });
-  }
-
-  if (
-    input.trigger === "delivery" &&
-    (input.sellerTier === "tier_2" || input.sellerTier === "tier_3")
-  ) {
-    return createExposureHold(input.orderId, {
-      adminClient,
-      actorUserId: input.actorUserId || null,
-      actorRole: input.actorRole,
-      exposureReleaseKey: "delivery",
-      exposureTrigger: "delivery",
-    });
-  }
-
-  if (
-    input.forceRelease ||
-    input.trigger === "buyer_confirmation" ||
-    input.trigger === "review_window_expiry"
-  ) {
-    return releaseExposureHold(input.orderId, {
-      adminClient,
-      actorUserId: input.actorUserId || null,
-      actorRole: input.actorRole,
-    });
-  }
-
+  void adminClient;
+  void input;
   return null;
 }
 
