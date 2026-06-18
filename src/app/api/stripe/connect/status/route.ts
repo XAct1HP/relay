@@ -22,9 +22,15 @@ export async function GET() {
     });
 
     return NextResponse.json({
+      connectedAccountId: syncResult.identityProfile.stripe_account_id,
       stripeAccountId: syncResult.identityProfile.stripe_account_id,
       onboardingComplete: syncResult.onboardingComplete,
       verificationStatus: syncResult.verificationStatus,
+      payoutsEnabled: syncResult.identityProfile.stripe_payouts_enabled,
+      chargesEnabled: syncResult.identityProfile.stripe_charges_enabled,
+      transfersCapabilityStatus:
+        syncResult.identityProfile.stripe_transfers_capability_status,
+      canReceiveTransfers: syncResult.canReceiveTransfers,
       adminReviewRequired: syncResult.adminReviewRequired,
       matchReasons: syncResult.matchReasons,
     });

@@ -32,6 +32,11 @@ export default function SettingsPage() {
   })
   const [stripeConnected, setStripeConnected] = useState(false)
   const [stripeVerificationStatus, setStripeVerificationStatus] = useState<string>('unverified')
+  const [stripeAccountId, setStripeAccountId] = useState<string | null>(null)
+  const [stripePayoutsEnabled, setStripePayoutsEnabled] = useState<boolean | null>(null)
+  const [stripeChargesEnabled, setStripeChargesEnabled] = useState<boolean | null>(null)
+  const [stripeTransfersCapabilityStatus, setStripeTransfersCapabilityStatus] = useState<string>('unknown')
+  const [stripeCanReceiveTransfers, setStripeCanReceiveTransfers] = useState(false)
   const [stripeLoading, setStripeLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [instagramUrl, setInstagramUrl] = useState('')
@@ -79,8 +84,16 @@ export default function SettingsPage() {
         setOffersEnabled(!!data.offers_enabled)
         // Check if Stripe account is connected based on profile data
         if (data.stripe_account_id) {
+          setStripeAccountId(data.stripe_account_id)
           setStripeConnected(!!data.stripe_connect_onboarding_complete)
           setStripeVerificationStatus(data.stripe_identity_verification_status || 'unverified')
+          setStripePayoutsEnabled(
+            typeof data.stripe_payouts_enabled === 'boolean' ? data.stripe_payouts_enabled : null
+          )
+          setStripeChargesEnabled(
+            typeof data.stripe_charges_enabled === 'boolean' ? data.stripe_charges_enabled : null
+          )
+          setStripeTransfersCapabilityStatus(data.stripe_transfers_capability_status || 'unknown')
         }
       }
 
@@ -102,8 +115,17 @@ export default function SettingsPage() {
         const payload = await response.json()
         if (!response.ok) return
 
+        setStripeAccountId(payload.connectedAccountId || payload.stripeAccountId || null)
         setStripeConnected(!!payload.onboardingComplete)
         setStripeVerificationStatus(payload.verificationStatus || 'unverified')
+        setStripePayoutsEnabled(
+          typeof payload.payoutsEnabled === 'boolean' ? payload.payoutsEnabled : null
+        )
+        setStripeChargesEnabled(
+          typeof payload.chargesEnabled === 'boolean' ? payload.chargesEnabled : null
+        )
+        setStripeTransfersCapabilityStatus(payload.transfersCapabilityStatus || 'unknown')
+        setStripeCanReceiveTransfers(!!payload.canReceiveTransfers)
       } catch {
         // Ignore sync failures here and fall back to stored profile state.
       }
@@ -779,6 +801,15 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="text-white font-medium">Stripe</p>
+                    {stripeAccountId && (
+                      <div className="mt-2 space-y-1 text-xs text-white/45">
+                        <p>Connected account: <span className="text-white/70">{stripeAccountId}</span></p>
+                        <p>Transfers: <span className="text-white/70">{stripeTransfersCapabilityStatus.replaceAll('_', ' ')}</span></p>
+                        <p>Payouts enabled: <span className="text-white/70">{stripePayoutsEnabled === null ? 'Unknown' : stripePayoutsEnabled ? 'Yes' : 'No'}</span></p>
+                        <p>Charges enabled: <span className="text-white/70">{stripeChargesEnabled === null ? 'Unknown' : stripeChargesEnabled ? 'Yes' : 'No'}</span></p>
+                        <p>Can receive Relay withdrawals: <span className="text-white/70">{stripeCanReceiveTransfers ? 'Yes' : 'Not yet'}</span></p>
+                      </div>
+                    )}
                     <p className="text-white/50 text-sm">
                       {stripeConnected ? `Connected · ${stripeVerificationStatus.replaceAll('_', ' ')}` : 'Not connected'}
                     </p>
@@ -811,11 +842,35 @@ export default function SettingsPage() {
                     {stripeLoading ? 'Connecting...' : 'Connect'}
                   </button>
                 ) : (
-                  <span className="px-4 py-2 rounded-lg font-medium bg-green-500/20 text-green-300 border border-green-500/30">
-                    Connected
-                  </span>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch('/api/stripe/dashboard', { method: 'POST' })
+                          const data = await response.json()
+                          if (!response.ok) throw new Error(data.error || 'Failed to open Stripe dashboard')
+                          if (data.url) {
+                            window.open(data.url, '_blank', 'noopener,noreferrer')
+                          }
+                        } catch (err: any) {
+                          alert(err.message || 'Failed to open Stripe dashboard')
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg font-medium transition-colors bg-white/[0.05] text-white hover:bg-white/[0.08] border border-white/10"
+                    >
+                      Manage in Stripe
+                    </button>
+                    <span className="px-4 py-2 rounded-lg font-medium bg-green-500/20 text-green-300 border border-green-500/30">
+                      Connected
+                    </span>
+                  </div>
                 )}
               </div>
+              {stripeAccountId && (
+                <p className="text-white/45 text-sm">
+                  Relay uses this Express account only as your withdrawal destination. Funds stay in Relay&apos;s platform balance until you request a withdrawal.
+                </p>
+              )}
             </div>
           </div>
         )}

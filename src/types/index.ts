@@ -14,6 +14,9 @@ export interface User {
   stripe_account_id: string | null;
   stripe_connect_onboarding_complete?: boolean;
   stripe_identity_verification_status?: import("./trust").SellerIdentityProfile["verification_status"];
+  stripe_payouts_enabled?: boolean | null;
+  stripe_charges_enabled?: boolean | null;
+  stripe_transfers_capability_status?: import("./trust").StripeTransferCapabilityStatus;
   seller_identity_review_required?: boolean;
   seller_identity_review_reason?: string | null;
   ship_from_address: ShippingAddress | null;

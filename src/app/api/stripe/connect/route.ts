@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
         type: 'express',
         country: 'US',
         email: user.email,
+        capabilities: {
+          transfers: {
+            requested: true,
+          },
+        },
+        metadata: {
+          relay_user_id: user.id,
+          relay_account_role: 'seller_withdrawal_destination',
+        },
       })
       accountId = account.id
 
@@ -78,6 +87,22 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error('Failed to save Stripe account ID:', updateError)
+      }
+    } else {
+      try {
+        await stripe.accounts.update(accountId, {
+          capabilities: {
+            transfers: {
+              requested: true,
+            },
+          },
+          metadata: {
+            relay_user_id: user.id,
+            relay_account_role: 'seller_withdrawal_destination',
+          },
+        })
+      } catch (error) {
+        console.error('Failed to request Stripe transfers capability:', error)
       }
     }
 

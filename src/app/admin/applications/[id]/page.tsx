@@ -604,6 +604,24 @@ export default function ApplicationDetailPage() {
               {identityProfile?.matched_banned_identity ? "Matched" : "No banned match detected"}
             </p>
           </div>
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+            <p className="text-white/50 mb-1">Transfers capability</p>
+            <p className="text-[#f5f7fb]">
+              {(identityProfile?.stripe_transfers_capability_status || profile.stripe_transfers_capability_status || "unknown").replaceAll("_", " ")}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+            <p className="text-white/50 mb-1">Payout destination ready</p>
+            <p className="text-[#f5f7fb]">
+              {(identityProfile?.stripe_payouts_enabled || profile.stripe_payouts_enabled) &&
+              (identityProfile?.stripe_transfers_capability_status || profile.stripe_transfers_capability_status) === "active"
+                ? "Ready for Relay withdrawals"
+                : "Needs Stripe setup"}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-4 text-sky-100 text-sm">
+          Relay uses this Express account only as a withdrawal destination. Approval should not assume seller funds live in the connected account before withdrawal.
         </div>
         {profile.seller_identity_review_reason && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-200 text-sm">

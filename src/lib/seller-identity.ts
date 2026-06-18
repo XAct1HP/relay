@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { isRelayTestModeEnabled, isRelayTestSellerEmail } from "@/lib/test-mode";
+import type { StripeTransferCapabilityStatus } from "@/types/trust";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
 
@@ -32,6 +33,9 @@ interface SellerIdentityProfileRow {
   stripe_account_id: string | null;
   verification_status: IdentityVerificationStatus;
   stripe_connect_onboarding_complete: boolean;
+  stripe_payouts_enabled: boolean | null;
+  stripe_charges_enabled: boolean | null;
+  stripe_transfers_capability_status: StripeTransferCapabilityStatus;
   matched_banned_identity: boolean;
   matched_banned_identity_id: string | null;
   match_reasons: string[];
@@ -55,6 +59,9 @@ interface SellerProfileIdentitySeed {
   stripe_account_id: string | null;
   stripe_connect_onboarding_complete?: boolean | null;
   stripe_identity_verification_status?: IdentityVerificationStatus | null;
+  stripe_payouts_enabled?: boolean | null;
+  stripe_charges_enabled?: boolean | null;
+  stripe_transfers_capability_status?: StripeTransferCapabilityStatus | null;
   seller_identity_review_required?: boolean | null;
   seller_identity_review_reason?: string | null;
   is_banned?: boolean | null;
@@ -69,6 +76,10 @@ interface StripeIdentitySnapshot {
   stripeAccountId: string | null;
   onboardingComplete: boolean;
   verificationStatus: IdentityVerificationStatus;
+  payoutsEnabled: boolean;
+  chargesEnabled: boolean;
+  transfersCapabilityStatus: StripeTransferCapabilityStatus;
+  canReceiveTransfers: boolean;
   legalName: string | null;
   dob: string | null;
   countryCode: string | null;
@@ -93,6 +104,7 @@ export interface SellerIdentitySyncResult {
   adminReviewRequired: boolean;
   bannedIdentityMatch: boolean;
   matchReasons: string[];
+  canReceiveTransfers: boolean;
 }
 
 function getAdminClient(client?: SupabaseAdminClient) {
@@ -179,6 +191,34 @@ function buildIdentityFingerprint(input: {
     .digest("hex");
 }
 
+function getTransfersCapabilityStatus(account: any): StripeTransferCapabilityStatus {
+  const capability = String(account?.capabilities?.transfers || "").trim().toLowerCase();
+
+  if (
+    capability === "active" ||
+    capability === "inactive" ||
+    capability === "pending" ||
+    capability === "unrequested"
+  ) {
+    return capability as StripeTransferCapabilityStatus;
+  }
+
+  return "unknown";
+}
+
+function canStripeAccountReceiveTransfers(account: any) {
+  const requirements = account?.requirements || {};
+  const disabledReason =
+    requirements?.disabled_reason ||
+    account?.future_requirements?.disabled_reason ||
+    null;
+  const transferStatus = getTransfersCapabilityStatus(account);
+
+  return Boolean(
+    !disabledReason && account?.payouts_enabled === true && transferStatus === "active"
+  );
+}
+
 function deriveVerificationStatus(account: any): IdentityVerificationStatus {
   const requirements = account?.requirements || {};
   const disabledReason =
@@ -197,7 +237,7 @@ function deriveVerificationStatus(account: any): IdentityVerificationStatus {
     return "unverified";
   }
 
-  if (account?.charges_enabled && account?.payouts_enabled && currentlyDue.length === 0) {
+  if (canStripeAccountReceiveTransfers(account) && currentlyDue.length === 0) {
     return "verified";
   }
 
@@ -220,6 +260,10 @@ async function getStripeIdentitySnapshot(
       stripeAccountId: profile.stripe_account_id || "acct_test_relay_founder",
       onboardingComplete: true,
       verificationStatus: "verified",
+      payoutsEnabled: true,
+      chargesEnabled: false,
+      transfersCapabilityStatus: "active",
+      canReceiveTransfers: true,
       legalName: profile.full_name || profile.display_name || "Relay Test Seller",
       dob: "1990-01-01",
       countryCode: "US",
@@ -236,6 +280,10 @@ async function getStripeIdentitySnapshot(
       stripeAccountId: null,
       onboardingComplete: false,
       verificationStatus: "unverified",
+      payoutsEnabled: false,
+      chargesEnabled: false,
+      transfersCapabilityStatus: "unrequested",
+      canReceiveTransfers: false,
       legalName: null,
       dob: null,
       countryCode: profile.ship_from_address?.country || null,
@@ -273,6 +321,10 @@ async function getStripeIdentitySnapshot(
     stripeAccountId: account.id || profile.stripe_account_id,
     onboardingComplete: isStripeOnboardingComplete(account),
     verificationStatus: deriveVerificationStatus(account),
+    payoutsEnabled: Boolean(account?.payouts_enabled),
+    chargesEnabled: Boolean(account?.charges_enabled),
+    transfersCapabilityStatus: getTransfersCapabilityStatus(account),
+    canReceiveTransfers: canStripeAccountReceiveTransfers(account),
     legalName: legalName || null,
     dob,
     countryCode: account?.country || profile.ship_from_address?.country || null,
@@ -467,6 +519,9 @@ export async function syncSellerIdentityProfile(
       ? "review_required"
       : stripeSnapshot.verificationStatus,
     stripe_connect_onboarding_complete: stripeSnapshot.onboardingComplete,
+    stripe_payouts_enabled: stripeSnapshot.payoutsEnabled,
+    stripe_charges_enabled: stripeSnapshot.chargesEnabled,
+    stripe_transfers_capability_status: stripeSnapshot.transfersCapabilityStatus,
     matched_banned_identity: bannedIdentityMatch,
     matched_banned_identity_id: matchedBannedIdentityId,
     match_reasons: matchReasons,
@@ -490,6 +545,9 @@ export async function syncSellerIdentityProfile(
       stripe_account_id: stripeSnapshot.stripeAccountId,
       stripe_connect_onboarding_complete: stripeSnapshot.onboardingComplete,
       stripe_identity_verification_status: identityUpsertPayload.verification_status,
+      stripe_payouts_enabled: stripeSnapshot.payoutsEnabled,
+      stripe_charges_enabled: stripeSnapshot.chargesEnabled,
+      stripe_transfers_capability_status: stripeSnapshot.transfersCapabilityStatus,
       seller_identity_review_required: adminReviewRequired,
       seller_identity_review_reason: reviewReason,
     })
@@ -524,6 +582,7 @@ export async function syncSellerIdentityProfile(
     adminReviewRequired,
     bannedIdentityMatch,
     matchReasons,
+    canReceiveTransfers: stripeSnapshot.canReceiveTransfers,
   };
 }
 
@@ -676,6 +735,89 @@ export async function clearSellerIdentityFalsePositive(
   });
 
   return updatedIdentity as SellerIdentityProfileRow;
+}
+
+export async function backfillStripeConnectTransferReadiness(input?: {
+  adminClient?: SupabaseAdminClient;
+  actorUserId?: string | null;
+  actorRole?: AuditActorRole;
+  sellerId?: string | null;
+  limit?: number;
+}) {
+  const adminClient = getAdminClient(input?.adminClient);
+  const normalizedSellerId = String(input?.sellerId || "").trim();
+  const normalizedLimit = Math.min(
+    100,
+    Math.max(1, Number.isFinite(Number(input?.limit)) ? Number(input?.limit) : 25)
+  );
+
+  let query = adminClient
+    .from("profiles")
+    .select("id, stripe_account_id")
+    .not("stripe_account_id", "is", null)
+    .order("updated_at", { ascending: true })
+    .limit(normalizedLimit);
+
+  if (normalizedSellerId) {
+    query = query.eq("id", normalizedSellerId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message || "Failed to load Stripe-connected profiles");
+  }
+
+  const rows = (data || []) as Array<{
+    id: string;
+    stripe_account_id: string | null;
+  }>;
+  const results: Array<{
+    sellerId: string;
+    stripeAccountId: string | null;
+    onboardingComplete?: boolean;
+    verificationStatus?: IdentityVerificationStatus;
+    payoutsEnabled?: boolean | null;
+    chargesEnabled?: boolean | null;
+    transfersCapabilityStatus?: StripeTransferCapabilityStatus;
+    canReceiveTransfers?: boolean;
+    error?: string;
+  }> = [];
+
+  for (const row of rows) {
+    try {
+      const syncResult = await syncSellerIdentityProfile(row.id, {
+        adminClient,
+        actorUserId: input?.actorUserId,
+        actorRole: input?.actorRole,
+      });
+
+      results.push({
+        sellerId: row.id,
+        stripeAccountId: syncResult.identityProfile.stripe_account_id,
+        onboardingComplete: syncResult.onboardingComplete,
+        verificationStatus: syncResult.verificationStatus,
+        payoutsEnabled: syncResult.identityProfile.stripe_payouts_enabled,
+        chargesEnabled: syncResult.identityProfile.stripe_charges_enabled,
+        transfersCapabilityStatus:
+          syncResult.identityProfile.stripe_transfers_capability_status,
+        canReceiveTransfers: syncResult.canReceiveTransfers,
+      });
+    } catch (error) {
+      results.push({
+        sellerId: row.id,
+        stripeAccountId: row.stripe_account_id,
+        error: error instanceof Error ? error.message : "Failed to sync Stripe account",
+      });
+    }
+  }
+
+  return {
+    processedCount: results.length,
+    successCount: results.filter((result) => !result.error).length,
+    failureCount: results.filter((result) => Boolean(result.error)).length,
+    results,
+  };
 }
 
 export async function getSellerIdentityProfile(

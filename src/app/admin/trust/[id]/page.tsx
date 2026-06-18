@@ -586,6 +586,43 @@ export default function AdminSellerTrustDetailPage() {
                   {identityProfile?.stripe_account_id || seller.stripe_account_id || "Not connected"}
                 </span>
               </p>
+              <p>
+                Transfers capability:{" "}
+                <span className="text-[#f5f7fb]">
+                  {(identityProfile?.stripe_transfers_capability_status || seller.stripe_transfers_capability_status || "unknown").replaceAll("_", " ")}
+                </span>
+              </p>
+              <p>
+                Payouts enabled:{" "}
+                <span className="text-[#f5f7fb]">
+                  {typeof identityProfile?.stripe_payouts_enabled === "boolean"
+                    ? identityProfile.stripe_payouts_enabled
+                      ? "Yes"
+                      : "No"
+                    : typeof seller.stripe_payouts_enabled === "boolean"
+                      ? seller.stripe_payouts_enabled
+                        ? "Yes"
+                        : "No"
+                      : "Unknown"}
+                </span>
+              </p>
+              <p>
+                Charges enabled:{" "}
+                <span className="text-[#f5f7fb]">
+                  {typeof identityProfile?.stripe_charges_enabled === "boolean"
+                    ? identityProfile.stripe_charges_enabled
+                      ? "Yes"
+                      : "No"
+                    : typeof seller.stripe_charges_enabled === "boolean"
+                      ? seller.stripe_charges_enabled
+                        ? "Yes"
+                        : "No"
+                      : "Unknown"}
+                </span>
+              </p>
+              <p className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3 text-sky-100">
+                Relay uses this Express account only as the seller&apos;s withdrawal destination. Seller funds stay in Relay&apos;s platform balance until a withdrawal transfer is created.
+              </p>
               {seller.seller_identity_review_reason && (
                 <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-200">
                   {seller.seller_identity_review_reason}

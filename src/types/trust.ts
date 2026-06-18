@@ -112,6 +112,13 @@ export type DisputeStatus = "open" | "seller_responded" | "under_review" | "reso
 
 export type AuditActorRole = "system" | "admin" | "seller" | "buyer";
 
+export type StripeTransferCapabilityStatus =
+  | "active"
+  | "inactive"
+  | "pending"
+  | "unrequested"
+  | "unknown";
+
 export interface SellerTrustSnapshot {
   sellerTier: SellerTier;
   trustScore: number;
@@ -166,6 +173,9 @@ export interface SellerIdentityProfile {
     | "restricted"
     | "review_required";
   stripe_connect_onboarding_complete: boolean;
+  stripe_payouts_enabled?: boolean | null;
+  stripe_charges_enabled?: boolean | null;
+  stripe_transfers_capability_status?: StripeTransferCapabilityStatus;
   matched_banned_identity?: boolean;
   matched_banned_identity_id?: string | null;
   match_reasons?: string[];
