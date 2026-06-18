@@ -154,9 +154,12 @@ function formatRelativeTimestamp(value: string) {
   return timestamp.toLocaleDateString();
 }
 
-function getTierAvailabilityMessage(sellerTier: SellerTier) {
-  void sellerTier;
-  return "Funds move from pending to available after the order is completed. Card-funded orders also wait for Stripe settlement to clear before becoming available.";
+function getAdvancedSellerProgramMessage() {
+  return "Advanced Seller Program coming soon";
+}
+
+function getAdvancedSellerProgramDetail() {
+  return "Future benefits will include faster payout access, higher limits, and advanced seller tools.";
 }
 
 function getLedgerActivitySummary(
@@ -188,7 +191,7 @@ function getLedgerActivitySummary(
     case "withdrawal_requested":
       return {
         title: "Withdrawal requested",
-        detail: "Amount moved out of withdrawable balance while the transfer is processed.",
+        detail: "Amount moved out of available balance while the transfer is processed.",
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "amber" as const,
       };
@@ -208,15 +211,15 @@ function getLedgerActivitySummary(
       };
     case "exposure_hold_created":
       return {
-        title: "Legacy exposure hold",
-        detail: `${listingLabel} has an older exposure record from pre-launch payout rules.`,
+        title: "Legacy balance hold",
+        detail: `${listingLabel} has an older hold record from pre-launch payout rules.`,
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "amber" as const,
       };
     case "exposure_hold_released":
       return {
-        title: "Legacy exposure released",
-        detail: `${listingLabel} had an older exposure record cleared.`,
+        title: "Legacy balance hold released",
+        detail: `${listingLabel} had an older hold record cleared.`,
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "green" as const,
       };
@@ -383,23 +386,14 @@ export default function DashboardPage() {
   const transferFeeCents = balanceData?.withdrawalConfig.transferFeeCents || 25;
   const withdrawalAmountCents = parseDollarInputToCents(withdrawAmount);
   const netTransferAmountCents = Math.max(0, withdrawalAmountCents - transferFeeCents);
-  const relayBalanceCents = clampNonNegativeCents(
-    balanceData?.balances.relayBalanceCents
-  );
   const pendingBalanceCents = clampNonNegativeCents(
     balanceData?.balances.pendingBalanceCents
   );
   const availableBalanceCents = clampNonNegativeCents(
     balanceData?.balances.availableBalanceCents
   );
-  const currentExposureCents = clampNonNegativeCents(
-    balanceData?.balances.currentExposureCents
-  );
-  const withdrawableBalanceCents = clampNonNegativeCents(
-    balanceData?.balances.withdrawableBalanceCents
-  );
-  const sellerTier =
-    balanceData?.profile.sellerTier || currentUser?.seller_tier || "tier_1";
+  const availableForWithdrawalCents = availableBalanceCents;
+  const isFoundingSeller = Boolean(currentUser?.is_founding_seller);
 
   async function loadBalanceData() {
     setBalanceLoading(true);
@@ -499,8 +493,8 @@ export default function DashboardPage() {
         throw new Error("Enter a withdrawal amount greater than zero.");
       }
 
-      if (withdrawalAmountCents > withdrawableBalanceCents) {
-        throw new Error("Withdrawal amount exceeds your withdrawable balance.");
+      if (withdrawalAmountCents > availableForWithdrawalCents) {
+        throw new Error("Withdrawal amount exceeds your available balance.");
       }
 
       if (netTransferAmountCents <= 0) {
@@ -608,7 +602,6 @@ export default function DashboardPage() {
 
             <div className="relative p-6 sm:p-8">
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-                {/* Left: Main balance display */}
                 <div className="space-y-1">
                   <div className="flex items-center gap-2.5 mb-4">
                     <div className="p-2 rounded-xl bg-[#5f8fff]/15">
@@ -616,20 +609,12 @@ export default function DashboardPage() {
                     </div>
                     <p className="text-xs uppercase tracking-[0.18em] text-[#7ca6ff] font-semibold">Relay Balance</p>
                   </div>
-                  <p className="text-white/50 text-sm">Total funds in Relay</p>
-                  <p className="text-4xl sm:text-5xl font-bold text-[#f5f7fb] tracking-tight">
-                    {balanceLoading ? "..." : formatMoneyFromCents(relayBalanceCents)}
+                  <p className="text-white/50 text-sm">
+                    Launch balances keep things simple: pending first, then available.
                   </p>
                 </div>
 
-                {/* Right: Withdrawable highlight + CTA */}
                 <div className="flex flex-col items-start lg:items-end gap-4">
-                  <div className="text-right">
-                    <p className="text-xs uppercase tracking-[0.14em] text-emerald-400/80 font-medium mb-1">Ready to withdraw</p>
-                    <p className="text-3xl sm:text-4xl font-bold text-emerald-300 tracking-tight">
-                      {balanceLoading ? "..." : formatMoneyFromCents(withdrawableBalanceCents)}
-                    </p>
-                  </div>
                   <div className="flex items-center gap-3">
                     {balanceData?.profile.stripeConnected ? (
                       <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400/70">
@@ -644,7 +629,7 @@ export default function DashboardPage() {
                     )}
                     <button
                       onClick={() => setWithdrawOpen((open) => !open)}
-                      disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
+                      disabled={!balanceData?.profile.stripeConnected || availableForWithdrawalCents <= 0}
                       className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                     >
                       <Banknote className="w-4 h-4" />
@@ -654,68 +639,44 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Fund flow visualization */}
-              {!balanceLoading && (
-                <div className="mt-8">
-                  {/* Composition bar */}
-                  {relayBalanceCents > 0 && (
-                    <div className="mb-5">
-                      <div className="flex rounded-full h-3 overflow-hidden bg-white/[0.06]">
-                        {pendingBalanceCents > 0 && (
-                          <div
-                            className="bg-amber-400/70 transition-all duration-700"
-                            style={{ width: `${Math.max(3, (pendingBalanceCents / relayBalanceCents) * 100)}%` }}
-                            title={`Pending: ${formatMoneyFromCents(pendingBalanceCents)}`}
-                          />
-                        )}
-                        {availableBalanceCents > 0 && (
-                          <div
-                            className="bg-emerald-400/70 transition-all duration-700"
-                            style={{ width: `${Math.max(3, (availableBalanceCents / relayBalanceCents) * 100)}%` }}
-                            title={`Available: ${formatMoneyFromCents(availableBalanceCents)}`}
-                          />
-                        )}
-                        {currentExposureCents > 0 && (
-                          <div
-                            className="bg-[#5f8fff]/60 transition-all duration-700"
-                            style={{ width: `${Math.max(3, (currentExposureCents / relayBalanceCents) * 100)}%` }}
-                            title={`Exposure: ${formatMoneyFromCents(currentExposureCents)}`}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fund stages */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400/70 flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-white/45 text-xs">Pending</p>
-                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(pendingBalanceCents)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/70 flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-white/45 text-xs">Available</p>
-                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(availableBalanceCents)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-3.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]/60 flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-white/45 text-xs">Withdrawable</p>
-                        <p className="text-lg font-semibold text-[#f5f7fb]">{formatMoneyFromCents(withdrawableBalanceCents)}</p>
-                      </div>
-                    </div>
-                  </div>
+              <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4">
+                  <p className="text-white/45 text-xs uppercase tracking-[0.16em] mb-2">
+                    Pending Balance
+                  </p>
+                  <p className="text-3xl font-bold text-[#f5f7fb] tracking-tight">
+                    {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents)}
+                  </p>
+                  <p className="text-white/55 text-sm mt-3">
+                    Pending funds become available after the order is completed and payment settlement clears.
+                  </p>
                 </div>
-              )}
+                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4">
+                  <p className="text-white/45 text-xs uppercase tracking-[0.16em] mb-2">
+                    Available Balance
+                  </p>
+                  <p className="text-3xl font-bold text-emerald-300 tracking-tight">
+                    {balanceLoading ? "..." : formatMoneyFromCents(availableBalanceCents)}
+                  </p>
+                  <p className="text-white/55 text-sm mt-3">
+                    Available funds can be withdrawn or used to buy on Relay.
+                  </p>
+                </div>
+              </div>
 
-              {/* Tier info */}
-              <div className="mt-5 rounded-xl bg-[#5f8fff]/[0.07] border border-[#5f8fff]/15 px-4 py-3">
-                <p className="text-[#b8ccff] text-sm">{getTierAvailabilityMessage(sellerTier)}</p>
+              <div className="mt-5 grid grid-cols-1 gap-3">
+                {isFoundingSeller && (
+                  <div className="rounded-xl bg-amber-500/[0.08] border border-amber-500/20 px-4 py-3">
+                    <p className="text-amber-200 text-sm font-medium">Founding Seller Benefits</p>
+                    <p className="text-amber-100/75 text-sm mt-1">
+                      Founding sellers get launch recognition, direct feedback access, and early visibility into new seller tools as Relay grows.
+                    </p>
+                  </div>
+                )}
+                <div className="rounded-xl bg-[#5f8fff]/[0.07] border border-[#5f8fff]/15 px-4 py-3">
+                  <p className="text-[#dce7ff] text-sm font-medium">{getAdvancedSellerProgramMessage()}</p>
+                  <p className="text-[#b8ccff] text-sm mt-1">{getAdvancedSellerProgramDetail()}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -780,7 +741,7 @@ export default function DashboardPage() {
                       className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
                     />
                     <p className="text-xs text-white/35">
-                      Max {formatMoneyFromCents(withdrawableBalanceCents)}. Pending and disputed amounts are excluded.
+                      Max {formatMoneyFromCents(availableForWithdrawalCents)}.
                     </p>
                   </div>
 
@@ -791,7 +752,7 @@ export default function DashboardPage() {
                         withdrawSubmitting ||
                         !balanceData?.profile.stripeConnected ||
                         withdrawalAmountCents <= 0 ||
-                        withdrawalAmountCents > withdrawableBalanceCents ||
+                        withdrawalAmountCents > availableForWithdrawalCents ||
                         netTransferAmountCents <= 0
                       }
                       className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -809,7 +770,7 @@ export default function DashboardPage() {
               ) : (
                 <button
                   onClick={() => setWithdrawOpen(true)}
-                  disabled={!balanceData?.profile.stripeConnected || withdrawableBalanceCents <= 0}
+                  disabled={!balanceData?.profile.stripeConnected || availableForWithdrawalCents <= 0}
                   className="w-full relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                 >
                   <Wallet className="w-4 h-4" />
