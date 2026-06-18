@@ -27,6 +27,7 @@ const MANUAL_WITHDRAWAL_REVIEW_THRESHOLD_CENTS = 200_000;
 type RelayBalanceLedgerType =
   | "order_pending_credit"
   | "order_available_credit"
+  | "relay_balance_purchase_debit"
   | "withdrawal_requested"
   | "withdrawal_completed"
   | "withdrawal_failed"

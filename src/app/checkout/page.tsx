@@ -7,7 +7,7 @@ import { resolveListingVariant } from '@/lib/listings';
 import { getVacationModeNotice } from '@/lib/seller-availability';
 import useAuth from '@/hooks/useAuth';
 import { Listing } from '@/types';
-import { ArrowLeft, Package, Truck, CreditCard, Loader2 } from 'lucide-react';
+import { ArrowLeft, Package, Truck, CreditCard, Loader2, Wallet } from 'lucide-react';
 import Link from 'next/link';
 
 interface BuyerAddress {
@@ -44,6 +44,14 @@ interface ResolvedUsedItem {
   condition: 'like_new' | 'used_excellent' | 'used_good' | 'used_fair';
   condition_photo_url: string;
   quantity: number;
+}
+
+interface BuyerRelayBalanceResponse {
+  balances: {
+    pendingBalanceCents: number;
+    availableBalanceCents: number;
+    updatedAt: string | null;
+  };
 }
 
 function getUsedConditionLabel(value: ResolvedUsedItem['condition']) {
@@ -114,6 +122,9 @@ export default function CheckoutPage() {
   const [resolvedPrice, setResolvedPrice] = useState<number | null>(null);
   const [resolvedVariant, setResolvedVariant] = useState<ResolvedVariant | null>(null);
   const [resolvedUsedItem, setResolvedUsedItem] = useState<ResolvedUsedItem | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'relay_balance'>('card');
+  const [buyerRelayBalance, setBuyerRelayBalance] = useState<BuyerRelayBalanceResponse | null>(null);
+  const [buyerBalanceLoading, setBuyerBalanceLoading] = useState(true);
 
   // Fetch listing details and resolve price from database
   useEffect(() => {
@@ -316,6 +327,35 @@ export default function CheckoutPage() {
     }
   }, [currentUser]);
 
+  useEffect(() => {
+    async function loadBuyerRelayBalance() {
+      if (!currentUser?.id) {
+        setBuyerRelayBalance(null);
+        setBuyerBalanceLoading(false);
+        return;
+      }
+
+      setBuyerBalanceLoading(true);
+      try {
+        const response = await fetch('/api/buyer/relay-balance', { cache: 'no-store' });
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Failed to load Relay Balance');
+        }
+
+        setBuyerRelayBalance(payload);
+      } catch (balanceError) {
+        console.error('Buyer Relay Balance error:', balanceError);
+        setBuyerRelayBalance(null);
+      } finally {
+        setBuyerBalanceLoading(false);
+      }
+    }
+
+    void loadBuyerRelayBalance();
+  }, [currentUser?.id]);
+
   const handleAddressChange = (field: keyof BuyerAddress, value: string) => {
     setBuyerAddress((prev) => ({ ...prev, [field]: value }));
   };
@@ -400,29 +440,55 @@ export default function CheckoutPage() {
     setError(null);
 
     try {
+      const requestBody = {
+        listingId,
+        size: resolvedUsedItem?.size || resolvedVariant?.size || size,
+        listingVariantId: resolvedVariant?.id?.includes(':') ? undefined : resolvedVariant?.id,
+        listingUsedItemId: resolvedUsedItem?.id,
+        price: resolvedPrice,
+        shippingCost: parseFloat(shippingRate.amount),
+        buyerAddress: {
+          name: buyerAddress.name,
+          email: buyerAddress.email || currentUser?.email || undefined,
+          phone: buyerAddress.phone || undefined,
+          street1: buyerAddress.street1,
+          street2: buyerAddress.street2 || undefined,
+          city: buyerAddress.city,
+          state: buyerAddress.state,
+          zip: buyerAddress.zip,
+          country: buyerAddress.country,
+        },
+        customOfferId: customOfferId || undefined,
+      };
+
+      if (paymentMethod === 'relay_balance') {
+        const relayBalanceRes = await fetch('/api/checkout/relay-balance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...requestBody,
+            idempotencyKey:
+              typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                ? crypto.randomUUID()
+                : `relay-balance-checkout-${Date.now()}`,
+          }),
+        });
+        const relayBalanceData = await relayBalanceRes.json();
+
+        if (!relayBalanceRes.ok) {
+          throw new Error(relayBalanceData.error || 'Failed to complete Relay Balance purchase');
+        }
+
+        if (relayBalanceData.redirectUrl) {
+          window.location.href = relayBalanceData.redirectUrl;
+        }
+        return;
+      }
+
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listingId,
-          size: resolvedUsedItem?.size || resolvedVariant?.size || size,
-          listingVariantId: resolvedVariant?.id?.includes(':') ? undefined : resolvedVariant?.id,
-          listingUsedItemId: resolvedUsedItem?.id,
-          price: resolvedPrice,
-          shippingCost: parseFloat(shippingRate.amount),
-          buyerAddress: {
-            name: buyerAddress.name,
-            email: buyerAddress.email || currentUser?.email || undefined,
-            phone: buyerAddress.phone || undefined,
-            street1: buyerAddress.street1,
-            street2: buyerAddress.street2 || undefined,
-            city: buyerAddress.city,
-            state: buyerAddress.state,
-            zip: buyerAddress.zip,
-            country: buyerAddress.country,
-          },
-          customOfferId: customOfferId || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await res.json();
@@ -464,8 +530,18 @@ export default function CheckoutPage() {
   const shoePrice = resolvedPrice;
   const shippingCost = shippingRate ? parseFloat(shippingRate.amount) : 0;
   const total = shoePrice + shippingCost;
+  const totalCents = Math.round(total * 100);
   const displaySize = resolvedUsedItem?.size || resolvedVariant?.size || size;
   const sellerOnVacation = !!listing.seller?.vacation_mode_enabled;
+  const availableRelayBalanceCents = Math.max(
+    0,
+    Number(buyerRelayBalance?.balances.availableBalanceCents || 0)
+  );
+  const pendingRelayBalanceCents = Math.max(
+    0,
+    Number(buyerRelayBalance?.balances.pendingBalanceCents || 0)
+  );
+  const canUseRelayBalance = availableRelayBalanceCents >= totalCents;
 
   return (
     <div className="max-w-2xl mx-auto py-8">
@@ -669,20 +745,88 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          <div className="border-t border-white/10 pt-6 mb-6">
+            <h3 className="text-base font-semibold text-relay-text mb-3">Payment Method</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                  paymentMethod === 'card'
+                    ? 'border-[#5f8fff]/50 bg-[#5f8fff]/10'
+                    : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.05]'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <CreditCard size={18} className="text-[#7ca6ff]" />
+                  <p className="text-relay-text font-medium">Pay with Card</p>
+                </div>
+                <p className="text-sm text-relay-muted">
+                  Pay now with Stripe checkout.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (canUseRelayBalance) {
+                    setPaymentMethod('relay_balance');
+                  }
+                }}
+                disabled={buyerBalanceLoading || !canUseRelayBalance}
+                className={`rounded-2xl border px-4 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  paymentMethod === 'relay_balance'
+                    ? 'border-emerald-500/40 bg-emerald-500/10'
+                    : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.05]'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet size={18} className="text-emerald-300" />
+                  <p className="text-relay-text font-medium">Pay with Relay Balance</p>
+                </div>
+                <p className="text-sm text-relay-muted">
+                  {buyerBalanceLoading
+                    ? 'Checking available balance...'
+                    : `Available: $${(availableRelayBalanceCents / 100).toFixed(2)}`}
+                </p>
+                <p className="text-xs text-relay-subtle mt-2">
+                  Pending balance cannot be used.
+                </p>
+                {!buyerBalanceLoading && !canUseRelayBalance && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    You need the full order total in available balance to use this option.
+                  </p>
+                )}
+              </button>
+            </div>
+
+            {!buyerBalanceLoading && pendingRelayBalanceCents > 0 && (
+              <p className="text-xs text-relay-subtle mt-3">
+                Pending Relay Balance: ${ (pendingRelayBalanceCents / 100).toFixed(2) }
+              </p>
+            )}
+          </div>
+
           <button
             onClick={handleProceedToPayment}
-            disabled={checkoutLoading || sellerOnVacation}
+            disabled={
+              checkoutLoading ||
+              sellerOnVacation ||
+              (paymentMethod === 'relay_balance' && (buyerBalanceLoading || !canUseRelayBalance))
+            }
             className="relay-button-primary w-full py-3 text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {checkoutLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                Redirecting to Payment...
+                {paymentMethod === 'relay_balance'
+                  ? 'Processing Relay Balance Payment...'
+                  : 'Redirecting to Payment...'}
               </>
             ) : (
               <>
-                <CreditCard size={18} />
-                Proceed to Payment
+                {paymentMethod === 'relay_balance' ? <Wallet size={18} /> : <CreditCard size={18} />}
+                {paymentMethod === 'relay_balance' ? 'Pay with Relay Balance' : 'Proceed to Payment'}
               </>
             )}
           </button>

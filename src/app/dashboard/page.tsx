@@ -188,6 +188,13 @@ function getLedgerActivitySummary(
         amountLabel: formatMoneyFromCents(absoluteAmountCents),
         tone: "green" as const,
       };
+    case "relay_balance_purchase_debit":
+      return {
+        title: "Relay Balance purchase",
+        detail: `${listingLabel} was paid using your available Relay Balance.`,
+        amountLabel: formatMoneyFromCents(absoluteAmountCents),
+        tone: "amber" as const,
+      };
     case "withdrawal_requested":
       return {
         title: "Withdrawal requested",
