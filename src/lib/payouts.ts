@@ -22,7 +22,7 @@ import {
   type OrderPayoutStepKey,
   type OrderPayoutTrigger,
 } from "./payout-calculations";
-import type { SellerTier } from "../types";
+import type { SellerTier, StripeSettlementStatus, PaymentFundingSource } from "../types";
 
 type SupabaseAdminClient = ReturnType<typeof import("./supabase-admin").createAdminClient>;
 
@@ -35,6 +35,12 @@ type ActorRole = "system" | "admin" | "seller" | "buyer";
 interface PayoutStepRow {
   id: string;
   payout_step: OrderPayoutStepKey;
+  payment_source_type?: PaymentFundingSource | null;
+  stripe_charge_id?: string | null;
+  stripe_balance_transaction_id?: string | null;
+  stripe_funds_available_on?: string | null;
+  stripe_funds_settled_at?: string | null;
+  stripe_settlement_status?: StripeSettlementStatus | null;
   status: "pending" | "paid" | "frozen" | "failed" | "cancelled";
   gross_amount_cents: number;
   reserve_withheld_cents: number;
@@ -64,6 +70,12 @@ interface OrderPayoutContext {
   seller_proceeds_cents: number | null;
   stripe_transfer_id: string | null;
   stripe_payment_intent_id: string | null;
+  payment_funding_source: PaymentFundingSource | null;
+  stripe_charge_id: string | null;
+  stripe_balance_transaction_id: string | null;
+  stripe_funds_available_on: string | null;
+  stripe_funds_settled_at: string | null;
+  stripe_settlement_status: StripeSettlementStatus | null;
   seller_funds_frozen: boolean | null;
   seller_tier_snapshot: SellerTier | null;
   payout_schedule: OrderPayoutPolicySnapshot["payoutSchedule"] | null;
@@ -149,6 +161,12 @@ async function getOrderPayoutContext(
       seller_proceeds_cents,
       stripe_transfer_id,
       stripe_payment_intent_id,
+      payment_funding_source,
+      stripe_charge_id,
+      stripe_balance_transaction_id,
+      stripe_funds_available_on,
+      stripe_funds_settled_at,
+      stripe_settlement_status,
       seller_funds_frozen,
       seller_tier_snapshot,
       payout_schedule,
@@ -521,6 +539,12 @@ export async function processOrderPayoutTrigger(
       order_id: order.id,
       seller_id: order.seller_id,
       payout_step: step.key,
+      payment_source_type: order.payment_funding_source,
+      stripe_charge_id: order.stripe_charge_id,
+      stripe_balance_transaction_id: order.stripe_balance_transaction_id,
+      stripe_funds_available_on: order.stripe_funds_available_on,
+      stripe_funds_settled_at: order.stripe_funds_settled_at,
+      stripe_settlement_status: order.stripe_settlement_status,
       status: "pending",
       gross_amount_cents: allocation.grossAmountCents,
       reserve_withheld_cents: 0,
@@ -532,6 +556,9 @@ export async function processOrderPayoutTrigger(
       metadata: {
         overrideReason: input.overrideReason || null,
         releaseDestination: "relay_balance",
+        paymentSourceType: order.payment_funding_source,
+        stripeSettlementStatus: order.stripe_settlement_status,
+        stripeFundsAvailableOn: order.stripe_funds_available_on,
       },
     };
 

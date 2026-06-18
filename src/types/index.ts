@@ -188,6 +188,7 @@ export interface Order {
   stripe_fee_estimate_cents?: number | null;
   seller_proceeds_cents?: number | null;
   payment_funding_source?: import("./trust").PaymentFundingSource | null;
+  stripe_settlement_status?: import("./trust").StripeSettlementStatus | null;
   stripe_charge_id?: string | null;
   stripe_balance_transaction_id?: string | null;
   stripe_funds_available_on?: string | null;

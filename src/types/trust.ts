@@ -19,6 +19,12 @@ export type RelayBalanceCreditStatus =
 
 export type PaymentFundingSource = "card" | "relay_balance";
 
+export type StripeSettlementStatus =
+  | "not_applicable"
+  | "pending"
+  | "pending_settlement_unknown"
+  | "settled";
+
 export type RelayBalanceLedgerType =
   | "order_pending_credit"
   | "order_available_credit"
@@ -256,6 +262,12 @@ export interface OrderPayoutRecord {
   order_id: string;
   seller_id: string;
   payout_step: OrderPayoutStep;
+  payment_source_type?: PaymentFundingSource | null;
+  stripe_charge_id?: string | null;
+  stripe_balance_transaction_id?: string | null;
+  stripe_funds_available_on?: string | null;
+  stripe_funds_settled_at?: string | null;
+  stripe_settlement_status?: StripeSettlementStatus | null;
   status: "pending" | "paid" | "frozen" | "failed" | "cancelled";
   gross_amount_cents: number;
   reserve_withheld_cents: number;

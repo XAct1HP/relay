@@ -10,6 +10,7 @@ import {
 import { evaluateOrderAuthenticationRequirements } from "@/lib/order-auth";
 import { buildOrderPayoutSnapshotForTier } from "@/lib/payouts";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
+import { syncOrderStripeSettlementByOrderId } from "@/lib/stripe-settlement";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
 
@@ -406,6 +407,7 @@ async function finalizeShoeOrderPurchase(
       stripe_fee_estimate_cents: stripeFeeCents,
       seller_proceeds_cents: sellerProceedsCents,
       payment_funding_source: "card",
+      stripe_settlement_status: "pending",
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId,
       challenge_code: challengeCode,
@@ -462,6 +464,13 @@ async function finalizeShoeOrderPurchase(
 
     throw new Error(orderError?.message || "Failed to create order");
   }
+
+  await syncOrderStripeSettlementByOrderId(supabase, {
+    orderId: insertedOrder.id,
+    source,
+    actorRole: source === "checkout_success_recovery" ? "buyer" : "system",
+    actorUserId: source === "checkout_success_recovery" ? buyerId : null,
+  });
 
   await createOrderPendingCredit(insertedOrder.id, {
     adminClient: supabase,

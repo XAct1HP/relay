@@ -2,11 +2,13 @@ import "server-only";
 
 import Stripe from "stripe";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
+import { syncOrderStripeSettlementByOrderId } from "@/lib/stripe-settlement";
 import { createAdminClient } from "@/lib/supabase-admin";
 import type {
   AuditActorRole,
   PaymentFundingSource,
   SellerTier,
+  StripeSettlementStatus,
 } from "@/types/trust";
 
 type SupabaseAdminClient = ReturnType<typeof createAdminClient>;
@@ -74,6 +76,7 @@ interface MoneyPolicyOrderLike {
   shipped_at?: string | null;
   stripe_payment_intent_id?: string | null;
   payment_funding_source?: PaymentFundingSource | null;
+  stripe_settlement_status?: StripeSettlementStatus | null;
   stripe_charge_id?: string | null;
   stripe_balance_transaction_id?: string | null;
   stripe_funds_available_on?: string | null;
@@ -93,6 +96,7 @@ interface MoneyPolicyOrderContext extends MoneyPolicyOrderLike {
   payout_status?: string | null;
   stripe_payment_intent_id?: string | null;
   payment_funding_source?: PaymentFundingSource | null;
+  stripe_settlement_status?: StripeSettlementStatus | null;
   stripe_charge_id?: string | null;
   stripe_balance_transaction_id?: string | null;
   stripe_funds_available_on?: string | null;
@@ -424,6 +428,7 @@ async function loadOrderMoneyContext(
       stripe_fee_estimate_cents,
       seller_proceeds_cents,
       payment_funding_source,
+      stripe_settlement_status,
       stripe_payment_intent_id,
       stripe_charge_id,
       stripe_balance_transaction_id,
@@ -483,120 +488,62 @@ async function updateOrderIfNeeded(
 async function syncCardOrderSettlementSnapshot(
   adminClient: SupabaseAdminClient,
   order: MoneyPolicyOrderContext
-) {
-  const now = new Date();
+): Promise<MoneyPolicyOrderContext> {
   const fundingSource = resolvePaymentFundingSource(order);
 
   if (fundingSource !== "card") {
     return {
       ...order,
       payment_funding_source: fundingSource,
+      stripe_settlement_status: "not_applicable",
     };
   }
 
   const knownAvailableOn = coerceDate(order.stripe_funds_available_on);
   const knownSettledAt = coerceDate(order.stripe_funds_settled_at);
-
-  if (knownAvailableOn) {
+  if (knownAvailableOn || knownSettledAt) {
     const settledAtIso =
-      knownSettledAt || knownAvailableOn.getTime() > now.getTime()
-        ? order.stripe_funds_settled_at || null
-        : knownAvailableOn.toISOString();
+      order.stripe_funds_settled_at ||
+      (knownAvailableOn && knownAvailableOn.getTime() <= Date.now()
+        ? knownAvailableOn.toISOString()
+        : null);
 
-    if (!knownSettledAt && settledAtIso) {
+    if (!order.stripe_funds_settled_at && settledAtIso) {
       await updateOrderIfNeeded(adminClient, order.id, {
         stripe_funds_settled_at: settledAtIso,
+        stripe_settlement_status: settledAtIso ? "settled" : "pending",
       });
     }
 
     return {
       ...order,
       payment_funding_source: fundingSource,
+      stripe_settlement_status: settledAtIso ? "settled" : "pending",
       stripe_funds_settled_at: settledAtIso,
     };
   }
 
-  if (!order.stripe_payment_intent_id) {
-    return {
-      ...order,
-      payment_funding_source: fundingSource,
-    };
-  }
+  const result = await syncOrderStripeSettlementByOrderId(adminClient, {
+    orderId: order.id,
+    source: "money_policy_reconciliation",
+    actorRole: "system",
+  });
 
-  try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(
-      order.stripe_payment_intent_id,
-      {
-        expand: ["latest_charge.balance_transaction"],
-      }
-    );
-
-    const latestCharge =
-      paymentIntent.latest_charge &&
-      typeof paymentIntent.latest_charge === "object"
-        ? (paymentIntent.latest_charge as any)
-        : null;
-    const balanceTransaction =
-      latestCharge?.balance_transaction &&
-      typeof latestCharge.balance_transaction === "object"
-        ? latestCharge.balance_transaction
-        : null;
-    const availableOnUnix =
-      typeof balanceTransaction?.available_on === "number"
-        ? balanceTransaction.available_on
-        : null;
-    const availableOnIso =
-      availableOnUnix !== null
-        ? new Date(availableOnUnix * 1000).toISOString()
-        : null;
-    const settledAtIso =
-      availableOnIso && new Date(availableOnIso).getTime() <= now.getTime()
-        ? availableOnIso
-        : null;
-
-    const updatePayload: Record<string, unknown> = {};
-    if (order.payment_funding_source !== fundingSource) {
-      updatePayload.payment_funding_source = fundingSource;
-    }
-    if ((order.stripe_charge_id || null) !== (latestCharge?.id || null)) {
-      updatePayload.stripe_charge_id = latestCharge?.id || null;
-    }
-    if (
-      (order.stripe_balance_transaction_id || null) !==
-      (balanceTransaction?.id || null)
-    ) {
-      updatePayload.stripe_balance_transaction_id = balanceTransaction?.id || null;
-    }
-    if ((order.stripe_funds_available_on || null) !== availableOnIso) {
-      updatePayload.stripe_funds_available_on = availableOnIso;
-    }
-    if ((order.stripe_funds_settled_at || null) !== settledAtIso) {
-      updatePayload.stripe_funds_settled_at = settledAtIso;
-    }
-
-    await updateOrderIfNeeded(adminClient, order.id, updatePayload);
-
-    return {
-      ...order,
-      payment_funding_source: fundingSource,
-      stripe_charge_id: latestCharge?.id || null,
-      stripe_balance_transaction_id: balanceTransaction?.id || null,
-      stripe_funds_available_on: availableOnIso,
-      stripe_funds_settled_at: settledAtIso,
-    };
-  } catch (error) {
-    console.error("Failed to sync Stripe settlement snapshot:", error);
-    return {
-      ...order,
-      payment_funding_source: fundingSource,
-    };
-  }
+  return {
+    ...order,
+    payment_funding_source: result.paymentSourceType,
+    stripe_settlement_status: result.status,
+    stripe_charge_id: result.chargeId,
+    stripe_balance_transaction_id: result.balanceTransactionId,
+    stripe_funds_available_on: result.availableOn,
+    stripe_funds_settled_at: result.settledAt,
+  };
 }
 
 async function ensureOrderMoneySnapshot(
   adminClient: SupabaseAdminClient,
   order: MoneyPolicyOrderContext
-) {
+): Promise<MoneyPolicyOrderContext> {
   const settlementSyncedOrder = await syncCardOrderSettlementSnapshot(
     adminClient,
     order
@@ -1227,6 +1174,8 @@ export async function createOrderPendingCredit(
       source: "relay_balance_policy",
       seller_tier: resolveSellerTier(order),
       payment_funding_source: resolvePaymentFundingSource(order),
+      stripe_settlement_status: order.stripe_settlement_status || null,
+      stripe_funds_available_on: order.stripe_funds_available_on || null,
     },
   });
 
@@ -1350,6 +1299,8 @@ export async function releaseOrderFundsToAvailable(
         forced_release: forcedReleaseKeys.has(stage.releaseKey),
         seller_tier: sellerTier,
         payment_funding_source: resolvePaymentFundingSource(order),
+        stripe_settlement_status: order.stripe_settlement_status || null,
+        stripe_funds_available_on: order.stripe_funds_available_on || null,
       },
     });
 

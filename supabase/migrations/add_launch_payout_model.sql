@@ -9,6 +9,14 @@ ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS payment_funding_source TEXT
     CHECK (payment_funding_source IN ('card', 'relay_balance'))
     DEFAULT 'card',
+  ADD COLUMN IF NOT EXISTS stripe_settlement_status TEXT
+    CHECK (stripe_settlement_status IN (
+      'not_applicable',
+      'pending',
+      'pending_settlement_unknown',
+      'settled'
+    ))
+    DEFAULT 'pending',
   ADD COLUMN IF NOT EXISTS stripe_charge_id TEXT,
   ADD COLUMN IF NOT EXISTS stripe_balance_transaction_id TEXT,
   ADD COLUMN IF NOT EXISTS stripe_funds_available_on TIMESTAMPTZ,
@@ -20,6 +28,30 @@ CREATE INDEX IF NOT EXISTS idx_orders_payment_funding_source
 CREATE INDEX IF NOT EXISTS idx_orders_stripe_funds_available_on
   ON public.orders(stripe_funds_available_on);
 
+CREATE INDEX IF NOT EXISTS idx_orders_stripe_settlement_status
+  ON public.orders(stripe_settlement_status);
+
+ALTER TABLE public.order_payouts
+  ADD COLUMN IF NOT EXISTS payment_source_type TEXT
+    CHECK (payment_source_type IN ('card', 'relay_balance')),
+  ADD COLUMN IF NOT EXISTS stripe_charge_id TEXT,
+  ADD COLUMN IF NOT EXISTS stripe_balance_transaction_id TEXT,
+  ADD COLUMN IF NOT EXISTS stripe_funds_available_on TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS stripe_funds_settled_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS stripe_settlement_status TEXT
+    CHECK (stripe_settlement_status IN (
+      'not_applicable',
+      'pending',
+      'pending_settlement_unknown',
+      'settled'
+    ));
+
+CREATE INDEX IF NOT EXISTS idx_order_payouts_payment_source_type
+  ON public.order_payouts(payment_source_type);
+
+CREATE INDEX IF NOT EXISTS idx_order_payouts_stripe_settlement_status
+  ON public.order_payouts(stripe_settlement_status);
+
 UPDATE public.orders
 SET payment_funding_source = COALESCE(
   payment_funding_source,
@@ -29,6 +61,45 @@ SET payment_funding_source = COALESCE(
   END
 )
 WHERE payment_funding_source IS NULL;
+
+UPDATE public.orders
+SET stripe_settlement_status = CASE
+  WHEN payment_funding_source = 'relay_balance' THEN 'not_applicable'
+  WHEN stripe_funds_settled_at IS NOT NULL THEN 'settled'
+  WHEN stripe_funds_available_on IS NOT NULL AND stripe_funds_available_on <= NOW() THEN 'settled'
+  WHEN stripe_funds_available_on IS NOT NULL THEN 'pending'
+  ELSE COALESCE(stripe_settlement_status, 'pending')
+END
+WHERE stripe_settlement_status IS NULL
+   OR stripe_settlement_status NOT IN (
+     'not_applicable',
+     'pending',
+     'pending_settlement_unknown',
+     'settled'
+   );
+
+UPDATE public.order_payouts AS op
+SET
+  payment_source_type = COALESCE(op.payment_source_type, o.payment_funding_source),
+  stripe_charge_id = COALESCE(op.stripe_charge_id, o.stripe_charge_id),
+  stripe_balance_transaction_id = COALESCE(
+    op.stripe_balance_transaction_id,
+    o.stripe_balance_transaction_id
+  ),
+  stripe_funds_available_on = COALESCE(
+    op.stripe_funds_available_on,
+    o.stripe_funds_available_on
+  ),
+  stripe_funds_settled_at = COALESCE(
+    op.stripe_funds_settled_at,
+    o.stripe_funds_settled_at
+  ),
+  stripe_settlement_status = COALESCE(
+    op.stripe_settlement_status,
+    o.stripe_settlement_status
+  )
+FROM public.orders AS o
+WHERE op.order_id = o.id;
 
 -- Disable launch-time early payouts and reserve behavior while preserving the
 -- existing compatibility columns.
