@@ -27,6 +27,7 @@ import {
 import { Listing, ListingUsedItem } from "@/types";
 import useAuth from "@/hooks/useAuth";
 import { sanitizeSneakerDescription } from "../../../../lib/sneakers/sanitizeSneakerDescription";
+import FoundingSellerBadge from "@/components/founding/FoundingSellerBadge";
 
 interface SizeInventory {
   id?: string;
@@ -67,6 +68,7 @@ interface ListingDetail {
     displayName: string;
     avatar: string;
     isVerified: boolean;
+    isFoundingSeller: boolean;
     customerMessagingEnabled: boolean;
     vacationModeEnabled: boolean;
     offersEnabled: boolean;
@@ -226,6 +228,7 @@ export default function ListingDetailPage({
                 data.seller?.avatar_url ||
                 "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
               isVerified: data.seller?.is_verified_seller || false,
+              isFoundingSeller: !!data.seller?.is_founding_seller,
               customerMessagingEnabled: data.seller?.customer_messaging_enabled ?? false,
               vacationModeEnabled: data.seller?.vacation_mode_enabled ?? false,
               offersEnabled: data.seller?.offers_enabled ?? false,
@@ -286,6 +289,7 @@ export default function ListingDetailPage({
                 displayName: previewListing.seller.displayName,
                 avatar: previewListing.seller.avatar,
                 isVerified: previewListing.seller.isVerified,
+                isFoundingSeller: previewListing.seller.isFoundingSeller,
                 customerMessagingEnabled: false,
                 vacationModeEnabled: false,
                 offersEnabled: false,
@@ -502,6 +506,11 @@ export default function ListingDetailPage({
                 <BadgeCheck size={16} className="text-relay-accent flex-shrink-0" />
               )}
             </div>
+            {listing.seller.isFoundingSeller && (
+              <div className="mt-1">
+                <FoundingSellerBadge compact />
+              </div>
+            )}
             <p className="text-sm text-relay-subtle">@{listing.seller.username}</p>
           </div>
         </div>

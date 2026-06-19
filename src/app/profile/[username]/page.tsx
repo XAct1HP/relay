@@ -13,6 +13,7 @@ import useAuth from '@/hooks/useAuth';
 import { useOnboardingPhase } from '@/hooks/useOnboardingPhase';
 import { Star, MessageCircle, TrendingUp, UserPlus, UserCheck, Heart, Instagram } from 'lucide-react';
 import Link from 'next/link';
+import FoundingSellerBadge from '@/components/founding/FoundingSellerBadge';
 
 interface Tab {
   id: string;
@@ -39,6 +40,7 @@ interface SellerProfile {
   sales_count?: number;
   avg_rating?: number;
   instagram_url?: string;
+  is_founding_seller?: boolean;
   role?: string;
   customer_messaging_enabled?: boolean;
   vacation_mode_enabled?: boolean;
@@ -304,6 +306,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
               {profile.is_verified_seller && (
                 <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold" style={{ backgroundColor: theme.accent + '20', color: theme.accent, border: '1px solid ' + theme.cardBorder }}>Verified</span>
               )}
+              {profile.is_founding_seller && <FoundingSellerBadge />}
               {profile.vacation_mode_enabled && (
                 <span className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300">
                   Vacation Mode

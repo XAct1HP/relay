@@ -15,7 +15,7 @@ export async function requireSellerSession() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("id, role, stripe_account_id, display_name, full_name, username, email, seller_tier")
+    .select("id, role, stripe_account_id, display_name, full_name, username, email, seller_tier, is_founding_seller")
     .eq("id", user.id)
     .single();
 

@@ -113,7 +113,6 @@ export async function GET() {
     const pendingTier3Approvals = sellersWithSummary.filter(
       (seller) =>
         seller.recommended_seller_tier === "tier_3" &&
-        !seller.is_founding_seller &&
         !seller.tier_3_approved_at
     ).length;
 

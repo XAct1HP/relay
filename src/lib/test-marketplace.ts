@@ -12,6 +12,7 @@ export interface RelayTestMarketplaceListing {
     displayName: string;
     avatar: string;
     isVerified: boolean;
+    isFoundingSeller: boolean;
     totalSales: number;
     rating: number;
     joinedDate: string;
@@ -32,6 +33,7 @@ const RELAY_PREVIEW_SELLER = {
   displayName: "Relay Preview Seller",
   avatar: "https://api.dicebear.com/7.x/shapes/svg?seed=relay-preview",
   isVerified: true,
+  isFoundingSeller: false,
   totalSales: 128,
   rating: 4.9,
   joinedDate: "January 2026",

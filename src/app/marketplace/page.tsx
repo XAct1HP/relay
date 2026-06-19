@@ -11,6 +11,7 @@ import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import { BRANDS as ALL_BRANDS } from "@/lib/constants";
 import { getRelayTestMarketplaceListings } from "@/lib/test-marketplace";
 import { Listing } from "@/types";
+import FoundingSellerBadge from "@/components/founding/FoundingSellerBadge";
 
 interface ListingDisplay {
   id: string;
@@ -27,6 +28,7 @@ interface ListingDisplay {
     avatar: string;
     isVerified: boolean;
     vacationModeEnabled: boolean;
+    isFoundingSeller: boolean;
   };
   gradient: string;
   createdAt: string;
@@ -65,7 +67,7 @@ export default function MarketplacePage() {
       try {
         const { data } = await supabase
           .from("listings")
-          .select("*, listing_variants(id, size, price, quantity, condition, is_active), listing_used_items(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url, vacation_mode_enabled)")
+          .select("*, listing_variants(id, size, price, quantity, condition, is_active), listing_used_items(id, size, price, quantity, is_active), seller:profiles(full_name, display_name, is_verified_seller, avatar_url, vacation_mode_enabled, is_founding_seller)")
           .eq("status", "active");
 
         if (data) {
@@ -106,6 +108,7 @@ export default function MarketplacePage() {
                   "https://api.dicebear.com/7.x/avataaars/svg?seed=default",
                 isVerified: listing.seller?.is_verified_seller || false,
                 vacationModeEnabled: !!listing.seller?.vacation_mode_enabled,
+                isFoundingSeller: !!listing.seller?.is_founding_seller,
               },
               gradient: gradients[listing.brand] || "from-blue-500/20 to-indigo-500/20",
               createdAt: listing.created_at,
@@ -141,6 +144,7 @@ export default function MarketplacePage() {
             avatar: listing.seller.avatar,
             isVerified: listing.seller.isVerified,
             vacationModeEnabled: false,
+            isFoundingSeller: false,
           },
           gradient: listing.gradient,
           createdAt: listing.createdAt,
@@ -438,6 +442,11 @@ export default function MarketplacePage() {
                           <p className="text-relay-text text-xs font-medium truncate">
                             {listing.seller.name}
                           </p>
+                          {listing.seller.isFoundingSeller && (
+                            <div className="mt-1">
+                              <FoundingSellerBadge compact />
+                            </div>
+                          )}
                         </div>
                         {listing.seller.isVerified && (
                           <BadgeCheck size={14} className="text-relay-accent flex-shrink-0" />

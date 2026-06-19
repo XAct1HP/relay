@@ -61,6 +61,7 @@ export async function GET() {
         stripeAccountId: profile.stripe_account_id,
         stripeConnected: Boolean(profile.stripe_account_id),
         sellerTier: profile.seller_tier || "tier_1",
+        isFoundingSeller: Boolean(profile.is_founding_seller),
         displayName:
           profile.display_name || profile.full_name || profile.username || profile.email || "Seller",
       },

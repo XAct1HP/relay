@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import useAuth from "@/hooks/useAuth";
 import type { RelayBalanceLedgerEntry, SellerTier, WithdrawalRequest } from "@/types";
+import FoundingSellerBadge from "@/components/founding/FoundingSellerBadge";
 
 interface ChartDataPoint {
   month: string;
@@ -48,6 +49,7 @@ interface SellerBalanceResponse {
     stripeAccountId: string | null;
     stripeConnected: boolean;
     sellerTier: SellerTier;
+    isFoundingSeller?: boolean;
     displayName: string;
   };
   balances: {
@@ -402,7 +404,8 @@ export default function DashboardPage() {
     balanceData?.balances.availableBalanceCents
   );
   const availableForWithdrawalCents = availableBalanceCents;
-  const isFoundingSeller = Boolean(currentUser?.is_founding_seller);
+  const isFoundingSeller =
+    Boolean(balanceData?.profile.isFoundingSeller) || Boolean(currentUser?.is_founding_seller);
 
   async function loadBalanceData() {
     setBalanceLoading(true);
@@ -627,6 +630,7 @@ export default function DashboardPage() {
                       <Wallet className="w-5 h-5 text-[#7ca6ff]" />
                     </div>
                     <p className="text-xs uppercase tracking-[0.18em] text-[#7ca6ff] font-semibold">Relay Balance</p>
+                    {isFoundingSeller && <FoundingSellerBadge compact />}
                   </div>
                   <p className="text-white/50 text-sm">
                     Launch balances keep things simple: pending first, then available.
@@ -687,8 +691,16 @@ export default function DashboardPage() {
                 {isFoundingSeller && (
                   <div className="rounded-xl bg-amber-500/[0.08] border border-amber-500/20 px-4 py-3">
                     <p className="text-amber-200 text-sm font-medium">Founding Seller Benefits</p>
-                    <p className="text-amber-100/75 text-sm mt-1">
-                      Founding sellers get launch recognition, direct feedback access, and early visibility into new seller tools as Relay grows.
+                    <div className="mt-2 space-y-1 text-amber-100/80 text-sm">
+                      <p>Free monthly Relay tag shipments</p>
+                      <p>Direct support and feedback access</p>
+                      <p>API onboarding assistance</p>
+                      <p>Early feature access</p>
+                      <p>Priority visibility where already supported</p>
+                      <p>Founding Seller badge across Relay</p>
+                    </div>
+                    <p className="text-amber-100/65 text-xs mt-3">
+                      Founding seller status is a launch program badge. Payout timing is the same as standard sellers at launch.
                     </p>
                   </div>
                 )}
