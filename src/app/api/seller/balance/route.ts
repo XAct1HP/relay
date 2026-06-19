@@ -69,8 +69,6 @@ export async function GET() {
         relayBalanceCents: relayBalance.totalBalanceCents,
         pendingBalanceCents: relayBalance.pendingBalanceCents,
         availableBalanceCents: relayBalance.availableBalanceCents,
-        currentExposureCents: relayBalance.exposureCents,
-        withdrawableBalanceCents: relayBalance.withdrawableBalanceCents,
         updatedAt: relayBalance.updatedAt,
       },
       withdrawalConfig: {

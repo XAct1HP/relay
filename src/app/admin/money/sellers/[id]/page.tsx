@@ -29,7 +29,6 @@ interface SellerMoneyDetailResponse {
     totalBalanceCents: number;
     pendingBalanceCents: number;
     availableBalanceCents: number;
-    exposureCents: number;
     withdrawableBalanceCents: number;
     adminFrozen: boolean;
     frozenReason: string | null;
@@ -290,13 +289,12 @@ export default function AdminSellerMoneyDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           ["Relay Balance", relayBalance.totalBalanceCents],
           ["Pending", relayBalance.pendingBalanceCents],
           ["Available", relayBalance.availableBalanceCents],
-          ["Exposure", relayBalance.exposureCents],
-          ["Withdrawable", relayBalance.withdrawableBalanceCents],
+          ["Available to Withdraw", relayBalance.withdrawableBalanceCents],
         ].map(([label, value]) => (
           <div key={label} className="relay-card p-4 sm:p-5">
             <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">{label}</p>
@@ -320,7 +318,7 @@ export default function AdminSellerMoneyDetailPage() {
             <div className={`rounded-xl border p-4 text-sm ${relayBalance.adminFrozen ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"}`}>
               {relayBalance.adminFrozen
                 ? `Relay Balance is frozen. ${relayBalance.frozenReason || ""}`
-                : "Relay Balance is active. Seller can withdraw up to current withdrawable balance."}
+                : "Relay Balance is active. Seller can withdraw up to current available balance."}
             </div>
 
             <textarea
@@ -389,10 +387,13 @@ export default function AdminSellerMoneyDetailPage() {
           </div>
 
           <div className="relay-card p-5">
-            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Active Exposure Holds</h2>
+            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Legacy Exposure Records</h2>
+            <p className="text-white/45 text-sm mb-4">
+              Exposure is inactive in the launch payout model. Older records remain here only for compatibility and historical review.
+            </p>
             <div className="space-y-3">
               {exposureHolds.length === 0 ? (
-                <div className="text-white/40 text-sm">No active exposure holds.</div>
+                <div className="text-white/40 text-sm">No legacy exposure records found.</div>
               ) : (
                 exposureHolds.map((hold) => (
                   <div key={hold.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">

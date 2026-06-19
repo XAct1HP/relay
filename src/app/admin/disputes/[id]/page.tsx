@@ -33,7 +33,6 @@ interface AdminDisputeDetailResponse {
     totalBalanceCents: number;
     pendingBalanceCents: number;
     availableBalanceCents: number;
-    exposureCents: number;
     withdrawableBalanceCents: number;
     adminFrozen: boolean;
   } | null;
@@ -75,7 +74,6 @@ interface AdminDisputeDetailResponse {
       totalBalanceCents: number;
       pendingBalanceCents: number;
       availableBalanceCents: number;
-      exposureCents: number;
       withdrawableBalanceCents: number;
       adminFrozen: boolean;
     };
@@ -489,8 +487,7 @@ export default function AdminDisputeDetailPage() {
                 <InfoCard label="Available Credit" value={formatMoney(data.computed.availableCreditCents)} />
                 <InfoCard label="Balance Pending" value={formatMoney(data.computed.relayBalanceImpact.pendingBalanceCents)} />
                 <InfoCard label="Balance Available" value={formatMoney(data.computed.relayBalanceImpact.availableBalanceCents)} />
-                <InfoCard label="Exposure" value={formatMoney(data.computed.relayBalanceImpact.exposureCents)} />
-                <InfoCard label="Withdrawable" value={formatMoney(data.computed.relayBalanceImpact.withdrawableBalanceCents)} />
+                <InfoCard label="Available to Withdraw" value={formatMoney(data.computed.relayBalanceImpact.withdrawableBalanceCents)} />
               </div>
             </div>
 
@@ -501,13 +498,16 @@ export default function AdminDisputeDetailPage() {
                   {formatLabel(data.computed.finalFinancialOutcome)}
                 </Badge>
               </div>
+              <p className="text-white/45 text-sm">
+                Exposure is inactive in the launch payout model. These legacy hold values are shown only for dispute-history context.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <InfoCard label="Refund Amount" value={formatMoney(data.computed.refundAmountCents)} />
                 <InfoCard label="Seller Debit" value={formatMoney(data.computed.sellerDebitAmountCents)} />
-                <InfoCard label="Exposure Status" value={formatLabel(data.computed.exposureStatus)} />
-                <InfoCard label="Exposure Held" value={formatMoney(data.computed.currentExposureHoldCents)} />
-                <InfoCard label="Exposure Released" value={formatMoney(data.computed.exposureReleasedCents)} />
-                <InfoCard label="Exposure Consumed" value={formatMoney(data.computed.exposureConsumedCents)} />
+                <InfoCard label="Legacy Hold Status" value={formatLabel(data.computed.exposureStatus)} />
+                <InfoCard label="Legacy Held" value={formatMoney(data.computed.currentExposureHoldCents)} />
+                <InfoCard label="Legacy Released" value={formatMoney(data.computed.exposureReleasedCents)} />
+                <InfoCard label="Legacy Consumed" value={formatMoney(data.computed.exposureConsumedCents)} />
               </div>
             </div>
           </div>

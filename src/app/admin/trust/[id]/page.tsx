@@ -36,7 +36,6 @@ interface SellerTrustDetailResponse {
     totalBalanceCents: number;
     pendingBalanceCents: number;
     availableBalanceCents: number;
-    exposureCents: number;
     withdrawableBalanceCents: number;
   } | null;
   reserveAccount: SellerReserveAccount | null;
@@ -454,7 +453,7 @@ export default function AdminSellerTrustDetailPage() {
               <h2 className="text-lg font-semibold text-[#f5f7fb]">Relay Balance Snapshot</h2>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
                 <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Total</p>
                 <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.totalBalanceCents || 0)}</p>
@@ -468,11 +467,7 @@ export default function AdminSellerTrustDetailPage() {
                 <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.availableBalanceCents || 0)}</p>
               </div>
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
-                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Current Exposure</p>
-                <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.exposureCents || 0)}</p>
-              </div>
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 sm:p-4">
-                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Withdrawable</p>
+                <p className="text-white/50 text-[10px] sm:text-xs uppercase tracking-[0.16em] mb-1">Available to Withdraw</p>
                 <p className="text-[#f5f7fb] text-base sm:text-xl font-semibold">{formatMoney(data.relayBalance?.withdrawableBalanceCents || 0)}</p>
               </div>
             </div>
@@ -480,6 +475,9 @@ export default function AdminSellerTrustDetailPage() {
             <div className="space-y-2">
               <p className="text-white/45 text-sm">
                 Tier V2 removes fixed reserve percentages and minimum platform balance requirements. Legacy reserve rows remain below only for historical context on older orders.
+              </p>
+              <p className="text-white/45 text-sm">
+                Exposure is inactive in the launch payout model and does not affect balance availability or withdrawal timing.
               </p>
               {reserveEntries.slice(0, 8).map((entry) => (
                 <div key={entry.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3 flex items-center justify-between">

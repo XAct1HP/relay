@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowRight,
   Banknote,
+  CheckCircle2,
   Clock3,
   RefreshCw,
   Search,
@@ -19,11 +21,39 @@ interface MoneyOverviewResponse {
     totalPendingSellerBalancesCents: number;
     totalAvailableSellerBalancesCents: number;
     totalWithdrawableBalancesCents: number;
-    totalActiveExposureHoldsCents: number;
     totalDisputedOrFrozenFundsCents: number;
     frozenSellerCount: number;
     pendingWithdrawalCount: number;
   };
+  accounting: {
+    totalSellerPendingBalanceCents: number;
+    totalSellerAvailableBalanceCents: number;
+    totalSellerLedgerLiabilityCents: number;
+    totalRelayBalanceSnapshotCents: number;
+    ledgerSnapshotDeltaCents: number;
+    totalLockedWithdrawalBalanceCents: number;
+    stripePlatformAvailableBalanceCents: number;
+    stripePlatformPendingBalanceCents: number;
+    stripePlatformTotalBalanceCents: number;
+    stripeVsLedgerLiabilityDeltaCents: number;
+    stripeAvailableCoverageDeltaCents: number;
+    failedTransferRestoreGapCount: number;
+    failedTransferRestoreGapAmountCents: number;
+    staleProcessingWithdrawalCount: number;
+    staleProcessingWithdrawalAmountCents: number;
+    refundsOrDisputesImbalanceCount: number;
+    missingSettlementAvailableOnCount: number;
+    stripeBalanceError: string | null;
+  };
+  warnings: Array<{
+    code: string;
+    severity: "critical" | "warning" | "info";
+    title: string;
+    detail: string;
+    amountCents?: number;
+    count?: number;
+    sampleIds?: string[];
+  }>;
   sellers: Array<{
     id: string;
     label: string;
@@ -31,7 +61,6 @@ interface MoneyOverviewResponse {
     totalBalanceCents: number;
     pendingBalanceCents: number;
     availableBalanceCents: number;
-    exposureCents: number;
     withdrawableBalanceCents: number;
     adminFrozen: boolean;
     frozenReason: string | null;
@@ -79,6 +108,13 @@ function formatMoneyFromCents(cents: number) {
     style: "currency",
     currency: "USD",
   }).format((cents || 0) / 100);
+}
+
+function formatSignedMoneyFromCents(cents: number) {
+  const absolute = formatMoneyFromCents(Math.abs(cents || 0));
+  if (cents > 0) return `+${absolute}`;
+  if (cents < 0) return `-${absolute}`;
+  return absolute;
 }
 
 function relativeTime(value: string | null) {
@@ -165,6 +201,10 @@ export default function AdminMoneyPage() {
     () => (data?.withdrawals || []).filter((item) => item.review_required),
     [data?.withdrawals]
   );
+  const criticalWarningCount = useMemo(
+    () => (data?.warnings || []).filter((warning) => warning.severity === "critical").length,
+    [data?.warnings]
+  );
 
   const filteredSellers = useMemo(() => {
     const sellers = data?.sellers || [];
@@ -241,7 +281,6 @@ export default function AdminMoneyPage() {
   const breakdownTotal = data
     ? data.metrics.totalPendingSellerBalancesCents +
       data.metrics.totalAvailableSellerBalancesCents +
-      data.metrics.totalActiveExposureHoldsCents +
       data.metrics.totalDisputedOrFrozenFundsCents
     : 0;
 
@@ -297,7 +336,7 @@ export default function AdminMoneyPage() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Withdrawable</p>
+                <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Available to Withdraw</p>
                 <p className="text-2xl font-semibold text-[#7ca6ff]">
                   {formatMoneyFromCents(data.metrics.totalWithdrawableBalancesCents)}
                 </p>
@@ -320,12 +359,6 @@ export default function AdminMoneyPage() {
                   color="#10b981"
                 />
                 <BreakdownSegment
-                  label="Exposure Holds"
-                  cents={data.metrics.totalActiveExposureHoldsCents}
-                  totalCents={breakdownTotal}
-                  color="#5f8fff"
-                />
-                <BreakdownSegment
                   label="Disputed / Frozen"
                   cents={data.metrics.totalDisputedOrFrozenFundsCents}
                   totalCents={breakdownTotal}
@@ -340,12 +373,145 @@ export default function AdminMoneyPage() {
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Available
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-xs text-white/50">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]" /> Exposure
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-xs text-white/50">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Frozen
                 </span>
               </div>
+            </div>
+          </div>
+
+          <div className="relay-card p-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-5">
+              <div>
+                <p className="text-white/50 text-xs uppercase tracking-[0.16em] mb-2">
+                  Launch Accounting Safety
+                </p>
+                <h2 className="text-xl font-semibold text-[#f5f7fb]">Platform Balance Checks</h2>
+                <p className="text-white/45 text-sm mt-1 max-w-3xl">
+                  Compare Relay&apos;s seller ledger liabilities against the pooled Stripe platform balance before opening withdrawals at launch.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {criticalWarningCount > 0 ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-sm font-semibold text-red-300">
+                    <AlertTriangle className="w-4 h-4" />
+                    {criticalWarningCount} critical warning{criticalWarningCount === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4" />
+                    No critical launch warnings
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[
+                ["Seller Pending", formatMoneyFromCents(data.accounting.totalSellerPendingBalanceCents)],
+                ["Seller Available", formatMoneyFromCents(data.accounting.totalSellerAvailableBalanceCents)],
+                ["Ledger Liability", formatMoneyFromCents(data.accounting.totalSellerLedgerLiabilityCents)],
+                ["Stripe Platform Available", formatMoneyFromCents(data.accounting.stripePlatformAvailableBalanceCents)],
+                ["Stripe Platform Pending", formatMoneyFromCents(data.accounting.stripePlatformPendingBalanceCents)],
+                ["Stripe vs Ledger Delta", formatSignedMoneyFromCents(data.accounting.stripeVsLedgerLiabilityDeltaCents)],
+                ["Available Coverage Delta", formatSignedMoneyFromCents(data.accounting.stripeAvailableCoverageDeltaCents)],
+                ["Locked Withdrawal Balance", formatMoneyFromCents(data.accounting.totalLockedWithdrawalBalanceCents)],
+                ["Missing available_on", String(data.accounting.missingSettlementAvailableOnCount)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                  <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">{label}</p>
+                  <p className="text-[#f5f7fb] font-semibold text-lg">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-2">Checks</p>
+                <div className="space-y-2 text-sm text-white/60">
+                  <p>
+                    Failed transfer restore gaps: <span className="text-[#f5f7fb] font-semibold">{data.accounting.failedTransferRestoreGapCount}</span>
+                    {" · "}
+                    {formatMoneyFromCents(data.accounting.failedTransferRestoreGapAmountCents)}
+                  </p>
+                  <p>
+                    Stale processing withdrawals: <span className="text-[#f5f7fb] font-semibold">{data.accounting.staleProcessingWithdrawalCount}</span>
+                    {" · "}
+                    {formatMoneyFromCents(data.accounting.staleProcessingWithdrawalAmountCents)}
+                  </p>
+                  <p>
+                    Refund/dispute imbalance candidates: <span className="text-[#f5f7fb] font-semibold">{data.accounting.refundsOrDisputesImbalanceCount}</span>
+                  </p>
+                  <p>
+                    Ledger snapshot delta: <span className="text-[#f5f7fb] font-semibold">{formatSignedMoneyFromCents(data.accounting.ledgerSnapshotDeltaCents)}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+                <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-2">Stripe Status</p>
+                {data.accounting.stripeBalanceError ? (
+                  <p className="text-sm text-red-300">{data.accounting.stripeBalanceError}</p>
+                ) : (
+                  <div className="space-y-2 text-sm text-white/60">
+                    <p>
+                      Stripe platform total: <span className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(data.accounting.stripePlatformTotalBalanceCents)}</span>
+                    </p>
+                    <p>
+                      Seller liability total: <span className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(data.accounting.totalSellerLedgerLiabilityCents)}</span>
+                    </p>
+                    <p>
+                      Difference: <span className="text-[#f5f7fb] font-semibold">{formatSignedMoneyFromCents(data.accounting.stripeVsLedgerLiabilityDeltaCents)}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {(data.warnings || []).length === 0 ? (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+                  No launch accounting warnings are currently detected.
+                </div>
+              ) : (
+                data.warnings.map((warning) => {
+                  const tone =
+                    warning.severity === "critical"
+                      ? "border-red-500/20 bg-red-500/10 text-red-200"
+                      : warning.severity === "warning"
+                        ? "border-amber-500/20 bg-amber-500/10 text-amber-100"
+                        : "border-[#5f8fff]/20 bg-[#5f8fff]/10 text-[#dce7ff]";
+                  return (
+                    <div key={warning.code} className={`rounded-2xl border p-4 ${tone}`}>
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.16em]">
+                          {warning.severity}
+                        </span>
+                        <p className="font-semibold text-sm">{warning.title}</p>
+                      </div>
+                      <p className="text-sm">{warning.detail}</p>
+                      {(warning.amountCents !== undefined || warning.count !== undefined || (warning.sampleIds || []).length > 0) && (
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          {warning.amountCents !== undefined && (
+                            <span className="rounded-full bg-black/10 px-2.5 py-1">
+                              Amount {formatMoneyFromCents(warning.amountCents)}
+                            </span>
+                          )}
+                          {warning.count !== undefined && (
+                            <span className="rounded-full bg-black/10 px-2.5 py-1">
+                              Count {warning.count}
+                            </span>
+                          )}
+                          {(warning.sampleIds || []).slice(0, 5).map((id) => (
+                            <span key={id} className="rounded-full bg-black/10 px-2.5 py-1">
+                              {id.slice(0, 8)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -412,7 +578,7 @@ export default function AdminMoneyPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-[#f5f7fb]">Seller Money Detail</h2>
                   <p className="text-white/45 text-sm">
-                    Open a seller to inspect balances, exposure, ledger, and disputes.
+                    Open a seller to inspect balances, withdrawals, ledger activity, and disputes.
                   </p>
                 </div>
               </div>
@@ -469,11 +635,11 @@ export default function AdminMoneyPage() {
                             <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(seller.availableBalanceCents)}</p>
                           </div>
                           <div>
-                            <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Exposure</p>
-                            <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(seller.exposureCents)}</p>
+                            <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Total</p>
+                            <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(seller.totalBalanceCents)}</p>
                           </div>
                           <div>
-                            <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Withdrawable</p>
+                            <p className="text-white/40 text-xs uppercase tracking-[0.14em] mb-1">Available to Withdraw</p>
                             <p className="text-[#7ca6ff] font-bold text-base">{formatMoneyFromCents(seller.withdrawableBalanceCents)}</p>
                           </div>
                         </div>

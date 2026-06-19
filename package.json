@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:launch-balance-policy": "node --require ./scripts/shim-server-only.cjs --import tsx ./scripts/test-launch-balance-policy.ts",
     "test:payouts": "npx tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck --outDir .tmp-payout-tests scripts/test-payout-calculations.ts src/lib/payout-calculations.ts && node .tmp-payout-tests/scripts/test-payout-calculations.js",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
@@ -27,6 +28,7 @@
     "react-dom": "^18.3.0",
     "react-dropzone": "^14.2.0",
     "recharts": "^2.12.0",
+    "server-only": "^0.0.1",
     "shippo": "^2.0.0",
     "stripe": "^16.8.0",
     "tailwind-merge": "^2.5.0",
@@ -43,6 +45,7 @@
     "eslint-config-next": "^14.2.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.5.0"
   }
 }

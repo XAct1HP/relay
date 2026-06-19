@@ -43,7 +43,7 @@ export async function GET() {
         .order("trust_score", { ascending: false }),
       adminClient
         .from("relay_balances")
-        .select("seller_id, pending_balance_cents, available_balance_cents, exposure_cents, withdrawable_balance_cents"),
+        .select("seller_id, pending_balance_cents, available_balance_cents, exposure_cents, admin_frozen"),
       adminClient
         .from("order_disputes")
         .select("id, order_id, seller_id, category, status")
@@ -103,7 +103,9 @@ export async function GET() {
         pending_balance_cents: relayBalance?.pending_balance_cents || 0,
         available_balance_cents: relayBalance?.available_balance_cents || 0,
         exposure_cents: relayBalance?.exposure_cents || 0,
-        withdrawable_balance_cents: relayBalance?.withdrawable_balance_cents || 0,
+        withdrawable_balance_cents: relayBalance?.admin_frozen
+          ? 0
+          : relayBalance?.available_balance_cents || 0,
         open_dispute_count: disputes,
         review_queue_count: reviewOrders,
         tag_inventory_count: allTags.filter((tag) => tag.assigned_seller_id === seller.id).length,
@@ -144,7 +146,7 @@ export async function GET() {
           0
         ),
         totalWithdrawableBalanceCents: (relayBalancesResult.data || []).reduce(
-          (sum, entry) => sum + (entry.withdrawable_balance_cents || 0),
+          (sum, entry) => sum + (entry.admin_frozen ? 0 : entry.available_balance_cents || 0),
           0
         ),
         totalTagInventory: allTags.length,

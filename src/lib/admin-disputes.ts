@@ -11,7 +11,7 @@ import {
   unfreezeOrderPayouts,
   consumeSellerReserveForOrder,
 } from "@/lib/payouts";
-import { getRelayBalanceSnapshot, releaseExposureHold } from "@/lib/money-policy";
+import { getRelayBalanceSnapshot } from "@/lib/money-policy";
 import { logRelayAuditEvent } from "@/lib/relay-audit";
 import { banSellerIdentity } from "@/lib/seller-identity";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
@@ -890,7 +890,6 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
       withdrawalBlocked:
         Boolean(order.seller_funds_frozen) ||
         order.payout_status === "frozen" ||
-        latestExposureHold?.status === "disputed" ||
         Boolean(relayBalance?.adminFrozen),
       reserveStatus: reserveSummary.status,
       tagMatch,
@@ -1034,14 +1033,6 @@ export async function runAdminDisputeAction(
       overrideReason: notes,
     });
 
-    const exposureReleaseResult = reviewWindowExpired
-      ? await releaseExposureHold(input.orderId, {
-          adminClient,
-          actorUserId: input.adminUserId,
-          actorRole: "admin",
-        })
-      : null;
-
     await adminClient
       .from("order_disputes")
       .update({
@@ -1055,7 +1046,8 @@ export async function runAdminDisputeAction(
         metadata: updateDisputeMetadata(dispute, {
           outcome: "seller_wins",
           reviewWindowExpired,
-          exposureReleased: Boolean(exposureReleaseResult?.created),
+          exposureReleased: false,
+          exposureInactiveAtLaunch: true,
         }),
       })
       .eq("id", dispute.id);
@@ -1068,7 +1060,8 @@ export async function runAdminDisputeAction(
       eventType: "admin.dispute_seller_won",
       metadata: {
         reviewWindowExpired,
-        exposureReleased: Boolean(exposureReleaseResult?.created),
+        exposureReleased: false,
+        exposureInactiveAtLaunch: true,
         notes,
       },
     });

@@ -11,7 +11,6 @@ interface OrderMoneyDetailResponse {
   sellerBalance: {
     availableBalanceCents: number;
     pendingBalanceCents: number;
-    exposureCents: number;
     withdrawableBalanceCents: number;
     adminFrozen: boolean;
   } | null;
@@ -167,7 +166,7 @@ export default function AdminOrderMoneyDetailPage() {
           ["Seller Proceeds", computed.sellerProceedsCents],
           ["Pending Credit", computed.pendingCreditCents],
           ["Available Credit", computed.availableCreditCents],
-          ["Exposure Hold", computed.exposureHoldCents],
+          ["Legacy Exposure Record", computed.exposureHoldCents],
           ["Dispute Freeze", computed.disputeFreezeCents],
         ].map(([label, value]) => (
           <div key={label} className="relay-card p-4 sm:p-5">
@@ -209,7 +208,10 @@ export default function AdminOrderMoneyDetailPage() {
           </div>
 
           <div className="relay-card p-5">
-            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Exposure Hold</h2>
+            <h2 className="text-lg font-semibold text-[#f5f7fb] mb-4">Legacy Exposure Record</h2>
+            <p className="text-white/45 text-sm mb-4">
+              Exposure is inactive in the launch payout model. Any record here is legacy or dispute-history context only.
+            </p>
             {exposureHold ? (
               <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 text-sm">
                 <p className="text-[#f5f7fb] font-medium mb-1">{formatMoneyFromCents(exposureHold.amount_cents)}</p>
@@ -218,7 +220,7 @@ export default function AdminOrderMoneyDetailPage() {
                 <p className="text-white/45">Released {formatDate(exposureHold.released_at)}</p>
               </div>
             ) : (
-              <div className="text-white/40 text-sm">No exposure hold recorded for this order.</div>
+              <div className="text-white/40 text-sm">No legacy exposure record found for this order.</div>
             )}
           </div>
 
@@ -235,11 +237,7 @@ export default function AdminOrderMoneyDetailPage() {
                   <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(sellerBalance.availableBalanceCents)}</p>
                 </div>
                 <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                  <p className="text-white/50 text-sm mb-1">Exposure</p>
-                  <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(sellerBalance.exposureCents)}</p>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
-                  <p className="text-white/50 text-sm mb-1">Withdrawable</p>
+                  <p className="text-white/50 text-sm mb-1">Available to Withdraw</p>
                   <p className="text-[#f5f7fb] font-semibold">{formatMoneyFromCents(sellerBalance.withdrawableBalanceCents)}</p>
                 </div>
               </div>

@@ -274,6 +274,8 @@ async function syncExposureHoldForTrigger(
 ) {
   void adminClient;
   void input;
+  // Launch payout model keeps exposure inactive. Carrier acceptance, delivery,
+  // and buyer-completion flows should never create or release exposure holds.
   return null;
 }
 

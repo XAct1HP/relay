@@ -28,8 +28,6 @@ interface SellerTrustDashboardSeller {
   tier_last_evaluated_at: string | null;
   pending_balance_cents: number;
   available_balance_cents: number;
-  exposure_cents: number;
-  withdrawable_balance_cents: number;
   open_dispute_count: number;
   review_queue_count: number;
   tag_inventory_count: number;
@@ -52,8 +50,6 @@ interface DashboardData {
     tagReviewCount: number;
     totalPendingBalanceCents: number;
     totalAvailableBalanceCents: number;
-    totalExposureCents: number;
-    totalWithdrawableBalanceCents: number;
     totalTagInventory: number;
   };
 }

@@ -902,16 +902,16 @@ export async function getRelayBalanceSnapshot(
   const adminClient = getAdminClient(options);
   const data = await ensureRelayBalanceRow(adminClient, sellerId);
   const adminFrozen = Boolean((data as any).admin_frozen);
+  const availableBalanceCents = Number(data.available_balance_cents || 0);
 
   return {
     sellerId,
     totalBalanceCents: Number(data.total_balance_cents || 0),
     pendingBalanceCents: Number(data.pending_balance_cents || 0),
-    availableBalanceCents: Number(data.available_balance_cents || 0),
+    availableBalanceCents,
     exposureCents: Number(data.exposure_cents || 0),
-    withdrawableBalanceCents: adminFrozen
-      ? 0
-      : Number(data.withdrawable_balance_cents || 0),
+    // Launch payout model treats available Relay Balance as the only withdrawable amount.
+    withdrawableBalanceCents: adminFrozen ? 0 : availableBalanceCents,
     adminFrozen,
     frozenReason: (data as any).frozen_reason || null,
     frozenAt: (data as any).frozen_at || null,
@@ -1186,7 +1186,7 @@ export async function calculateWithdrawableBalance(
   options?: MoneyMutationOptions
 ) {
   const relayBalance = await getRelayBalanceSnapshot(sellerId, options);
-  return relayBalance.adminFrozen ? 0 : relayBalance.withdrawableBalanceCents;
+  return relayBalance.adminFrozen ? 0 : relayBalance.availableBalanceCents;
 }
 
 export async function setSellerRelayBalanceFrozen(

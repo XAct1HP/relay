@@ -56,8 +56,6 @@ interface SellerBalanceResponse {
     relayBalanceCents: number;
     pendingBalanceCents: number;
     availableBalanceCents: number;
-    currentExposureCents: number;
-    withdrawableBalanceCents: number;
     updatedAt: string | null;
   };
   withdrawalConfig: {
