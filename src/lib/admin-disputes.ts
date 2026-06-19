@@ -863,6 +863,8 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
     sellerViolations: sellerViolationsResult.data || [],
     timeline: (eventsResult.data || []) as RelayAuditEvent[],
     computed: {
+      paymentFundingSource:
+        order.payment_funding_source === "relay_balance" ? "relay_balance" : "card",
       orderValueCents: toCents(order.price),
       buyerPaidAmountCents,
       refundAmountCents: buyerPaidAmountCents,
@@ -884,8 +886,32 @@ export async function getAdminDisputeDetail(adminClient: SupabaseAdminClient, or
         withdrawableBalanceCents: relayBalance?.withdrawableBalanceCents || 0,
         adminFrozen: relayBalance?.adminFrozen || false,
       },
+      sellerOutstandingRefundExposureCents:
+        Math.max(0, pendingCreditCents - availableCreditCents) +
+        Math.max(0, availableCreditCents - disputeDebitCents),
       sellerDebitAmountCents:
         disputeDebitCents > 0 ? disputeDebitCents : sellerProceedsCents,
+      refundRecoveryStatus: String(dispute.metadata?.refundRecoveryStatus || "not_recorded"),
+      refundRecoveryAmountCents: Number(dispute.metadata?.refundRecoveryAmountCents || 0),
+      refundRecoveryNeedsAdminReview: Boolean(
+        dispute.metadata?.refundRecoveryNeedsAdminReview
+      ),
+      refundRecoveryReason: dispute.metadata?.refundRecoveryReason || null,
+      refundRecoveryPendingOutstandingCents: Number(
+        dispute.metadata?.refundRecoveryPendingOutstandingCents || 0
+      ),
+      refundRecoveryAvailableOutstandingCents: Number(
+        dispute.metadata?.refundRecoveryAvailableOutstandingCents || 0
+      ),
+      refundRecoverySellerAvailableBalanceCents: Number(
+        dispute.metadata?.refundRecoverySellerAvailableBalanceCents || 0
+      ),
+      refundRecoveryHasCompletedWithdrawals: Boolean(
+        dispute.metadata?.refundRecoveryHasCompletedWithdrawals
+      ),
+      buyerRefundCreditAmountCents: Number(
+        dispute.metadata?.buyerRefundCreditAmountCents || 0
+      ),
       finalFinancialOutcome: dispute.financial_outcome || "pending_admin_resolution",
       withdrawalBlocked:
         Boolean(order.seller_funds_frozen) ||
@@ -963,7 +989,10 @@ export async function runAdminDisputeAction(
       .update({
         status: "resolved",
         admin_resolution:
-          notes || "Buyer won dispute. Buyer refunded and seller Relay Balance adjusted.",
+          notes ||
+          (result.adminReviewRequired
+            ? "Buyer won dispute. Buyer refund was processed and seller recovery now requires admin review."
+            : "Buyer won dispute. Buyer refund was processed and seller Relay Balance was recovered."),
         financial_outcome: "buyer_refunded",
         seller_penalty_outcome: dispute.category,
         seller_funds_frozen: true,
@@ -974,6 +1003,16 @@ export async function runAdminDisputeAction(
           refundAmountCents,
           debitedAmountCents: result.debitedAmountCents,
           resolutionFlow: "relay_balance_refund",
+          paymentFundingSource: result.paymentFundingSource,
+          refundRecoveryStatus: result.sellerRecoveryStatus,
+          refundRecoveryAmountCents: result.sellerRecoveredAmountCents,
+          refundRecoveryNeedsAdminReview: result.adminReviewRequired,
+          refundRecoveryReason: result.adminReviewReason,
+          refundRecoveryPendingOutstandingCents: result.sellerPendingOutstandingCents,
+          refundRecoveryAvailableOutstandingCents: result.sellerAvailableOutstandingCents,
+          refundRecoverySellerAvailableBalanceCents: result.sellerAvailableBalanceCents,
+          refundRecoveryHasCompletedWithdrawals: result.hasCompletedWithdrawals,
+          buyerRefundCreditAmountCents: result.buyerRefundCreditAmountCents,
         }),
       })
       .eq("id", dispute.id);
@@ -998,6 +1037,16 @@ export async function runAdminDisputeAction(
         category: dispute.category,
         refundAmountCents,
         sellerDebitAmountCents: result.debitedAmountCents,
+        paymentFundingSource: result.paymentFundingSource,
+        refundRecoveryStatus: result.sellerRecoveryStatus,
+        refundRecoveryAmountCents: result.sellerRecoveredAmountCents,
+        refundRecoveryNeedsAdminReview: result.adminReviewRequired,
+        refundRecoveryReason: result.adminReviewReason,
+        refundRecoveryPendingOutstandingCents: result.sellerPendingOutstandingCents,
+        refundRecoveryAvailableOutstandingCents: result.sellerAvailableOutstandingCents,
+        refundRecoverySellerAvailableBalanceCents: result.sellerAvailableBalanceCents,
+        refundRecoveryHasCompletedWithdrawals: result.hasCompletedWithdrawals,
+        buyerRefundCreditAmountCents: result.buyerRefundCreditAmountCents,
         notes,
       },
     });

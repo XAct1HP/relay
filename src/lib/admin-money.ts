@@ -233,7 +233,13 @@ export async function getAdminMoneyOverview(adminClient: SupabaseAdminClient) {
         balance_credit_status,
         payout_status,
         seller_funds_frozen,
-        seller_proceeds_cents
+        seller_proceeds_cents,
+        order_disputes(
+          id,
+          status,
+          financial_outcome,
+          metadata
+        )
       `)
       .in("status", ["refunded", "refund_pending", "disputed"]),
     getStripePlatformBalanceSnapshot(),
@@ -279,7 +285,10 @@ export async function getAdminMoneyOverview(adminClient: SupabaseAdminClient) {
   const allWithdrawals = allWithdrawalsResult.data || [];
   const ledgerRows = ledgerResult.data || [];
   const settlementOrders = settlementOrdersResult.data || [];
-  const riskOrders = riskOrdersResult.data || [];
+  const riskOrders = (riskOrdersResult.data || []).map((row: any) => ({
+    ...row,
+    order_dispute: normalizeRelationRecord(row.order_disputes),
+  }));
   const totalPendingSellerBalancesCents = sellers.reduce(
     (sum, row) => sum + Number(row.pending_balance_cents || 0),
     0
@@ -411,6 +420,30 @@ export async function getAdminMoneyOverview(adminClient: SupabaseAdminClient) {
 
     return false;
   });
+  const refundRecoveryReviewOrders = riskOrders.filter((order: any) => {
+    const metadata = order.order_dispute?.metadata || {};
+    return Boolean(metadata.refundRecoveryNeedsAdminReview);
+  });
+  const refundRecoveryOutstandingExposureCents = imbalanceRiskOrders.reduce(
+    (sum: number, order: any) => {
+      const summary = orderLedgerSummary.get(String(order.id)) || {
+        pendingCreditCents: 0,
+        availableCreditCents: 0,
+        disputeDebitCents: 0,
+      };
+
+      return (
+        sum +
+        Math.max(0, summary.pendingCreditCents - summary.availableCreditCents) +
+        Math.max(0, summary.availableCreditCents - summary.disputeDebitCents)
+      );
+    },
+    0
+  );
+  const postWithdrawalRecoveryOrders = refundRecoveryReviewOrders.filter((order: any) => {
+    const status = String(order.order_dispute?.metadata?.refundRecoveryStatus || "");
+    return status === "admin_review_post_withdrawal";
+  });
 
   const stripeVsLedgerLiabilityDeltaCents =
     platformBalance.totalBalanceCents - totalSellerLedgerLiabilityCents;
@@ -505,6 +538,24 @@ export async function getAdminMoneyOverview(adminClient: SupabaseAdminClient) {
     });
   }
 
+  if (refundRecoveryReviewOrders.length > 0) {
+    pushWarning({
+      code: "refund_recovery_admin_review_required",
+      severity: postWithdrawalRecoveryOrders.length > 0 ? "critical" : "warning",
+      title:
+        postWithdrawalRecoveryOrders.length > 0
+          ? "Refunds need post-withdrawal recovery review"
+          : "Refund recovery needs admin review",
+      detail:
+        postWithdrawalRecoveryOrders.length > 0
+          ? "One or more refunded orders appear to have seller funds withdrawn before recovery. Treat these as platform-loss or recovery-needed cases before launch."
+          : "One or more refunded orders could not be fully recovered from seller balances automatically. Review seller availability and refund recovery notes before launch.",
+      count: refundRecoveryReviewOrders.length,
+      amountCents: refundRecoveryOutstandingExposureCents,
+      sampleIds: refundRecoveryReviewOrders.slice(0, 5).map((row: any) => row.id),
+    });
+  }
+
   if (settlementMissingOrderIds.length > 0) {
     pushWarning({
       code: "missing_settlement_available_on",
@@ -550,6 +601,9 @@ export async function getAdminMoneyOverview(adminClient: SupabaseAdminClient) {
         0
       ),
       refundsOrDisputesImbalanceCount: imbalanceRiskOrders.length,
+      refundRecoveryReviewCount: refundRecoveryReviewOrders.length,
+      refundRecoveryOutstandingExposureCents,
+      postWithdrawalRecoveryCount: postWithdrawalRecoveryOrders.length,
       missingSettlementAvailableOnCount: settlementMissingOrderIds.length,
       stripeBalanceError: platformBalance.error,
     },

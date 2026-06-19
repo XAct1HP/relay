@@ -42,6 +42,9 @@ interface MoneyOverviewResponse {
     staleProcessingWithdrawalCount: number;
     staleProcessingWithdrawalAmountCents: number;
     refundsOrDisputesImbalanceCount: number;
+    refundRecoveryReviewCount: number;
+    refundRecoveryOutstandingExposureCents: number;
+    postWithdrawalRecoveryCount: number;
     missingSettlementAvailableOnCount: number;
     stripeBalanceError: string | null;
   };
@@ -440,6 +443,14 @@ export default function AdminMoneyPage() {
                   </p>
                   <p>
                     Refund/dispute imbalance candidates: <span className="text-[#f5f7fb] font-semibold">{data.accounting.refundsOrDisputesImbalanceCount}</span>
+                  </p>
+                  <p>
+                    Refund recovery reviews: <span className="text-[#f5f7fb] font-semibold">{data.accounting.refundRecoveryReviewCount}</span>
+                    {" · "}
+                    {formatMoneyFromCents(data.accounting.refundRecoveryOutstandingExposureCents)}
+                  </p>
+                  <p>
+                    Post-withdrawal recovery cases: <span className="text-[#f5f7fb] font-semibold">{data.accounting.postWithdrawalRecoveryCount}</span>
                   </p>
                   <p>
                     Ledger snapshot delta: <span className="text-[#f5f7fb] font-semibold">{formatSignedMoneyFromCents(data.accounting.ledgerSnapshotDeltaCents)}</span>

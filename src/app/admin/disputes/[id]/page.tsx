@@ -57,6 +57,7 @@ interface AdminDisputeDetailResponse {
     created_at: string;
   }>;
   computed: {
+    paymentFundingSource: string;
     orderValueCents: number;
     buyerPaidAmountCents: number;
     refundAmountCents: number;
@@ -77,7 +78,17 @@ interface AdminDisputeDetailResponse {
       withdrawableBalanceCents: number;
       adminFrozen: boolean;
     };
+    sellerOutstandingRefundExposureCents: number;
     sellerDebitAmountCents: number;
+    refundRecoveryStatus: string;
+    refundRecoveryAmountCents: number;
+    refundRecoveryNeedsAdminReview: boolean;
+    refundRecoveryReason: string | null;
+    refundRecoveryPendingOutstandingCents: number;
+    refundRecoveryAvailableOutstandingCents: number;
+    refundRecoverySellerAvailableBalanceCents: number;
+    refundRecoveryHasCompletedWithdrawals: boolean;
+    buyerRefundCreditAmountCents: number;
     finalFinancialOutcome: string;
     withdrawalBlocked: boolean;
     reserveStatus: string;
@@ -504,11 +515,28 @@ export default function AdminDisputeDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <InfoCard label="Refund Amount" value={formatMoney(data.computed.refundAmountCents)} />
                 <InfoCard label="Seller Debit" value={formatMoney(data.computed.sellerDebitAmountCents)} />
+                <InfoCard label="Payment Source" value={formatLabel(data.computed.paymentFundingSource)} />
+                <InfoCard label="Refund Recovery" value={formatLabel(data.computed.refundRecoveryStatus)} />
+                <InfoCard label="Recovered" value={formatMoney(data.computed.refundRecoveryAmountCents)} />
+                <InfoCard label="Exposure Left" value={formatMoney(data.computed.sellerOutstandingRefundExposureCents)} />
+                <InfoCard
+                  label="Needs Admin Review"
+                  value={data.computed.refundRecoveryNeedsAdminReview ? "Yes" : "No"}
+                />
+                <InfoCard
+                  label="Buyer Relay Credit"
+                  value={formatMoney(data.computed.buyerRefundCreditAmountCents)}
+                />
                 <InfoCard label="Legacy Hold Status" value={formatLabel(data.computed.exposureStatus)} />
                 <InfoCard label="Legacy Held" value={formatMoney(data.computed.currentExposureHoldCents)} />
                 <InfoCard label="Legacy Released" value={formatMoney(data.computed.exposureReleasedCents)} />
                 <InfoCard label="Legacy Consumed" value={formatMoney(data.computed.exposureConsumedCents)} />
               </div>
+              {data.computed.refundRecoveryReason && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                  {data.computed.refundRecoveryReason}
+                </div>
+              )}
             </div>
           </div>
 

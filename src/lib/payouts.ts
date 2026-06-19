@@ -3,9 +3,9 @@ import "server-only";
 import Stripe from "stripe";
 import { logRelayAuditEvent } from "./relay-audit";
 import {
+  createAdminBalanceAdjustment,
   createOrderPendingCredit,
   calculateStripeFeeEstimateCents,
-  debitSellerForDispute,
   freezeFundsForDispute,
   releaseOrderFundsToAvailable,
 } from "./money-policy";
@@ -66,6 +66,9 @@ interface OrderPayoutContext {
   seller_id: string;
   buyer_id: string;
   status: string;
+  price: number | null;
+  shipping_cost: number | null;
+  amount_total: number | null;
   seller_earnings: number | null;
   seller_proceeds_cents: number | null;
   stripe_transfer_id: string | null;
@@ -97,6 +100,40 @@ interface OrderPayoutContext {
 
 export interface OrderPayoutSnapshotResult extends OrderPayoutPolicySnapshot {
   sellerTierSnapshot: SellerTier;
+}
+
+interface LaunchRefundSellerRecoveryRow {
+  order_id: string;
+  seller_id: string;
+  buyer_id: string;
+  payment_funding_source: PaymentFundingSource | string | null;
+  seller_proceeds_cents: number | null;
+  pending_credit_total_cents: number | null;
+  available_credit_total_cents: number | null;
+  dispute_debit_total_cents: number | null;
+  pending_outstanding_cents: number | null;
+  available_outstanding_cents: number | null;
+  seller_available_balance_cents: number | null;
+  recovered_amount_cents: number | null;
+  recovery_status: string | null;
+  admin_review_required: boolean | null;
+  admin_review_reason: string | null;
+  has_completed_withdrawals: boolean | null;
+}
+
+export interface BuyerRefundSettlementResult {
+  consumedReserveCents: number;
+  debitedAmountCents: number;
+  paymentFundingSource: PaymentFundingSource;
+  sellerRecoveryStatus: string;
+  sellerRecoveredAmountCents: number;
+  sellerPendingOutstandingCents: number;
+  sellerAvailableOutstandingCents: number;
+  sellerAvailableBalanceCents: number;
+  adminReviewRequired: boolean;
+  adminReviewReason: string | null;
+  hasCompletedWithdrawals: boolean;
+  buyerRefundCreditAmountCents: number;
 }
 
 export function buildOrderPayoutSnapshotForTier(
@@ -157,6 +194,9 @@ async function getOrderPayoutContext(
       seller_id,
       buyer_id,
       status,
+      price,
+      shipping_cost,
+      amount_total,
       seller_earnings,
       seller_proceeds_cents,
       stripe_transfer_id,
@@ -199,6 +239,67 @@ async function getOrderPayoutContext(
   return {
     ...(data as unknown as OrderPayoutContext),
     seller: seller || null,
+  };
+}
+
+function resolveOrderPaymentFundingSource(order: {
+  payment_funding_source?: PaymentFundingSource | null;
+  stripe_payment_intent_id?: string | null;
+}): PaymentFundingSource {
+  if (order.payment_funding_source === "relay_balance") {
+    return "relay_balance";
+  }
+
+  if (order.payment_funding_source === "card") {
+    return "card";
+  }
+
+  return order.stripe_payment_intent_id ? "card" : "relay_balance";
+}
+
+async function resolveLaunchRefundSellerRecovery(
+  adminClient: SupabaseAdminClient,
+  orderId: string
+) {
+  const { data, error } = await adminClient.rpc(
+    "resolve_launch_refund_seller_recovery",
+    { p_order_id: orderId }
+  );
+
+  if (error) {
+    throw new Error(error.message || "Failed to resolve launch refund seller recovery");
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | LaunchRefundSellerRecoveryRow
+    | null
+    | undefined;
+
+  if (!row?.order_id) {
+    throw new Error("Launch refund seller recovery returned no result");
+  }
+
+  return {
+    orderId: row.order_id,
+    sellerId: row.seller_id,
+    buyerId: row.buyer_id,
+    paymentFundingSource: resolveOrderPaymentFundingSource({
+      payment_funding_source:
+        row.payment_funding_source === "relay_balance" ? "relay_balance" : "card",
+      stripe_payment_intent_id: null,
+    }),
+    sellerProceedsCents: Math.max(0, Number(row.seller_proceeds_cents || 0)),
+    pendingCreditTotalCents: Math.max(0, Number(row.pending_credit_total_cents || 0)),
+    availableCreditTotalCents: Math.max(0, Number(row.available_credit_total_cents || 0)),
+    disputeDebitTotalCents: Math.max(0, Number(row.dispute_debit_total_cents || 0)),
+    pendingOutstandingCents: Math.max(0, Number(row.pending_outstanding_cents || 0)),
+    availableOutstandingCents: Math.max(0, Number(row.available_outstanding_cents || 0)),
+    sellerAvailableBalanceCents: Number(row.seller_available_balance_cents || 0),
+    recoveredAmountCents: Math.max(0, Number(row.recovered_amount_cents || 0)),
+    recoveryStatus: String(row.recovery_status || "unknown"),
+    adminReviewRequired: Boolean(row.admin_review_required),
+    adminReviewReason: row.admin_review_reason || null,
+    hasCompletedWithdrawals: Boolean(row.has_completed_withdrawals),
   };
 }
 
@@ -1002,46 +1103,63 @@ export async function finalizeBuyerRefundAndSellerLoss(
     actorUserId?: string | null;
     actorRole: ActorRole;
   }
-) {
+): Promise<BuyerRefundSettlementResult> {
   const order = await getOrderPayoutContext(adminClient, input.orderId);
-  if (!order.stripe_payment_intent_id) {
-    throw new Error("No payment intent found for this order");
-  }
+  const paymentFundingSource = resolveOrderPaymentFundingSource(order);
 
   const sellerProceedsCents =
     Math.max(0, Number(order.seller_proceeds_cents || 0)) ||
     toCents(order.seller_earnings);
+  const refundAmountCents = estimateRefundAmountCents({
+    orderPrice: order.price,
+    shippingCost: order.shipping_cost,
+    stripeAmountTotal: order.amount_total,
+  });
 
-  if (sellerProceedsCents > 0) {
-    await releaseOrderFundsToAvailable(order.id, sellerProceedsCents, {
-      adminClient,
-      actorUserId: input.actorUserId || null,
-      actorRole: input.actorRole,
-      forceReleaseKeys: [
-        "buyer_confirmation_or_review_expiry",
-        "delivery",
-        "carrier_acceptance",
-      ],
-    });
+  if (paymentFundingSource === "card") {
+    if (!order.stripe_payment_intent_id) {
+      throw new Error("No payment intent found for this card-funded order");
+    }
+
+    await stripe.refunds.create(
+      {
+        payment_intent: order.stripe_payment_intent_id,
+      },
+      {
+        idempotencyKey: `order-refund-${order.id}`,
+      }
+    );
   }
 
-  await stripe.refunds.create(
-    {
-      payment_intent: order.stripe_payment_intent_id,
-    },
-    {
-      idempotencyKey: `order-refund-${order.id}`,
-    }
-  );
-
-  const debitResult = await debitSellerForDispute(order.id, {
+  const sellerRecovery = await resolveLaunchRefundSellerRecovery(
     adminClient,
-    actorUserId: input.actorUserId || null,
-    actorRole: input.actorRole,
-  });
-  const debitedAmountCents = debitResult.created
-    ? debitResult.sellerProceedsCents
-    : debitResult.sellerProceedsCents || 0;
+    order.id
+  );
+  let buyerRefundCreditAmountCents = 0;
+
+  if (paymentFundingSource === "relay_balance" && refundAmountCents > 0) {
+    const buyerRefundCredit = await createAdminBalanceAdjustment(
+      order.buyer_id,
+      {
+        amountCents: refundAmountCents,
+        reason: "Relay Balance buyer refund for refunded order",
+        orderId: order.id,
+        idempotencyKey: `money:order:${order.id}:buyer_refund_credit`,
+      },
+      {
+        adminClient,
+        actorUserId: input.actorUserId || null,
+        actorRole: input.actorRole,
+      }
+    );
+
+    buyerRefundCreditAmountCents = Math.max(
+      0,
+      Number(buyerRefundCredit.ledgerEntry?.amount_cents || refundAmountCents)
+    );
+  }
+
+  const debitedAmountCents = sellerRecovery.recoveredAmountCents;
 
   await adminClient
     .from("orders")
@@ -1050,12 +1168,13 @@ export async function finalizeBuyerRefundAndSellerLoss(
       payout_status: "refunded",
       seller_amount_refunded_cents: Math.max(
         order.seller_amount_refunded_cents || 0,
-        debitResult.sellerProceedsCents ||
-          order.seller_amount_paid_cents ||
-          0
+        sellerProceedsCents || order.seller_amount_paid_cents || 0
       ),
       payout_last_trigger: "manual_override",
       seller_funds_frozen: true,
+      payout_last_error: sellerRecovery.adminReviewRequired
+        ? sellerRecovery.adminReviewReason || "Refund requires manual seller recovery review."
+        : null,
     })
     .eq("id", order.id);
 
@@ -1073,13 +1192,34 @@ export async function finalizeBuyerRefundAndSellerLoss(
     sellerId: order.seller_id,
     eventType: "order.buyer_refunded",
     metadata: {
+      paymentFundingSource,
+      refundAmountCents,
       debitedAmountCents,
+      sellerRecoveryStatus: sellerRecovery.recoveryStatus,
+      sellerRecoveredAmountCents: sellerRecovery.recoveredAmountCents,
+      sellerPendingOutstandingCents: sellerRecovery.pendingOutstandingCents,
+      sellerAvailableOutstandingCents: sellerRecovery.availableOutstandingCents,
+      sellerAvailableBalanceCents: sellerRecovery.sellerAvailableBalanceCents,
+      adminReviewRequired: sellerRecovery.adminReviewRequired,
+      adminReviewReason: sellerRecovery.adminReviewReason,
+      hasCompletedWithdrawals: sellerRecovery.hasCompletedWithdrawals,
+      buyerRefundCreditAmountCents,
     },
   });
 
   return {
     consumedReserveCents: 0,
     debitedAmountCents,
+    paymentFundingSource,
+    sellerRecoveryStatus: sellerRecovery.recoveryStatus,
+    sellerRecoveredAmountCents: sellerRecovery.recoveredAmountCents,
+    sellerPendingOutstandingCents: sellerRecovery.pendingOutstandingCents,
+    sellerAvailableOutstandingCents: sellerRecovery.availableOutstandingCents,
+    sellerAvailableBalanceCents: sellerRecovery.sellerAvailableBalanceCents,
+    adminReviewRequired: sellerRecovery.adminReviewRequired,
+    adminReviewReason: sellerRecovery.adminReviewReason,
+    hasCompletedWithdrawals: sellerRecovery.hasCompletedWithdrawals,
+    buyerRefundCreditAmountCents,
   };
 }
 
