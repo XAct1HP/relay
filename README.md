@@ -258,6 +258,27 @@ Relay is built as a modern full-stack web application using a serverless archite
 ### Integrations
 
 - Stripe Connect
+
+---
+
+## Launch Testing
+
+For the current launch payout, Relay Balance, withdrawal, dispute, and admin accounting flows, start with:
+
+- [Launch system test regimen](docs/relay-balance-tagging-test-regimen.md)
+
+Recommended quick smoke sequence:
+
+```powershell
+npx tsc --noEmit
+npm run lint
+npm run test:launch-balance-policy
+npm run test:payouts
+```
+
+Use the E2E suite after the launch smoke pack, not instead of it:
+
+- [E2E test suite](e2e/README.md)
 - Shippo
 
 ---

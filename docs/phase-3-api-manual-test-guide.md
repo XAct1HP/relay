@@ -1,5 +1,11 @@
 # Relay Phase 3 API Manual Test Guide
 
+This guide is only for the inventory integration API.
+
+If you are testing launch money systems, use the launch runbook instead:
+
+- [Launch system test regimen](./relay-balance-tagging-test-regimen.md)
+
 This guide is for manually testing Relay's Inventory API against a **Vercel Preview deployment** backed by **`relay_staging` Supabase**.
 
 Do **not** run these tests against production.

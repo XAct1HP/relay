@@ -1,99 +1,83 @@
-# Relay Balance, Tagging, and Payout Testing Regimen
+# Relay Launch System Test Regimen
 
-This guide is the fastest practical manual pass for the new Relay money, tagging, withdrawal, dispute, identity, and tier flows.
+This is the fastest practical way to validate Relay's launch systems on local or staging.
+
+It supersedes the old Tier 2 / Tier 3 early-payout expectations. At launch:
+
+- All sellers use the same balance model: `Pending Balance` and `Available Balance`
+- Exposure is inactive
+- Carrier acceptance does not release funds
+- Delivery does not release funds
+- Card-funded seller proceeds become available only after:
+  - the order is complete in Relay
+  - Stripe settlement has cleared
+- Relay-balance-funded seller proceeds become available only after:
+  - the order is complete in Relay
+- Connected Stripe accounts are withdrawal destinations only
+- No Stripe transfer is created when seller funds move from pending to available
 
 Use this against local or staging only. Do not run it against production.
 
-If you are testing against a protected Vercel Preview deployment, do not hardcode the bypass secret into this file or commit it anywhere. Use an environment variable instead.
+## 1. Fastest Path
 
-## 1. Fastest Test Strategy
+If you only want the quickest launch confidence pass, do these in order:
 
-Use one seller account, one buyer account, and one admin account.
+1. Apply the latest launch migrations.
+2. Start the app locally.
+3. Run the automated smoke commands in section 4.
+4. Run the manual launch pass in section 5.
+5. Review `/admin/money`, `/admin/disputes`, and `/admin/withdrawals`.
 
-To save time:
+Recommended accounts:
 
-- Reuse the same seller for Tier 1, Tier 2, and Tier 3.
-- Change the seller tier in the admin UI instead of maintaining three separate seller accounts.
-- Use the Shippo test webhook route instead of waiting on real carrier scans.
-- Use buyer confirmation to complete most orders immediately.
-- Use cron only for the auto-complete and idempotency checks.
+- 1 buyer
+- 1 seller
+- 1 admin
 
 Recommended pages:
 
 - Seller onboarding/settings: `/onboarding`, `/settings`
-- Seller balance dashboard: `/dashboard`
+- Seller dashboard/balance UI: `/dashboard`
+- Buyer checkout: `/checkout`
 - Seller tags: `/tags`
 - Admin money overview: `/admin/money`
 - Admin seller money detail: `/admin/money/sellers/{SELLER_ID}`
+- Admin order money detail: `/admin/money/orders/{ORDER_ID}`
 - Admin withdrawals: `/admin/withdrawals`
 - Admin disputes: `/admin/disputes`
-- Admin tags: `/admin/tags`
 - Admin trust: `/admin/trust`
+- Admin tags: `/admin/tags`
 
 ## 2. One-Time Setup
 
-Start the app:
+### 2.1 Apply the launch migrations
+
+Make sure your test database includes the launch money and refund changes:
+
+- `supabase/migrations/add_launch_payout_model.sql`
+- `supabase/migrations/add_stripe_connect_transfer_readiness.sql`
+- `supabase/migrations/add_launch_founding_seller_program.sql`
+- `supabase/migrations/add_launch_refund_dispute_recovery.sql`
+
+### 2.2 Start the app
 
 ```powershell
 npm run dev
 ```
 
-Set local variables:
+### 2.3 Useful shell variables
 
 ```powershell
 $BaseUrl = "http://localhost:3000"
 $CronSecret = $env:CRON_SECRET
 ```
 
-For a protected Vercel Preview deployment, set these too:
+Optional preview variables:
 
 ```powershell
-$PreviewUrl = "https://relay-git-phase-1-seller-scale-trickylion05-3435s-projects.vercel.app"
+$PreviewUrl = "https://YOUR-PREVIEW-URL.vercel.app"
 $VercelBypassToken = $env:VERCEL_AUTOMATION_BYPASS_SECRET
 ```
-
-Recommended:
-
-- Keep local testing on `http://localhost:3000`
-- Use `vercel curl` or the `x-vercel-protection-bypass` header for Preview API calls
-- Keep the bypass secret in your shell environment only
-
-Vercel CLI option:
-
-```powershell
-vercel whoami
-vercel curl /api/test-mode/status --deployment $PreviewUrl
-```
-
-If you already have a project bypass secret, you can also set it once in your shell:
-
-```powershell
-$env:VERCEL_AUTOMATION_BYPASS_SECRET = $VercelBypassToken
-```
-
-Optional direct-request headers for Preview:
-
-```powershell
-$PreviewHeaders = @{
-  "x-vercel-protection-bypass" = $VercelBypassToken
-  "Content-Type" = "application/json"
-}
-
-$PreviewCronHeaders = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
-```
-
-Optional one-time browser cookie setup for Preview UI testing:
-
-This is useful when you need to click through the Preview deployment in a browser and are not already authenticated to Vercel there.
-
-```powershell
-Start-Process "$PreviewUrl/?x-vercel-protection-bypass=$VercelBypassToken&x-vercel-set-bypass-cookie=true"
-```
-
-That cookie-setting approach is convenient, but less private than header-based API calls because the token appears in the URL. Prefer `vercel curl` or headers when possible.
 
 Optional cron helper:
 
@@ -106,21 +90,6 @@ function Invoke-RelayCron {
   }
 
   Invoke-RestMethod -Method GET -Uri "$BaseUrl$Path" -Headers $Headers
-}
-```
-
-Optional Preview cron helper:
-
-```powershell
-function Invoke-RelayPreviewCron {
-  param([string]$Path)
-
-  $Headers = @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
-
-  Invoke-RestMethod -Method GET -Uri "$PreviewUrl$Path" -Headers $Headers
 }
 ```
 
@@ -148,555 +117,401 @@ function Invoke-RelayShippoTest {
 }
 ```
 
-Optional Preview Shippo helper:
+## 3. Preflight Checklist
+
+Run these once before money flow tests:
+
+1. Seller can log in and access `/dashboard`.
+2. Seller completes Stripe Connect onboarding in `/onboarding` or `/settings`.
+3. `/dashboard` shows only `Pending Balance` and `Available Balance`.
+4. Tier 2 / Tier 3 early payout language is gone or replaced with `Advanced Seller Program coming soon`.
+5. Founding seller copy does not promise early payouts.
+6. `/admin/money` loads without accounting errors.
+7. `/admin/trust/{SELLER_ID}` shows connected account and transfer readiness data.
+8. `/api/test-mode/status` returns the expected local or preview test-mode status if you use test mode.
+
+Expected result:
+
+- Seller balance UI matches the launch model
+- Connected account exists and can receive transfers
+- Admin money and trust views load cleanly
+
+## 4. Automated Smoke Pack
+
+Run these before the manual pass.
+
+### 4.1 Type and lint
 
 ```powershell
-function Invoke-RelayPreviewShippoTest {
-  param(
-    [string]$TrackingNumber,
-    [string]$TrackingStatus
-  )
-
-  $Headers = @{
-    "x-vercel-protection-bypass" = $VercelBypassToken
-    "Content-Type" = "application/json"
-  }
-
-  $Body = @{
-    test = $true
-    source = "relay_test_shippo"
-    trackingNumber = $TrackingNumber
-    trackingStatus = $TrackingStatus
-  } | ConvertTo-Json
-
-  Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
-}
+npx tsc --noEmit
+npm run lint
 ```
 
-## 3. Preflight Checks
+### 4.2 Launch balance rules
 
-Complete these once before the order tests:
+```powershell
+npm run test:launch-balance-policy
+```
 
-1. Sign in as the seller and finish Stripe Connect onboarding in `/onboarding` or `/settings`.
-2. Confirm the seller is approved and allowed to sell.
-3. In `/dashboard`, confirm the seller sees the Relay Balance card.
-4. In `/admin/money`, confirm the seller appears in the Relay Balance overview.
-5. In `/admin/trust` or `/admin/trust/{SELLER_ID}`, confirm the seller has an identity profile and Stripe account status.
+This verifies the launch money rules:
+
+- no Tier 2 delivery credit
+- no Tier 3 carrier acceptance credit
+- no launch exposure behavior
+- card-funded proceeds stay pending until settlement clears
+- relay-balance-funded proceeds release only on order completion
+
+### 4.3 Payout calculation regression
+
+```powershell
+npm run test:payouts
+```
+
+### 4.4 Optional browser E2E
+
+Use this only after the launch smoke pack passes. It is slower than the manual launch pass.
+
+```powershell
+npm run test:e2e:headed
+```
+
+## 5. Manual Launch Pass
+
+This is the recommended quickest end-to-end launch check.
+
+### 5.1 Seller balance UI and founding seller copy
+
+1. Open `/dashboard` as the seller.
+2. Confirm the balance card shows only:
+   - `Pending Balance`
+   - `Available Balance`
+3. Confirm the pending copy says:
+   - `Pending funds become available after the order is completed and payment settlement clears.`
+4. Confirm the available copy says:
+   - `Available funds can be withdrawn or used to buy on Relay.`
+5. If the seller is marked as founding, confirm founding benefits are shown separately and not as Tier 3 payout access.
 
 Expected result:
 
-- Seller can onboard successfully.
-- Seller has a Stripe account connected.
-- Relay Balance UI loads without negative withdrawable values.
-- Admin trust view shows identity and Stripe verification data.
+- No exposure UI
+- No reserved balance UI
+- No carrier-acceptance payout language
+- No delivery-release payout language
 
-## 4. Tagging Tests
+### 5.2 Connected account transfer readiness
 
-### 4.1 Fast tag inventory test
+1. Complete or revisit Stripe Connect onboarding as the seller.
+2. In `/admin/trust/{SELLER_ID}`, confirm:
+   - `connected_account_id` exists
+   - `onboarding_complete` is true
+   - `payouts_enabled` is visible
+   - transfers capability is visible
+3. If needed, run the admin backfill utility through the admin UI or `POST /api/admin/stripe/connect-readiness`.
 
-This is the quickest tag sanity check.
+Expected result:
+
+- Connected account is treated as a withdrawal destination only
+- No launch flow depends on connected-account balances
+
+### 5.3 Tagging sanity pass
 
 1. Open `/admin/tags`.
-2. Create or bulk import 2 to 3 tags.
-3. Assign the tags to the test seller.
-4. Open `/tags` as the seller.
+2. Create or assign 2 to 3 tags to the seller.
+3. Open `/tags` as the seller and confirm they appear.
+4. Optionally buy one tag bundle and move one tag order through admin fulfillment.
 
 Expected result:
 
-- Seller `Available` tag count increases.
-- New tags appear under `Available Tags`.
-- No auth, checkout, or tag pages break.
+- Tag pages load normally alongside the launch balance changes
+- Tag purchase and fulfillment do not break balance UI or admin money pages
 
-### 4.2 Tag order purchase test
+### 5.4 Card checkout: pending first, available later
 
-This verifies the Stripe checkout flow for seller tag purchases.
+Use a card-funded order.
 
-1. In `/tags`, open `Buy Tags`.
-2. Purchase one unlocked tag bundle.
-3. After Stripe returns, confirm the success message and tag order entry appear.
-4. Open `/admin/tags`.
-5. In `Pending Orders`, move the order through:
-   - `Start Processing`
-   - `Ship`
-   - `Mark Fulfilled`
-6. Return to `/tags` and confirm the order status updates.
-
-Expected result:
-
-- Stripe Checkout opens from `/api/seller/tags/checkout`.
-- The seller sees the new tag order in the `Orders` tab.
-- Admin can fulfill the tag order in `/admin/tags`.
-
-### 4.3 Tag request test
-
-1. As the seller, submit a tag request if the tier/policy allows it.
-2. As admin, review the request.
-3. Update the request to `approved`, `fulfilled`, or `rejected`.
+1. Place a normal buyer order with card checkout.
+2. Confirm the order is created successfully.
+3. As admin, open `/admin/money/orders/{ORDER_ID}`.
+4. Confirm the order shows:
+   - `payment_funding_source = card`
+   - `payment_intent_id`
+   - `charge_id`
+   - `balance_transaction_id`
+   - `stripe_funds_available_on` if available
+   - settlement status populated or `pending_settlement_unknown`
+5. As seller, confirm proceeds appear in `Pending Balance`.
+6. Ship the order.
+7. Trigger Shippo `TRANSIT`.
+8. Trigger Shippo `DELIVERED`.
+9. Confirm seller funds are still pending after shipping and delivery.
+10. Complete the order through the buyer flow or auto-complete cron.
+11. If settlement is already cleared, run the reconciliation cron once.
 
 Expected result:
 
-- Request is created from `/api/seller/tag-requests`.
-- Admin review works through `/api/admin/tag-requests/{REQUEST_ID}` or the admin UI.
-- Audit events are written for request creation and admin action.
+- Seller funds do not become available on carrier acceptance
+- Seller funds do not become available on delivery
+- Seller funds do not become available just because payment succeeded
+- Seller funds become available only after:
+  - order completion
+  - Stripe settlement availability
 
-## 5. Tier 1 Money Flow
+### 5.5 Relay Balance checkout
 
-Before starting, set the seller to Tier 1 in `/admin/trust/{SELLER_ID}`.
+Use a buyer who already has enough `Available Balance`.
 
-1. Create a new buyer order and complete payment normally.
-2. As the seller, verify the order appears and complete any required auth/tag/custody steps.
-3. Verify `/dashboard` shows the seller proceeds as `Pending Balance`.
-4. Ship the order through the normal seller flow.
-5. Trigger delivery with the Shippo delivered test event or the buyer delivered flow.
-6. Before buyer confirmation, verify:
-   - Pending balance still includes this order
-   - Available balance did not increase
-   - Exposure remains `0`
-7. As the buyer, confirm the order from the normal order review flow.
-
-Expected result:
-
-- Buyer payment creates a pending seller credit.
-- Tier 1 funds do not become available on delivery.
-- On buyer confirmation, pending decreases and available increases by seller proceeds.
-- Withdrawable balance rises only after the order is confirmed or completed.
-
-## 6. Tier 2 Money Flow
-
-Before starting, set the same seller to Tier 2 in `/admin/trust/{SELLER_ID}`.
-
-1. Create a second buyer order and pay normally.
-2. Verify `/dashboard` shows the new seller proceeds as pending before delivery.
-3. Complete the seller auth/tag/custody flow and ship the order.
-4. Trigger the Shippo delivered test event.
-5. Refresh `/dashboard` and `/admin/money/orders/{ORDER_ID}`.
-
-Expected immediately after delivery:
-
-- Seller proceeds move to `Available Balance`.
-- `Current Exposure` increases by the order subtotal.
-- `Withdrawable Balance` is reduced by active exposure.
-- No duplicate credits appear if the delivery webhook is retried.
-
-6. As the buyer, confirm the order.
-
-Expected after buyer confirmation:
-
-- Order completes.
-- Exposure hold is released.
-- Withdrawable balance rises.
-
-## 7. Tier 3 Money Flow
-
-Before starting, set the seller to Tier 3 in `/admin/trust/{SELLER_ID}` and make sure Tier 3 approval is present if required.
-
-1. Create a third buyer order and pay normally.
-2. Verify the new proceeds first appear as pending.
-3. Ship the order.
-4. Trigger the Shippo accepted event with `TRANSIT`.
-5. Refresh `/dashboard`.
-
-Expected after carrier acceptance:
-
-- About 50% of seller proceeds move to `Available Balance`.
-- The order does not fully release yet.
-- Replaying the same accepted webhook does not create another 50% release.
-
-6. Trigger the Shippo delivered event with `DELIVERED`.
-7. Refresh `/dashboard` and `/admin/money/orders/{ORDER_ID}`.
-
-Expected after delivery:
-
-- Remaining seller proceeds become available.
-- Exposure hold is created for the order subtotal.
-- Replaying the same delivered webhook does not duplicate credits or holds.
-
-8. As the buyer, confirm the order.
-
-Expected after confirmation:
-
-- Exposure hold releases.
-- Withdrawable increases.
-
-## 8. Withdrawal Tests
-
-### 8.1 Normal withdrawal
-
-1. Make sure the seller has positive `Withdrawable Balance`.
-2. In `/dashboard`, click `Withdraw`.
-3. Enter an amount below withdrawable balance.
-4. Confirm that the UI shows:
-   - Withdrawal amount
-   - Stripe transfer fee of `$0.25`
-   - Net transfer amount
-5. Submit the withdrawal.
-
-Expected result:
-
-- Withdrawal is created from `/api/seller/withdrawals`.
-- A `withdrawal_requested` ledger entry appears.
-- If the amount is below `$2,000`, it will usually auto-process.
-- A successful transfer creates a `withdrawal_completed` ledger entry and Stripe transfer id.
-
-### 8.2 Manual review withdrawal
-
-Manual review is currently triggered at `>= $2,000`.
-
-1. Create a withdrawal request for at least `$2,000` if the seller has enough withdrawable balance.
-2. Open `/admin/withdrawals`.
-3. Confirm the request is marked for review.
-4. Click `Mark Reviewed`.
-
-Expected result:
-
-- Withdrawal stays pending until reviewed.
-- Admin review writes an audit event.
-- Review can process the transfer afterward.
-
-### 8.3 Cancel suspicious withdrawal
-
-Only do this while the request is still `pending`, not `processing` or `completed`.
-
-1. Create a manual-review withdrawal.
-2. In `/admin/withdrawals`, click `Cancel`.
-3. Refresh seller `/dashboard`.
-
-Expected result:
-
-- Withdrawal status becomes `canceled`.
-- Funds are restored correctly.
-- A `withdrawal_failed` or cancellation-restoration style ledger path is visible in activity.
-
-## 9. Dispute Tests
-
-Use a delivered Tier 2 or Tier 3 order that is still inside the review window.
-
-1. As the buyer, open a dispute from the order flow.
-2. Refresh `/dashboard`, `/admin/disputes`, and `/admin/money/orders/{ORDER_ID}`.
+1. Open checkout and choose `Pay with Relay Balance`.
+2. Confirm the option is enabled only when the buyer has enough available balance to cover the full order total.
+3. Submit the purchase.
+4. Open seller `/dashboard`.
+5. Open buyer balance API or buyer balance UI if available.
+6. Open `/admin/money/orders/{ORDER_ID}`.
 
 Expected immediately:
 
-- Order funds are frozen for dispute handling.
-- Related exposure is frozen or consumed from the normal withdrawable path.
-- Seller cannot withdraw the disputed amount.
+- Buyer available balance decreases
+- Seller pending balance increases
+- No Stripe charge is created
+- No Stripe transfer is created
+- Order shows `payment_funding_source = relay_balance`
 
-Then test the three admin outcomes in separate disputes if possible.
+Then:
 
-### 9.1 Buyer wins
+7. Complete the order through the buyer flow or auto-complete cron.
 
-1. Open `/admin/disputes/{ORDER_ID}`.
-2. Resolve with buyer-favor action.
+Expected after completion:
 
-Expected result:
+- Seller pending decreases
+- Seller available increases
+- No Stripe settlement wait is required
 
-- Existing refund flow runs if available.
-- Seller balance is debited if needed.
-- Exposure is consumed or released appropriately.
-- Authenticity violation penalties apply when relevant.
+### 5.6 Launch tier regression check
 
-### 9.2 Seller wins
+This replaces the old Tier 2 / Tier 3 early payout tests.
 
-1. Open another test dispute.
-2. Resolve with seller-favor action.
-
-Expected result:
-
-- Funds unfreeze.
-- Exposure releases if the review window is already satisfied.
-- Seller returns to normal withdrawal eligibility.
-
-### 9.3 Carrier or manual issue
-
-1. Open another test dispute.
-2. Resolve with the carrier/manual handling path.
+1. Set the seller to Tier 2 in admin.
+2. Create a card-funded order.
+3. Trigger `TRANSIT` and `DELIVERED`.
+4. Confirm no early seller credit appears.
+5. Set the same seller to Tier 3.
+6. Repeat the order.
+7. Trigger `TRANSIT` and `DELIVERED`.
+8. Confirm no early seller credit appears.
 
 Expected result:
 
-- Funds do not auto-release.
-- Order remains in an admin-handled state.
+- Tier 2 delivery does not create availability
+- Tier 3 carrier acceptance does not create availability
+- Exposure remains inactive
 
-## 10. Auto-Complete and Idempotency Tests
+### 5.7 Withdrawal flow
 
-Use a delivered order with no active dispute and no admin review hold.
+Run this only after the seller has launch-eligible available balance.
 
-1. Let the order qualify for completion, or use a staging order whose review window has already expired.
-2. Run the auto-complete cron once.
-3. Refresh the buyer order, seller dashboard, and admin money views.
+1. Open `/dashboard`.
+2. Confirm only available balance can be withdrawn.
+3. Submit a withdrawal below the manual-review threshold.
+4. Confirm the UI shows:
+   - gross amount
+   - Stripe transfer fee of `$0.25`
+   - net transfer amount
+5. Open `/admin/withdrawals`.
+
+Expected result:
+
+- A `withdrawal_requested` ledger entry is created
+- Relay verifies seller balance and Stripe platform available balance
+- A Stripe transfer is created to the connected account
+- No Stripe payout is created by Relay
+- On success, `withdrawal_completed` is written and the Stripe transfer id is stored
+
+Optional manual-review path:
+
+6. Create a withdrawal at or above the manual-review threshold if the seller has enough balance.
+7. Review it in `/admin/withdrawals`.
+8. Optionally cancel it before processing.
+
+Expected result:
+
+- Pending/manual-review withdrawals can be reviewed or canceled safely
+- Canceled or failed requests restore the seller balance correctly
+
+### 5.8 Refund and dispute launch behavior
+
+Run these as separate scenarios if possible.
+
+#### Scenario A: refund before seller funds are available
+
+1. Create an order that is still pending for the seller.
+2. Open a buyer dispute or route it through the admin refund path.
+3. Resolve in the buyer's favor.
+
+Expected result:
+
+- Buyer refund is processed
+- Seller pending credit is reversed
+- Payout record is canceled or marked refunded
+- No negative seller balance is created automatically
+
+#### Scenario B: refund after seller funds are available but before withdrawal
+
+1. Create an order, let it become available, but do not withdraw it.
+2. Refund it through the admin dispute flow.
+
+Expected result:
+
+- Seller available balance is debited if coverage exists
+- Admin dispute detail shows the refund recovery result
+- `/admin/money` shows no unexplained accounting drift
+
+#### Scenario C: refund after seller withdrawal
+
+1. Create an order, release funds, and complete a withdrawal.
+2. Then refund through the admin dispute path.
+
+Expected result:
+
+- Seller is not automatically pushed negative unless explicitly supported elsewhere
+- The case is flagged for admin review / recovery needed
+- `/admin/money` shows a warning for refund recovery review or post-withdrawal recovery
+
+### 5.9 Settlement reconciliation cron
+
+Use this to release eligible pending seller funds after completion.
+
+1. Identify an order that is:
+   - complete in Relay
+   - still pending for the seller
+   - either card-settled or relay-balance-funded
+2. Run:
+
+```powershell
+Invoke-RelayCron "/api/cron/release-reserves"
+```
+
+3. Refresh `/admin/money/orders/{ORDER_ID}` and `/dashboard`.
 4. Run the same cron again.
 
 Expected result:
 
-- First run completes the eligible order.
-- Tier 1 pending funds move to available on completion.
-- Tier 2 and Tier 3 exposure releases on completion.
-- Second run does not duplicate order completion, credits, exposure release, or audit events.
+- First run moves eligible seller funds from pending to available
+- No Stripe transfer or payout is created
+- Second run is idempotent
+- Skipped rows are logged with reasons
 
-## 11. Admin Money Controls
+### 5.10 Auto-complete cron
 
-### 11.1 Freeze and unfreeze seller balance
+1. Use a delivered order with no active dispute.
+2. Run:
 
-1. Open `/admin/money/sellers/{SELLER_ID}`.
-2. Freeze the seller balance with a reason.
-3. Attempt a seller withdrawal.
-4. Unfreeze the seller balance.
+```powershell
+Invoke-RelayCron "/api/cron/auto-complete"
+```
+
+3. Refresh the order and seller dashboard.
+4. Run the cron again.
 
 Expected result:
 
-- Withdrawal is blocked while frozen.
-- Freeze and unfreeze both write audit events.
+- Eligible order completes
+- Re-running does not double-complete the order
+- Funds still obey the launch settlement rules
 
-### 11.2 Manual balance adjustment
+### 5.11 Admin accounting safety checks
 
-1. In `/admin/money/sellers/{SELLER_ID}`, enter a positive adjustment with a reason.
-2. Verify the seller balance increases.
-3. Enter a negative adjustment with a reason.
-4. Verify the seller balance decreases without going into a confusing UI state.
+Open `/admin/money` and confirm the launch warnings are useful.
 
-Expected result:
+Review:
 
-- Adjustments write ledger entries.
-- Adjustments write audit events.
-
-## 12. Trust and Tier Policy Checks
-
-1. Open `/admin/trust/{SELLER_ID}`.
-2. Confirm the seller shows Stripe onboarding and identity data.
-3. Confirm founding seller controls work if you use them.
-4. Run the trust evaluation cron if you want to recalculate tier status after test orders.
+- total seller pending balance
+- total seller available balance
+- total seller ledger liability
+- Stripe platform available balance
+- Stripe platform pending balance
+- Stripe funds vs Relay ledger liability delta
+- failed transfer restore gaps
+- missing settlement `available_on`
+- refund recovery review cases
 
 Expected result:
 
-- Tier language reflects V2 policy.
-- No legacy reserve language is shown where Relay Balance terminology should appear.
+- Admin can spot launch-blocking mismatches quickly
+- Refunded / disputed orders with unresolved seller exposure are surfaced
 
-## 13. Copy-Paste Commands
+### 5.12 Founding seller display
 
-Use the local commands when testing on `http://localhost:3000`.
+1. Mark the seller as founding.
+2. Visit:
+   - seller profile
+   - storefront
+   - listing card or listing page
+   - seller dashboard
 
-Use the Preview commands when testing against a protected Vercel Preview deployment.
+Expected result:
 
-### Shippo accepted test event
+- Founding seller badge appears where supported
+- Founding benefits are shown separately
+- Founding seller is not presented as Tier 3 payout access
 
-Exact route path:
+## 6. Copy-Paste Commands
 
-- `/api/shippo/webhook`
+### 6.1 Shippo test events
 
-Command:
-
-```powershell
-$TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
-$Headers = @{
-  "Content-Type" = "application/json"
-}
-
-$Body = @{
-  test = $true
-  source = "relay_test_shippo"
-  trackingNumber = $TrackingNumber
-  trackingStatus = "TRANSIT"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
-```
-
-Preview version:
+Carrier acceptance:
 
 ```powershell
-$TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
-$Headers = @{
-  "x-vercel-protection-bypass" = $VercelBypassToken
-  "Content-Type" = "application/json"
-}
-
-$Body = @{
-  test = $true
-  source = "relay_test_shippo"
-  trackingNumber = $TrackingNumber
-  trackingStatus = "TRANSIT"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+Invoke-RelayShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "TRANSIT"
 ```
 
-CLI version:
+Delivery:
 
 ```powershell
-vercel curl /api/shippo/webhook `
-  --deployment $PreviewUrl `
-  --protection-bypass $VercelBypassToken `
-  -- `
-  --request POST `
-  --header "Content-Type: application/json" `
-  --data "{\"test\":true,\"source\":\"relay_test_shippo\",\"trackingNumber\":\"REPLACE_WITH_TRACKING_NUMBER\",\"trackingStatus\":\"TRANSIT\"}"
+Invoke-RelayShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "DELIVERED"
 ```
 
-### Shippo delivered test event
+### 6.2 Settlement reconciliation cron
 
 ```powershell
-$TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
-$Headers = @{
-  "Content-Type" = "application/json"
-}
-
-$Body = @{
-  test = $true
-  source = "relay_test_shippo"
-  trackingNumber = $TrackingNumber
-  trackingStatus = "DELIVERED"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+Invoke-RelayCron "/api/cron/release-reserves"
 ```
 
-Preview version:
+This route currently runs both:
+
+- reserve release processing
+- payout settlement reconciliation
+
+### 6.3 Auto-complete cron
 
 ```powershell
-$TrackingNumber = "REPLACE_WITH_TRACKING_NUMBER"
-$Headers = @{
-  "x-vercel-protection-bypass" = $VercelBypassToken
-  "Content-Type" = "application/json"
-}
-
-$Body = @{
-  test = $true
-  source = "relay_test_shippo"
-  trackingNumber = $TrackingNumber
-  trackingStatus = "DELIVERED"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+Invoke-RelayCron "/api/cron/auto-complete"
 ```
 
-CLI version:
+### 6.4 Trust evaluation cron
 
 ```powershell
-vercel curl /api/shippo/webhook `
-  --deployment $PreviewUrl `
-  --protection-bypass $VercelBypassToken `
-  -- `
-  --request POST `
-  --header "Content-Type: application/json" `
-  --data "{\"test\":true,\"source\":\"relay_test_shippo\",\"trackingNumber\":\"REPLACE_WITH_TRACKING_NUMBER\",\"trackingStatus\":\"DELIVERED\"}"
+Invoke-RelayCron "/api/cron/trust-evaluate"
 ```
 
-### Auto-complete cron
+### 6.5 Test mode status
 
 ```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-}
-
-Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/auto-complete" -Headers $Headers
+Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/test-mode/status"
 ```
 
-Preview version:
+## 7. What Changed From the Old Regimen
 
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
+If you used the earlier testing guide, ignore these legacy expectations:
 
-Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/auto-complete" -Headers $Headers
-```
+- Tier 2 delivery release
+- Tier 3 carrier acceptance release
+- Tier 3 delivery split release
+- exposure increasing on delivery
+- withdrawable balance being reduced by active exposure
+- seller connected accounts already holding seller funds before withdrawal
 
-CLI version:
+For launch, the key question is simpler:
 
-```powershell
-vercel curl /api/cron/auto-complete `
-  --deployment $PreviewUrl `
-  --protection-bypass $VercelBypassToken `
-  -- `
-  --header "Authorization: Bearer $CronSecret"
-```
-
-### Trust evaluation cron
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-}
-
-Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/trust-evaluate" -Headers $Headers
-```
-
-Preview version:
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
-
-Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/trust-evaluate" -Headers $Headers
-```
-
-### Tag replenishment cron
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-}
-
-Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/tag-replenishment" -Headers $Headers
-```
-
-Preview version:
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
-
-Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/tag-replenishment" -Headers $Headers
-```
-
-### Legacy reserve release cron
-
-Only run this if you are specifically regression-testing legacy reserve behavior:
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-}
-
-Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/cron/release-reserves" -Headers $Headers
-```
-
-Preview version:
-
-```powershell
-$Headers = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
-
-Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/cron/release-reserves" -Headers $Headers
-```
-
-## 14. Minimum Smoke Pass
-
-If you only want the highest-signal, lowest-time pass, do this order:
-
-1. Preflight and Stripe onboarding.
-2. Admin import and assign tags.
-3. Tier 1 order through buyer confirmation.
-4. Tier 2 order through delivery and buyer confirmation.
-5. Tier 3 order through `TRANSIT`, `DELIVERED`, and buyer confirmation.
-6. One normal withdrawal.
-7. One manual-review withdrawal.
-8. One dispute.
-9. Re-run Shippo and cron commands to confirm idempotency.
-
-That gives the best coverage per minute.
-
-## 15. Cleanup
-
-After testing:
-
-1. Cancel any intentionally staged pending withdrawals.
-2. Resolve any open disputes.
-3. Return the seller to the intended tier.
-4. Remove or void throwaway test tags if needed.
-5. Confirm no test orders are left in a misleading admin state.
+- Did seller funds stay pending until they were truly eligible?
+- Did available balance increase only through the Relay ledger?
+- Did withdrawals send money only when Relay explicitly transferred from the platform balance?
+- Did refunds and disputes keep the Relay ledger reconcilable with Stripe?

@@ -2,6 +2,20 @@
 
 Comprehensive end-to-end test suite for the Relay shoe reselling marketplace built with Playwright.
 
+## Launch Note
+
+For launch payout, Relay Balance, settlement, withdrawal, refund/dispute, and admin accounting validation, use the manual runbook first:
+
+- [Launch system test regimen](../docs/relay-balance-tagging-test-regimen.md)
+
+The E2E suite is still valuable, but it is slower and broader than the dedicated launch smoke path. Recommended order:
+
+1. `npx tsc --noEmit`
+2. `npm run lint`
+3. `npm run test:launch-balance-policy`
+4. `npm run test:payouts`
+5. `npm run test:e2e:headed`
+
 ## Overview
 
 This test suite covers all critical user flows:
