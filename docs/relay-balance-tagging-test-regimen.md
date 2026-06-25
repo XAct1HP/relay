@@ -73,33 +73,68 @@ Before running money flow tests, confirm all of the following:
 ### 2.3 Preview shell variables
 
 ```powershell
-$PreviewUrl = "https://YOUR-PREVIEW-URL.vercel.app"
+$PreviewUrl = "https://YOUR-PREVIEW-URL.vercel.app".TrimEnd("/")
 $CronSecret = $env:CRON_SECRET
 $VercelBypassToken = $env:VERCEL_AUTOMATION_BYPASS_SECRET
 $AppUrl = $PreviewUrl
+$PreviewSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+```
+
+Fail fast if required shell variables are missing:
+
+```powershell
+function Assert-RelayPreviewConfig {
+  if ([string]::IsNullOrWhiteSpace($PreviewUrl)) {
+    throw "Preview URL is missing. Set `$PreviewUrl first."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($VercelBypassToken)) {
+    throw "Vercel preview bypass token is missing in this shell. Set `$env:VERCEL_AUTOMATION_BYPASS_SECRET or assign `$VercelBypassToken manually."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($CronSecret)) {
+    Write-Warning "CRON_SECRET is missing in this shell. Preview cron commands will fail until you set `$env:CRON_SECRET."
+  }
+}
+
+Assert-RelayPreviewConfig
 ```
 
 Recommended:
 
 - Keep the bypass token in your shell only
 - Do not hardcode the bypass token into committed docs or scripts
-- Prefer `vercel curl` for protected Preview API calls
-- If header-based `Invoke-RestMethod` calls behave inconsistently in your shell, use `vercel curl` as the fallback for the same Preview routes
+- Prefer the helper functions below for protected Preview API calls
+- They bootstrap a Vercel bypass cookie and also send the bypass token on each request
+- If a command still fails at the Vercel protection layer, fall back to `vercel curl`
 
 ### 2.4 Preview helper headers and functions
 
-Preview JSON helper headers:
+Initialize one Preview session before running any command:
 
 ```powershell
-$PreviewHeaders = @{
-  "x-vercel-protection-bypass" = $VercelBypassToken
-  "Content-Type" = "application/json"
+function Get-RelayPreviewUri {
+  param([string]$Path)
+
+  $normalizedPath = if ($Path.StartsWith("/")) { $Path } else { "/$Path" }
+  $separator = if ($normalizedPath.Contains("?")) { "&" } else { "?" }
+
+  if ([string]::IsNullOrWhiteSpace($VercelBypassToken)) {
+    return "$PreviewUrl$normalizedPath"
+  }
+
+  return "$PreviewUrl$normalizedPath${separator}x-vercel-protection-bypass=$VercelBypassToken&x-vercel-set-bypass-cookie=samesitenone"
 }
 
-$PreviewCronHeaders = @{
-  Authorization = "Bearer $CronSecret"
-  "x-vercel-protection-bypass" = $VercelBypassToken
+function Initialize-RelayPreviewSession {
+  Invoke-WebRequest `
+    -Method GET `
+    -Uri (Get-RelayPreviewUri "/") `
+    -WebSession $PreviewSession `
+    -MaximumRedirection 5 | Out-Null
 }
+
+Initialize-RelayPreviewSession
 ```
 
 Optional browser cookie setup for the Preview UI:
@@ -117,18 +152,77 @@ vercel whoami
 vercel curl /api/test-mode/status --deployment $PreviewUrl
 ```
 
+Generic Preview request helpers:
+
+```powershell
+function Invoke-RelayPreviewJsonGet {
+  param(
+    [string]$Path,
+    [hashtable]$Headers = @{}
+  )
+
+  $RequestHeaders = @{}
+  foreach ($Key in $Headers.Keys) {
+    $RequestHeaders[$Key] = $Headers[$Key]
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($VercelBypassToken)) {
+    $RequestHeaders["x-vercel-protection-bypass"] = $VercelBypassToken
+  }
+
+  Invoke-RestMethod `
+    -Method GET `
+    -Uri (Get-RelayPreviewUri $Path) `
+    -WebSession $PreviewSession `
+    -Headers $RequestHeaders `
+    -MaximumRedirection 5
+}
+
+function Invoke-RelayPreviewJsonPost {
+  param(
+    [string]$Path,
+    [object]$Body,
+    [hashtable]$Headers = @{}
+  )
+
+  $RequestHeaders = @{}
+  foreach ($Key in $Headers.Keys) {
+    $RequestHeaders[$Key] = $Headers[$Key]
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($VercelBypassToken)) {
+    $RequestHeaders["x-vercel-protection-bypass"] = $VercelBypassToken
+  }
+
+  $JsonBody =
+    if ($Body -is [string]) {
+      $Body
+    } else {
+      $Body | ConvertTo-Json -Depth 10
+    }
+
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri (Get-RelayPreviewUri $Path) `
+    -WebSession $PreviewSession `
+    -Headers $RequestHeaders `
+    -ContentType "application/json" `
+    -Body $JsonBody `
+    -MaximumRedirection 5
+}
+```
+
 Preview cron helper:
 
 ```powershell
 function Invoke-RelayPreviewCron {
   param([string]$Path)
 
-  $Headers = @{
-    Authorization = "Bearer $CronSecret"
-    "x-vercel-protection-bypass" = $VercelBypassToken
-  }
-
-  Invoke-RestMethod -Method GET -Uri "$PreviewUrl$Path" -Headers $Headers
+  Invoke-RelayPreviewJsonGet `
+    -Path $Path `
+    -Headers @{
+      Authorization = "Bearer $CronSecret"
+    }
 }
 ```
 
@@ -141,36 +235,24 @@ function Invoke-RelayPreviewShippoTest {
     [string]$TrackingStatus
   )
 
-  $Headers = @{
-    "x-vercel-protection-bypass" = $VercelBypassToken
-    "Content-Type" = "application/json"
-  }
-
-  $Body = @{
+  Invoke-RelayPreviewJsonPost `
+    -Path "/api/shippo/webhook" `
+    -Body @{
     test = $true
     source = "relay_test_shippo"
     trackingNumber = $TrackingNumber
     trackingStatus = $TrackingStatus
-  } | ConvertTo-Json
-
-  Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+  }
 }
 ```
 
 Optional Preview POST helper for admin/debug endpoints:
 
 ```powershell
-function Invoke-RelayPreviewJsonPost {
-  param(
-    [string]$Path,
-    [hashtable]$Body
-  )
-
-  Invoke-RestMethod `
-    -Method POST `
-    -Uri "$PreviewUrl$Path" `
-    -Headers $PreviewHeaders `
-    -Body ($Body | ConvertTo-Json -Depth 10)
+function Reset-RelayPreviewSession {
+  $PreviewSession.Cookies = New-Object System.Net.CookieContainer
+  Assert-RelayPreviewConfig
+  Initialize-RelayPreviewSession
 }
 ```
 
@@ -552,9 +634,7 @@ Invoke-RelayPreviewCron "/api/cron/trust-evaluate"
 ### 6.5 Test mode status
 
 ```powershell
-Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/test-mode/status" -Headers @{
-  "x-vercel-protection-bypass" = $VercelBypassToken
-}
+Invoke-RelayPreviewJsonGet "/api/test-mode/status"
 ```
 
 ## 7. What Changed From the Old Regimen

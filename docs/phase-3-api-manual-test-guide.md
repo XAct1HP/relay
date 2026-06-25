@@ -35,23 +35,46 @@ If your Vercel Preview deployment is protected, direct requests to `https://...v
 
 For Preview testing:
 
-- Prefer `vercel curl` over direct `Invoke-RestMethod` or `Invoke-WebRequest`
+- Prefer the Preview helper below over raw `Invoke-RestMethod` or `Invoke-WebRequest`
 - Your **Vercel deployment protection bypass token** is separate from your **Relay API key**
-- `vercel curl` handles the Vercel protection layer
+- The helper bootstraps a Vercel bypass cookie and also sends the bypass token on each request
 - Relay still requires `Authorization: Bearer relay_sk_test_...`
 
 Recommended workflow:
 
 - Use direct PowerShell REST calls only if your Preview deployment is not protected
-- If Preview protection is enabled, use the `vercel curl` examples in this guide instead
+- If Preview protection is enabled, use the helper examples in this guide instead
+- Keep `vercel curl` as a fallback if your local shell or corporate network interferes with PowerShell requests
 
 ## 2. Test Variables
 
 Set these variables in PowerShell first:
 
 ```powershell
-$BASE_URL = "https://YOUR-PREVIEW-URL.vercel.app"
+$BASE_URL = "https://YOUR-PREVIEW-URL.vercel.app".TrimEnd("/")
 $API_KEY = "relay_sk_test_xxxxxxxxx"
+$VERCEL_BYPASS_TOKEN = $env:VERCEL_AUTOMATION_BYPASS_SECRET
+$PREVIEW_SESSION = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+```
+
+Fail fast if required shell variables are missing:
+
+```powershell
+function Assert-RelayPreviewApiConfig {
+  if ([string]::IsNullOrWhiteSpace($BASE_URL)) {
+    throw "Preview URL is missing. Set `$BASE_URL first."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($API_KEY)) {
+    throw "Relay staging API key is missing. Set `$API_KEY first."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($VERCEL_BYPASS_TOKEN)) {
+    throw "Vercel preview bypass token is missing in this shell. Set `$env:VERCEL_AUTOMATION_BYPASS_SECRET or assign `$VERCEL_BYPASS_TOKEN manually."
+  }
+}
+
+Assert-RelayPreviewApiConfig
 ```
 
 Optional helper headers:
@@ -98,40 +121,73 @@ PowerShell 5.1 note:
 - For successful JSON responses, `Invoke-RestMethod` is convenient.
 - For expected error responses like `400`, `401`, `403`, and `429`, prefer `Invoke-WebRequest` plus `Show-RelayError`.
 - If PowerShell still hides the response body, use `curl.exe -i` as a fallback.
-- If Vercel Preview protection is enabled, prefer `vercel curl` with a temp JSON file.
+- If Vercel Preview protection is enabled, prefer the helper below.
 
-Optional `vercel curl` helper for protected Preview deployments:
+Protected Preview helper:
 
 ```powershell
-function Invoke-RelayPreviewApi {
+function Get-RelayPreviewUri {
   param(
     [string]$Path,
-    [string]$Method,
-    [string]$Body,
-    [string]$ApiKey,
     [string]$BaseUrl
   )
 
-  $temp = New-TemporaryFile
-  Set-Content -Path $temp -Value $Body -NoNewline
+  $normalizedPath = if ($Path.StartsWith("/")) { $Path } else { "/$Path" }
+  $separator = if ($normalizedPath.Contains("?")) { "&" } else { "?" }
 
-  $args = @(
-    'curl',
-    $Path,
-    '--deployment', $BaseUrl,
-    '--',
-    '--header', "Authorization: Bearer $ApiKey",
-    '--header', 'Content-Type: application/json',
-    '--request', $Method,
-    '--data-binary', "@$temp"
+  if ([string]::IsNullOrWhiteSpace($VERCEL_BYPASS_TOKEN)) {
+    return "$BaseUrl$normalizedPath"
+  }
+
+  return "$BaseUrl$normalizedPath${separator}x-vercel-protection-bypass=$VERCEL_BYPASS_TOKEN&x-vercel-set-bypass-cookie=samesitenone"
+}
+
+function Initialize-RelayPreviewSession {
+  param([string]$BaseUrl)
+
+  Assert-RelayPreviewApiConfig
+
+  Invoke-WebRequest `
+    -Method GET `
+    -Uri (Get-RelayPreviewUri -Path "/" -BaseUrl $BaseUrl) `
+    -WebSession $PREVIEW_SESSION `
+    -MaximumRedirection 5 | Out-Null
+}
+
+function Invoke-RelayPreviewApi {
+  param(
+    [string]$Path,
+    [string]$Method = "GET",
+    [string]$Body = $null,
+    [string]$ApiKey = $null,
+    [string]$BaseUrl
   )
 
-  try {
-    & vercel @args
-  } finally {
-    Remove-Item $temp -ErrorAction SilentlyContinue
+  $Headers = @{}
+  if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
+    $Headers["Authorization"] = "Bearer $ApiKey"
   }
+  if (-not [string]::IsNullOrWhiteSpace($VERCEL_BYPASS_TOKEN)) {
+    $Headers["x-vercel-protection-bypass"] = $VERCEL_BYPASS_TOKEN
+  }
+
+  $Params = @{
+    Method = $Method
+    Uri = (Get-RelayPreviewUri -Path $Path -BaseUrl $BaseUrl)
+    WebSession = $PREVIEW_SESSION
+    Headers = $Headers
+    MaximumRedirection = 5
+  }
+
+  if ($null -ne $Body) {
+    $Params["ContentType"] = "application/json"
+    $Params["Body"] = $Body
+  }
+
+  Invoke-RestMethod @Params
 }
+
+Initialize-RelayPreviewSession -BaseUrl $BASE_URL
 ```
 
 ## 3. API Key Checks
@@ -154,25 +210,14 @@ try {
 }
 ```
 
-If Preview protection is enabled, use `vercel curl` instead:
+If Preview protection is enabled, use the helper instead:
 
 ```powershell
-$body = '{"items":[]}'
-$temp = New-TemporaryFile
-Set-Content -Path $temp -Value $body -NoNewline
-
-$args = @(
-  'curl',
-  '/api/integrations/inventory/upsert',
-  '--deployment', $BASE_URL,
-  '--',
-  '--header', 'Content-Type: application/json',
-  '--request', 'POST',
-  '--data-binary', "@$temp"
-)
-
-& vercel @args
-Remove-Item $temp
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/upsert" `
+  -Method "POST" `
+  -Body '{"items":[]}' `
+  -BaseUrl $BASE_URL
 ```
 
 Expected result:
@@ -201,26 +246,15 @@ try {
 }
 ```
 
-If Preview protection is enabled, use `vercel curl` instead:
+If Preview protection is enabled, use the helper instead:
 
 ```powershell
-$body = '{"items":[]}'
-$temp = New-TemporaryFile
-Set-Content -Path $temp -Value $body -NoNewline
-
-$args = @(
-  'curl',
-  '/api/integrations/inventory/upsert',
-  '--deployment', $BASE_URL,
-  '--',
-  '--header', 'Authorization: Bearer relay_sk_test_not_real',
-  '--header', 'Content-Type: application/json',
-  '--request', 'POST',
-  '--data-binary', "@$temp"
-)
-
-& vercel @args
-Remove-Item $temp
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/upsert" `
+  -Method "POST" `
+  -Body '{"items":[]}' `
+  -ApiKey "relay_sk_test_not_real" `
+  -BaseUrl $BASE_URL
 ```
 
 Expected result:
@@ -252,26 +286,15 @@ try {
 }
 ```
 
-If Preview protection is enabled, use `vercel curl` instead:
+If Preview protection is enabled, use the helper instead:
 
 ```powershell
-$body = '{"items":[]}'
-$temp = New-TemporaryFile
-Set-Content -Path $temp -Value $body -NoNewline
-
-$args = @(
-  'curl',
-  '/api/integrations/inventory/upsert',
-  '--deployment', $BASE_URL,
-  '--',
-  '--header', 'Authorization: Bearer relay_sk_test_REVOKED_KEY',
-  '--header', 'Content-Type: application/json',
-  '--request', 'POST',
-  '--data-binary', "@$temp"
-)
-
-& vercel @args
-Remove-Item $temp
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/upsert" `
+  -Method "POST" `
+  -Body '{"items":[]}' `
+  -ApiKey "relay_sk_test_REVOKED_KEY" `
+  -BaseUrl $BASE_URL
 ```
 
 Expected result:
@@ -312,23 +335,12 @@ Expected result:
 If Preview protection is enabled, use this working smoke test instead:
 
 ```powershell
-$body = '{"items":[]}'
-$temp = New-TemporaryFile
-Set-Content -Path $temp -Value $body -NoNewline
-
-$args = @(
-  'curl',
-  '/api/integrations/inventory/upsert',
-  '--deployment', $BASE_URL,
-  '--',
-  '--header', "Authorization: Bearer $API_KEY",
-  '--header', 'Content-Type: application/json',
-  '--request', 'POST',
-  '--data-binary', "@$temp"
-)
-
-& vercel @args
-Remove-Item $temp
+Invoke-RelayPreviewApi `
+  -Path "/api/integrations/inventory/upsert" `
+  -Method "POST" `
+  -Body '{"items":[]}' `
+  -ApiKey $API_KEY `
+  -BaseUrl $BASE_URL
 ```
 
 ## 4. Inventory Upsert Test
