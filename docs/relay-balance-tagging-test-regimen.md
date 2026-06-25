@@ -1,6 +1,6 @@
-# Relay Launch System Test Regimen
+# Relay Launch System Test Regimen For Vercel Preview
 
-This is the fastest practical way to validate Relay's launch systems on local or staging.
+This is the fastest practical way to validate Relay's launch systems on a Vercel Preview deployment backed by staging data.
 
 It supersedes the old Tier 2 / Tier 3 early-payout expectations. At launch:
 
@@ -16,17 +16,17 @@ It supersedes the old Tier 2 / Tier 3 early-payout expectations. At launch:
 - Connected Stripe accounts are withdrawal destinations only
 - No Stripe transfer is created when seller funds move from pending to available
 
-Use this against local or staging only. Do not run it against production.
+Use this against a Preview deployment or staging only. Do not run it against production.
 
 ## 1. Fastest Path
 
 If you only want the quickest launch confidence pass, do these in order:
 
-1. Apply the latest launch migrations.
-2. Start the app locally.
-3. Run the automated smoke commands in section 4.
-4. Run the manual launch pass in section 5.
-5. Review `/admin/money`, `/admin/disputes`, and `/admin/withdrawals`.
+1. Confirm the Preview deployment points at staging infrastructure.
+2. Apply the latest launch migrations to the staging database behind that Preview deployment.
+3. Run the automated smoke commands in section 4 from your local repo.
+4. Run the manual Preview pass in section 5 against the Preview URL.
+5. Review `/admin/money`, `/admin/disputes`, and `/admin/withdrawals` on Preview.
 
 Recommended accounts:
 
@@ -48,7 +48,7 @@ Recommended pages:
 - Admin trust: `/admin/trust`
 - Admin tags: `/admin/tags`
 
-## 2. One-Time Setup
+## 2. Preview Setup
 
 ### 2.1 Apply the launch migrations
 
@@ -59,50 +59,90 @@ Make sure your test database includes the launch money and refund changes:
 - `supabase/migrations/add_launch_founding_seller_program.sql`
 - `supabase/migrations/add_launch_refund_dispute_recovery.sql`
 
-### 2.2 Start the app
+### 2.2 Confirm the Preview deployment is safe to test
 
-```powershell
-npm run dev
-```
+Before running money flow tests, confirm all of the following:
 
-### 2.3 Useful shell variables
+- The deployment is a Vercel Preview URL, not production
+- Preview env vars point to staging Supabase and staging Stripe
+- `CRON_SECRET` is configured on the Preview deployment
+- If you rely on test mode, `RELAY_TEST_MODE=true` is enabled only on Preview
+- You have a buyer, seller, and admin account in staging
+- You have a Vercel deployment automation bypass key available in your shell
 
-```powershell
-$BaseUrl = "http://localhost:3000"
-$CronSecret = $env:CRON_SECRET
-```
-
-Optional preview variables:
+### 2.3 Preview shell variables
 
 ```powershell
 $PreviewUrl = "https://YOUR-PREVIEW-URL.vercel.app"
+$CronSecret = $env:CRON_SECRET
 $VercelBypassToken = $env:VERCEL_AUTOMATION_BYPASS_SECRET
+$AppUrl = $PreviewUrl
 ```
 
-Optional cron helper:
+Recommended:
+
+- Keep the bypass token in your shell only
+- Do not hardcode the bypass token into committed docs or scripts
+- Prefer `vercel curl` for protected Preview API calls
+- If header-based `Invoke-RestMethod` calls behave inconsistently in your shell, use `vercel curl` as the fallback for the same Preview routes
+
+### 2.4 Preview helper headers and functions
+
+Preview JSON helper headers:
 
 ```powershell
-function Invoke-RelayCron {
+$PreviewHeaders = @{
+  "x-vercel-protection-bypass" = $VercelBypassToken
+  "Content-Type" = "application/json"
+}
+
+$PreviewCronHeaders = @{
+  Authorization = "Bearer $CronSecret"
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
+```
+
+Optional browser cookie setup for the Preview UI:
+
+This is useful when you want to click through the Preview deployment in a browser without repeatedly dealing with the protection screen.
+
+```powershell
+Start-Process "$PreviewUrl/?x-vercel-protection-bypass=$VercelBypassToken&x-vercel-set-bypass-cookie=true"
+```
+
+Optional `vercel curl` sanity check:
+
+```powershell
+vercel whoami
+vercel curl /api/test-mode/status --deployment $PreviewUrl
+```
+
+Preview cron helper:
+
+```powershell
+function Invoke-RelayPreviewCron {
   param([string]$Path)
 
   $Headers = @{
     Authorization = "Bearer $CronSecret"
+    "x-vercel-protection-bypass" = $VercelBypassToken
   }
 
-  Invoke-RestMethod -Method GET -Uri "$BaseUrl$Path" -Headers $Headers
+  Invoke-RestMethod -Method GET -Uri "$PreviewUrl$Path" -Headers $Headers
 }
 ```
 
-Optional Shippo helper:
+Preview Shippo helper:
 
 ```powershell
-function Invoke-RelayShippoTest {
+function Invoke-RelayPreviewShippoTest {
   param(
     [string]$TrackingNumber,
     [string]$TrackingStatus
   )
 
   $Headers = @{
+    "x-vercel-protection-bypass" = $VercelBypassToken
     "Content-Type" = "application/json"
   }
 
@@ -113,7 +153,24 @@ function Invoke-RelayShippoTest {
     trackingStatus = $TrackingStatus
   } | ConvertTo-Json
 
-  Invoke-RestMethod -Method POST -Uri "$BaseUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+  Invoke-RestMethod -Method POST -Uri "$PreviewUrl/api/shippo/webhook" -Headers $Headers -Body $Body
+}
+```
+
+Optional Preview POST helper for admin/debug endpoints:
+
+```powershell
+function Invoke-RelayPreviewJsonPost {
+  param(
+    [string]$Path,
+    [hashtable]$Body
+  )
+
+  Invoke-RestMethod `
+    -Method POST `
+    -Uri "$PreviewUrl$Path" `
+    -Headers $PreviewHeaders `
+    -Body ($Body | ConvertTo-Json -Depth 10)
 }
 ```
 
@@ -128,7 +185,7 @@ Run these once before money flow tests:
 5. Founding seller copy does not promise early payouts.
 6. `/admin/money` loads without accounting errors.
 7. `/admin/trust/{SELLER_ID}` shows connected account and transfer readiness data.
-8. `/api/test-mode/status` returns the expected local or preview test-mode status if you use test mode.
+8. `/api/test-mode/status` returns the expected Preview test-mode status if you use test mode.
 
 Expected result:
 
@@ -138,7 +195,7 @@ Expected result:
 
 ## 4. Automated Smoke Pack
 
-Run these before the manual pass.
+Run these from your local repo before the Preview manual pass.
 
 ### 4.1 Type and lint
 
@@ -169,7 +226,7 @@ npm run test:payouts
 
 ### 4.4 Optional browser E2E
 
-Use this only after the launch smoke pack passes. It is slower than the manual launch pass.
+Use this only after the launch smoke pack passes. It is slower than the manual Preview pass.
 
 ```powershell
 npm run test:e2e:headed
@@ -177,11 +234,11 @@ npm run test:e2e:headed
 
 ## 5. Manual Launch Pass
 
-This is the recommended quickest end-to-end launch check.
+This is the recommended quickest end-to-end launch check against Preview.
 
 ### 5.1 Seller balance UI and founding seller copy
 
-1. Open `/dashboard` as the seller.
+1. Open `$PreviewUrl/dashboard` as the seller.
 2. Confirm the balance card shows only:
    - `Pending Balance`
    - `Available Balance`
@@ -200,8 +257,8 @@ Expected result:
 
 ### 5.2 Connected account transfer readiness
 
-1. Complete or revisit Stripe Connect onboarding as the seller.
-2. In `/admin/trust/{SELLER_ID}`, confirm:
+1. Complete or revisit Stripe Connect onboarding as the seller on Preview.
+2. In `$PreviewUrl/admin/trust/{SELLER_ID}`, confirm:
    - `connected_account_id` exists
    - `onboarding_complete` is true
    - `payouts_enabled` is visible
@@ -215,9 +272,9 @@ Expected result:
 
 ### 5.3 Tagging sanity pass
 
-1. Open `/admin/tags`.
+1. Open `$PreviewUrl/admin/tags`.
 2. Create or assign 2 to 3 tags to the seller.
-3. Open `/tags` as the seller and confirm they appear.
+3. Open `$PreviewUrl/tags` as the seller and confirm they appear.
 4. Optionally buy one tag bundle and move one tag order through admin fulfillment.
 
 Expected result:
@@ -230,9 +287,9 @@ Expected result:
 Use a card-funded order.
 
 1. Place a normal buyer order with card checkout.
-2. Confirm the order is created successfully.
-3. As admin, open `/admin/money/orders/{ORDER_ID}`.
-4. Confirm the order shows:
+2. Confirm the order is created successfully on Preview.
+3. As admin, open `$PreviewUrl/admin/money/orders/{ORDER_ID}`.
+4. Confirm the Preview order shows:
    - `payment_funding_source = card`
    - `payment_intent_id`
    - `charge_id`
@@ -263,9 +320,9 @@ Use a buyer who already has enough `Available Balance`.
 1. Open checkout and choose `Pay with Relay Balance`.
 2. Confirm the option is enabled only when the buyer has enough available balance to cover the full order total.
 3. Submit the purchase.
-4. Open seller `/dashboard`.
+4. Open seller `$PreviewUrl/dashboard`.
 5. Open buyer balance API or buyer balance UI if available.
-6. Open `/admin/money/orders/{ORDER_ID}`.
+6. Open `$PreviewUrl/admin/money/orders/{ORDER_ID}`.
 
 Expected immediately:
 
@@ -289,7 +346,7 @@ Expected after completion:
 
 This replaces the old Tier 2 / Tier 3 early payout tests.
 
-1. Set the seller to Tier 2 in admin.
+1. Set the seller to Tier 2 in admin on Preview.
 2. Create a card-funded order.
 3. Trigger `TRANSIT` and `DELIVERED`.
 4. Confirm no early seller credit appears.
@@ -308,14 +365,14 @@ Expected result:
 
 Run this only after the seller has launch-eligible available balance.
 
-1. Open `/dashboard`.
+1. Open `$PreviewUrl/dashboard`.
 2. Confirm only available balance can be withdrawn.
 3. Submit a withdrawal below the manual-review threshold.
 4. Confirm the UI shows:
    - gross amount
    - Stripe transfer fee of `$0.25`
    - net transfer amount
-5. Open `/admin/withdrawals`.
+5. Open `$PreviewUrl/admin/withdrawals`.
 
 Expected result:
 
@@ -328,7 +385,7 @@ Expected result:
 Optional manual-review path:
 
 6. Create a withdrawal at or above the manual-review threshold if the seller has enough balance.
-7. Review it in `/admin/withdrawals`.
+7. Review it in `$PreviewUrl/admin/withdrawals`.
 8. Optionally cancel it before processing.
 
 Expected result:
@@ -356,7 +413,7 @@ Expected result:
 #### Scenario B: refund after seller funds are available but before withdrawal
 
 1. Create an order, let it become available, but do not withdraw it.
-2. Refund it through the admin dispute flow.
+2. Refund it through the admin dispute flow on Preview.
 
 Expected result:
 
@@ -367,7 +424,7 @@ Expected result:
 #### Scenario C: refund after seller withdrawal
 
 1. Create an order, release funds, and complete a withdrawal.
-2. Then refund through the admin dispute path.
+2. Then refund through the admin dispute path on Preview.
 
 Expected result:
 
@@ -386,10 +443,10 @@ Use this to release eligible pending seller funds after completion.
 2. Run:
 
 ```powershell
-Invoke-RelayCron "/api/cron/release-reserves"
+Invoke-RelayPreviewCron "/api/cron/release-reserves"
 ```
 
-3. Refresh `/admin/money/orders/{ORDER_ID}` and `/dashboard`.
+3. Refresh `$PreviewUrl/admin/money/orders/{ORDER_ID}` and `$PreviewUrl/dashboard`.
 4. Run the same cron again.
 
 Expected result:
@@ -405,7 +462,7 @@ Expected result:
 2. Run:
 
 ```powershell
-Invoke-RelayCron "/api/cron/auto-complete"
+Invoke-RelayPreviewCron "/api/cron/auto-complete"
 ```
 
 3. Refresh the order and seller dashboard.
@@ -419,7 +476,7 @@ Expected result:
 
 ### 5.11 Admin accounting safety checks
 
-Open `/admin/money` and confirm the launch warnings are useful.
+Open `$PreviewUrl/admin/money` and confirm the launch warnings are useful.
 
 Review:
 
@@ -440,7 +497,7 @@ Expected result:
 
 ### 5.12 Founding seller display
 
-1. Mark the seller as founding.
+1. Mark the seller as founding on Preview.
 2. Visit:
    - seller profile
    - storefront
@@ -453,26 +510,26 @@ Expected result:
 - Founding benefits are shown separately
 - Founding seller is not presented as Tier 3 payout access
 
-## 6. Copy-Paste Commands
+## 6. Preview Copy-Paste Commands
 
 ### 6.1 Shippo test events
 
 Carrier acceptance:
 
 ```powershell
-Invoke-RelayShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "TRANSIT"
+Invoke-RelayPreviewShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "TRANSIT"
 ```
 
 Delivery:
 
 ```powershell
-Invoke-RelayShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "DELIVERED"
+Invoke-RelayPreviewShippoTest -TrackingNumber "REPLACE_WITH_TRACKING_NUMBER" -TrackingStatus "DELIVERED"
 ```
 
 ### 6.2 Settlement reconciliation cron
 
 ```powershell
-Invoke-RelayCron "/api/cron/release-reserves"
+Invoke-RelayPreviewCron "/api/cron/release-reserves"
 ```
 
 This route currently runs both:
@@ -483,19 +540,21 @@ This route currently runs both:
 ### 6.3 Auto-complete cron
 
 ```powershell
-Invoke-RelayCron "/api/cron/auto-complete"
+Invoke-RelayPreviewCron "/api/cron/auto-complete"
 ```
 
 ### 6.4 Trust evaluation cron
 
 ```powershell
-Invoke-RelayCron "/api/cron/trust-evaluate"
+Invoke-RelayPreviewCron "/api/cron/trust-evaluate"
 ```
 
 ### 6.5 Test mode status
 
 ```powershell
-Invoke-RestMethod -Method GET -Uri "$BaseUrl/api/test-mode/status"
+Invoke-RestMethod -Method GET -Uri "$PreviewUrl/api/test-mode/status" -Headers @{
+  "x-vercel-protection-bypass" = $VercelBypassToken
+}
 ```
 
 ## 7. What Changed From the Old Regimen
