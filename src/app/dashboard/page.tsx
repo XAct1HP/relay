@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, Plus, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, Plus, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote, X, Palette } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -365,73 +365,69 @@ function MessageRow({ message }: any) {
   );
 }
 
-function MobileStatTile({ icon: Icon, label, value, toneClass }: any) {
-  return (
-    <div className="rounded-[1.25rem] border border-white/[0.06] bg-white/[0.04] px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-white/38">
-        <Icon className={`h-3.5 w-3.5 ${toneClass}`} />
-        <span className="truncate">{label}</span>
-      </div>
-      <p className="mt-2 text-lg font-semibold leading-none text-[#f5f7fb]">{value}</p>
-    </div>
-  );
-}
-
-function MobileQuickAction({ href, icon: Icon, label, dot, onClick }: any) {
-  const className =
-    "relative flex min-h-[3.25rem] items-center justify-center gap-2 rounded-[1.15rem] border border-white/[0.06] bg-white/[0.04] px-3 text-sm font-medium text-white/78 transition-colors active:bg-white/[0.08]";
-
-  const content = (
-    <>
-      <Icon className="h-4 w-4 text-[#d7e3ff]" />
-      <span>{label}</span>
-      {dot && <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#5f8fff]" />}
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={className}>
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <button onClick={onClick} className={className} type="button">
-      {content}
-    </button>
-  );
-}
-
-function MobileSummaryCard({
+function MobileMetricLink({
   href,
   icon: Icon,
   label,
+  value,
+  toneClass,
+}: any) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-w-0 flex-col gap-2 rounded-2xl px-2 py-2 text-left transition-colors active:bg-white/[0.04]"
+    >
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-white/34">
+        <Icon className={`h-3.5 w-3.5 ${toneClass}`} />
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="truncate text-[1.05rem] font-semibold leading-none text-[#f5f7fb]">{value}</p>
+    </Link>
+  );
+}
+
+function MobileActionPill({ href, icon: Icon, label, dot }: any) {
+  return (
+    <Link
+      href={href}
+      className="relative inline-flex min-h-[2.5rem] items-center justify-center gap-2 rounded-full bg-white/[0.05] px-3.5 text-sm font-medium text-white/78 transition-colors active:bg-white/[0.1]"
+    >
+      <Icon className="h-4 w-4 text-[#d7e3ff]" />
+      <span>{label}</span>
+      {dot && <span className="absolute right-2.5 top-2 h-2 w-2 rounded-full bg-[#5f8fff]" />}
+    </Link>
+  );
+}
+
+function MobileInfoLink({
+  href,
+  icon: Icon,
+  eyebrow,
   title,
   detail,
-  badge,
-  iconToneClass,
+  meta,
+  toneClass,
 }: any) {
-  const content = (
-    <div className="h-full rounded-[1.4rem] border border-white/[0.06] bg-white/[0.04] p-3.5">
+  return (
+    <Link
+      href={href}
+      className="group flex h-full flex-col justify-between border-t border-white/[0.08] pt-3 text-left transition-colors active:opacity-80"
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className={`rounded-2xl border border-white/10 bg-black/20 p-2 ${iconToneClass}`}>
-          <Icon className="h-4 w-4" />
+        <div className="flex min-w-0 items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-white/34">
+          <Icon className={`h-4 w-4 ${toneClass}`} />
+          <span className="truncate">{eyebrow}</span>
         </div>
-        {badge && <span className="text-[10px] text-white/35">{badge}</span>}
+        {meta && <span className="shrink-0 text-[10px] text-white/28">{meta}</span>}
       </div>
-      <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-white/35">{label}</p>
-      <p className="mt-1 text-sm font-semibold leading-tight text-[#f5f7fb]">{title}</p>
-      <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">{detail}</p>
-    </div>
+      <div className="mt-3 min-w-0">
+        <p className="line-clamp-2 text-[1.05rem] font-semibold leading-tight text-[#f5f7fb]">
+          {title}
+        </p>
+        <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/42">{detail}</p>
+      </div>
+    </Link>
   );
-
-  if (href) {
-    return <Link href={href}>{content}</Link>;
-  }
-
-  return content;
 }
 
 export default function DashboardPage() {
@@ -493,6 +489,14 @@ export default function DashboardPage() {
     : stripeConnected
       ? "Everything important in one clean view."
       : "Connect Stripe to unlock withdrawals.";
+  const ratingHref = currentUser?.username
+    ? `/profile/${currentUser.username}`
+    : "/profile/studio";
+  const latestOrderHref = latestOrder ? `/orders/${latestOrder.id}` : "/orders";
+  const latestMessageHref = latestMessage ? `/messages/${latestMessage.id}` : "/messages";
+  const livePulseHref = latestActivityEntry?.order?.id
+    ? `/orders/${latestActivityEntry.order.id}`
+    : "/orders";
 
   async function loadBalanceData() {
     setBalanceLoading(true);
@@ -666,6 +670,24 @@ export default function DashboardPage() {
     }
   }
 
+  function openSettingsPage() {
+    window.location.assign("/settings");
+  }
+
+  function handleBalanceTap() {
+    if (!stripeConnected) {
+      openSettingsPage();
+      return;
+    }
+
+    if (availableForWithdrawalCents > 0 || (balanceData?.withdrawals || []).length > 0) {
+      setWithdrawOpen(true);
+      return;
+    }
+
+    void openStripeDashboard();
+  }
+
   if (loading) {
     return (
       <div className="relay-empty text-center">Loading...</div>
@@ -675,127 +697,139 @@ export default function DashboardPage() {
   return (
     <>
       {/* Mobile Dashboard */}
-      <div className="lg:hidden box-border h-full overflow-hidden px-4 pb-3 pt-3">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#0a0d14] shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(95,143,255,0.2),transparent_38%),radial-gradient(circle_at_85%_22%,rgba(16,185,129,0.14),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_40%)]" />
-          <div className="relative flex items-start justify-between gap-3 px-5 pt-5">
-            <div className="min-w-0">
+      <div className="lg:hidden relative h-full overflow-hidden px-5 pb-[calc(18px+env(safe-area-inset-bottom,0px))] pt-[calc(24px+env(safe-area-inset-top,0px))]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_14%,rgba(95,143,255,0.16),transparent_26%),radial-gradient(circle_at_88%_20%,rgba(16,185,129,0.1),transparent_22%),radial-gradient(circle_at_50%_100%,rgba(95,143,255,0.08),transparent_28%)]" />
+
+        <div className="relative flex h-full flex-col overflow-hidden">
+          <div className="pr-16">
+            <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.22em] text-white/32">Seller HQ</p>
-              <h1 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-[#f5f7fb]">
-                Hi, {firstName}
-              </h1>
-              <p className="mt-1 text-sm text-white/45">{mobileStatusMessage}</p>
-            </div>
-            <div className="shrink-0">
               {isFoundingSeller ? (
                 <FoundingSellerBadge compact />
               ) : (
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-[11px] font-medium text-emerald-200/80">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-[11px] font-medium text-emerald-200/75">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                   Live
                 </div>
               )}
             </div>
+
+            <h1 className="mt-4 text-[2.15rem] font-semibold tracking-tight text-[#f5f7fb]">
+              Hi, {firstName}
+            </h1>
+            <p className="mt-2 max-w-[15rem] text-[1.05rem] leading-8 text-white/43">
+              {mobileStatusMessage}
+            </p>
           </div>
 
-          <div className="relative px-5 pt-4">
-            <div className="rounded-[1.7rem] border border-white/[0.08] bg-black/20 p-4 backdrop-blur-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8fb1ff]">
-                    Relay Balance
-                  </p>
-                  <p className="mt-2 text-[2rem] font-semibold leading-none tracking-tight text-[#f5f7fb]">
-                    {balanceLoading ? "..." : formatMoneyFromCents(totalBalanceCents)}
-                  </p>
-                </div>
-                <div
-                  className={`rounded-full px-3 py-1 text-[11px] font-medium ${
-                    stripeConnected
-                      ? "border border-emerald-400/20 bg-emerald-400/10 text-emerald-200/85"
-                      : "border border-amber-400/20 bg-amber-400/10 text-amber-100/85"
-                  }`}
-                >
-                  {stripeConnected ? "Stripe ready" : "Setup payout"}
-                </div>
+          <button
+            onClick={handleBalanceTap}
+            className="mt-6 text-left active:opacity-90"
+            type="button"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8fb1ff]">
+                  Relay Balance
+                </p>
+                <p className="mt-2 text-[2.55rem] font-semibold leading-none tracking-tight text-[#f5f7fb]">
+                  {balanceLoading ? "..." : formatMoneyFromCents(totalBalanceCents)}
+                </p>
               </div>
-
-              {!balanceLoading && totalBalanceCents > 0 && (
-                <div className="mt-4">
-                  <div className="flex h-2 gap-1 overflow-hidden rounded-full bg-white/[0.05]">
-                    {(() => {
-                      const pendingPct = totalBalanceCents > 0 ? (pendingBalanceCents / totalBalanceCents) * 100 : 0;
-                      const availablePct = totalBalanceCents > 0 ? (availableBalanceCents / totalBalanceCents) * 100 : 0;
-                      return (
-                        <>
-                          {pendingPct >= 0.5 && (
-                            <div
-                              className="h-full rounded-full bg-[#5f8fff] transition-all"
-                              style={{ width: `${Math.max(pendingPct, 4)}%` }}
-                            />
-                          )}
-                          {availablePct >= 0.5 && (
-                            <div
-                              className="h-full rounded-full bg-emerald-400 transition-all"
-                              style={{ width: `${Math.max(availablePct, 4)}%` }}
-                            />
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <div className="rounded-2xl bg-white/[0.04] px-3 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Pending</p>
-                  <p className="mt-1 text-sm font-semibold text-[#f5f7fb]">
-                    {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-white/[0.04] px-3 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Available</p>
-                  <p className="mt-1 text-sm font-semibold text-emerald-300">
-                    {balanceLoading ? "..." : formatMoneyFromCents(availableBalanceCents)}
-                  </p>
-                </div>
+              <div
+                className={`rounded-full px-3 py-1.5 text-[11px] font-medium ${
+                  stripeConnected
+                    ? "bg-emerald-400/10 text-emerald-200/75"
+                    : "bg-amber-400/10 text-amber-100/80"
+                }`}
+              >
+                {stripeConnected
+                  ? availableForWithdrawalCents > 0
+                    ? "Tap to withdraw"
+                    : "Stripe ready"
+                  : "Finish setup"}
               </div>
-
-              {(balanceError || withdrawFeedback) && (
-                <div
-                  className={`mt-3 rounded-2xl px-3 py-2 text-xs ${
-                    balanceError
-                      ? "border border-red-400/15 bg-red-400/10 text-red-200/85"
-                      : "border border-[#5f8fff]/15 bg-[#5f8fff]/10 text-[#dce7ff]"
-                  }`}
-                >
-                  {balanceError || withdrawFeedback}
-                </div>
-              )}
             </div>
-          </div>
 
-          <div className="relative grid grid-cols-4 gap-2 px-5 pt-3">
-            <MobileStatTile
+            {!balanceLoading && totalBalanceCents > 0 && (
+              <div className="mt-5">
+                <div className="flex h-2 gap-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  {(() => {
+                    const pendingPct = totalBalanceCents > 0 ? (pendingBalanceCents / totalBalanceCents) * 100 : 0;
+                    const availablePct = totalBalanceCents > 0 ? (availableBalanceCents / totalBalanceCents) * 100 : 0;
+                    return (
+                      <>
+                        {pendingPct >= 0.5 && (
+                          <div
+                            className="h-full rounded-full bg-[#5f8fff]"
+                            style={{ width: `${Math.max(pendingPct, 4)}%` }}
+                          />
+                        )}
+                        {availablePct >= 0.5 && (
+                          <div
+                            className="h-full rounded-full bg-emerald-400"
+                            style={{ width: `${Math.max(availablePct, 4)}%` }}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-6 border-t border-white/[0.08] pt-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Pending</p>
+                <p className="mt-1 text-[1.05rem] font-semibold text-[#f5f7fb]">
+                  {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Available</p>
+                <p className="mt-1 text-[1.05rem] font-semibold text-emerald-300">
+                  {balanceLoading ? "..." : formatMoneyFromCents(availableBalanceCents)}
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {(balanceError || withdrawFeedback) && (
+            <div
+              className={`mt-3 rounded-2xl px-3 py-2 text-xs ${
+                balanceError
+                  ? "bg-red-400/10 text-red-200/85"
+                  : "bg-[#5f8fff]/10 text-[#dce7ff]"
+              }`}
+            >
+              {balanceError || withdrawFeedback}
+            </div>
+          )}
+
+          <div className="mt-4 grid grid-cols-4 gap-1 border-t border-white/[0.08] pt-3">
+            <MobileMetricLink
+              href="/orders"
               icon={DollarSign}
               label="Revenue"
               value={`$${metrics.totalRevenue.toFixed(0)}`}
               toneClass="text-emerald-300"
             />
-            <MobileStatTile
+            <MobileMetricLink
+              href="/my-listings"
               icon={Package}
               label="Listings"
               value={metrics.activeListings}
               toneClass="text-[#8fb1ff]"
             />
-            <MobileStatTile
+            <MobileMetricLink
+              href="/orders"
               icon={ShoppingCart}
               label="Orders"
               value={metrics.ordersThisMonth}
               toneClass="text-amber-300"
             />
-            <MobileStatTile
+            <MobileMetricLink
+              href={ratingHref}
               icon={Star}
               label="Rating"
               value={metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "--"}
@@ -803,293 +837,237 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="relative grid grid-cols-3 gap-2 px-5 pt-3">
-            <MobileQuickAction href="/sell" icon={Plus} label="Sell" />
-            <MobileQuickAction
-              href="/orders"
-              icon={Package}
-              label="Orders"
-              dot={recentOrdersList.length > 0}
+          <div className="mt-4 grid grid-cols-4 gap-2">
+            <MobileActionPill href="/sell" icon={Plus} label="Sell" />
+            <MobileActionPill
+              href="/messages"
+              icon={MessageSquare}
+              label="Inbox"
+              dot={recentMessagesList.length > 0}
             />
-            <MobileQuickAction
-              onClick={() =>
-                stripeConnected && availableForWithdrawalCents > 0
-                  ? setWithdrawOpen((open) => !open)
-                  : void openStripeDashboard()
+            <MobileActionPill href="/tags" icon={Tag} label="Tags" />
+            <MobileActionPill href="/profile/studio" icon={Palette} label="Studio" />
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-5">
+            <MobileInfoLink
+              href={latestOrderHref}
+              icon={Package}
+              eyebrow="Latest Order"
+              title={latestOrder ? latestOrder.shoe : "No orders yet"}
+              detail={
+                latestOrder
+                  ? `${formatMoney(latestOrder.price)} - ${latestOrder.status}`
+                  : "Tap to view your order queue."
               }
-              icon={
-                withdrawOpen
-                  ? X
-                  : stripeConnected && availableForWithdrawalCents > 0
-                    ? Banknote
-                    : ExternalLink
+              meta={latestOrder ? formatRelativeTimestamp(latestOrder.date) : undefined}
+              toneClass="text-amber-300"
+            />
+            <MobileInfoLink
+              href={latestMessageHref}
+              icon={MessageSquare}
+              eyebrow="Inbox"
+              title={latestMessage ? latestMessage.name : "No new messages"}
+              detail={
+                latestMessage
+                  ? latestMessage.lastMessage
+                  : "Tap to open conversations and offers."
               }
-              label={
-                withdrawOpen
-                  ? "Close"
-                  : stripeConnected && availableForWithdrawalCents > 0
-                    ? "Withdraw"
-                    : "Stripe"
-              }
+              meta={latestMessage ? formatRelativeTimestamp(latestMessage.time) : undefined}
+              toneClass="text-[#8fb1ff]"
             />
           </div>
 
-          <div className="relative flex-1 min-h-0 px-5 py-3">
-            {withdrawOpen ? (
-              <div className="flex h-full min-h-0 flex-col rounded-[1.6rem] border border-white/[0.06] bg-white/[0.04] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Withdraw</p>
-                    <p className="mt-1 text-lg font-semibold text-[#f5f7fb]">Move funds to Stripe</p>
-                  </div>
-                  <span className="text-xs text-white/35">
-                    Fee {formatMoneyFromCents(transferFeeCents)}
-                  </span>
-                </div>
-
-                {!stripeConnected && (
-                  <div className="mt-3 rounded-2xl border border-amber-400/15 bg-amber-400/10 px-3 py-2.5 text-xs text-amber-100/85">
-                    Connect Stripe in Settings before requesting a withdrawal.
-                  </div>
-                )}
-
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl bg-black/20 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Amount</p>
-                    <p className="mt-1 text-sm font-semibold text-[#f5f7fb]">
-                      {formatMoneyFromCents(withdrawalAmountCents)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-black/20 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Fee</p>
-                    <p className="mt-1 text-sm font-semibold text-white/70">
-                      {formatMoneyFromCents(transferFeeCents)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-black/20 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Receive</p>
-                    <p className="mt-1 text-sm font-semibold text-emerald-300">
-                      {formatMoneyFromCents(netTransferAmountCents)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <label htmlFor="mobile-withdraw-amount" className="text-xs text-white/50">
-                    Withdrawal amount
-                  </label>
-                  <input
-                    id="mobile-withdraw-amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={withdrawAmount}
-                    onChange={(event) => setWithdrawAmount(event.target.value)}
-                    placeholder="0.00"
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
-                  />
-                  <p className="mt-2 text-xs text-white/35">
-                    Max {formatMoneyFromCents(availableForWithdrawalCents)}.
-                  </p>
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={() => void handleWithdrawalSubmit()}
-                    disabled={
-                      withdrawSubmitting ||
-                      !stripeConnected ||
-                      withdrawalAmountCents <= 0 ||
-                      withdrawalAmountCents > availableForWithdrawalCents ||
-                      netTransferAmountCents <= 0
-                    }
-                    className="relay-button-primary min-h-[3rem] flex-1 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {withdrawSubmitting ? "Processing..." : "Confirm"}
-                  </button>
-                  <button
-                    onClick={() => setWithdrawOpen(false)}
-                    className="relay-button-secondary min-h-[3rem] px-4"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                <div className="mt-4 min-h-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-                      Recent transfers
-                    </p>
-                    <button
-                      onClick={() => void openStripeDashboard()}
-                      className="text-xs text-[#8fb1ff]"
-                      type="button"
-                    >
-                      Stripe
-                    </button>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {!balanceLoading && (balanceData?.withdrawals || []).length > 0 ? (
-                      balanceData?.withdrawals.slice(0, 3).map((withdrawal) => (
-                        <div
-                          key={withdrawal.id}
-                          className="flex items-center justify-between rounded-2xl bg-black/20 px-3 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-[#f5f7fb]">
-                              {formatMoneyFromCents(clampNonNegativeCents(withdrawal.amount_cents))}
-                            </p>
-                            <p className="text-xs capitalize text-white/40">
-                              {withdrawal.status.replace(/_/g, " ")}
-                            </p>
-                          </div>
-                          <span className="text-xs text-white/30">
-                            {formatRelativeTimestamp(withdrawal.created_at)}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex h-[5.5rem] items-center justify-center rounded-2xl bg-black/20 text-sm text-white/30">
-                        No transfers yet
-                      </div>
-                    )}
-                  </div>
-                </div>
+          <Link
+            href={livePulseHref}
+            className="mt-4 block border-t border-white/[0.08] pt-4 active:opacity-90"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/32">Live Pulse</p>
+                <p className="mt-1 text-[1.05rem] font-semibold text-[#f5f7fb]">
+                  {latestActivitySummary ? latestActivitySummary.title : "Everything looks calm"}
+                </p>
               </div>
-            ) : (
-              <div className="grid h-full min-h-0 grid-cols-2 gap-3">
-                <MobileSummaryCard
-                  href="/orders"
-                  icon={Package}
-                  label="Latest order"
-                  title={latestOrder ? latestOrder.shoe : "No orders yet"}
-                  detail={
-                    latestOrder
-                      ? `${formatMoney(latestOrder.price)} - ${latestOrder.status}`
-                      : "Your next sale will show up here."
-                  }
-                  badge={latestOrder ? formatRelativeTimestamp(latestOrder.date) : undefined}
-                  iconToneClass="text-amber-300"
-                />
-                <MobileSummaryCard
-                  href="/messages"
-                  icon={MessageSquare}
-                  label="Inbox"
-                  title={latestMessage ? latestMessage.name : "No new messages"}
-                  detail={
-                    latestMessage
-                      ? latestMessage.lastMessage
-                      : "Customer messages and offers will land here."
-                  }
-                  badge={latestMessage ? formatRelativeTimestamp(latestMessage.time) : undefined}
-                  iconToneClass="text-[#8fb1ff]"
-                />
+              <span className="shrink-0 text-[10px] text-white/28">
+                {balanceData?.balances.updatedAt
+                  ? formatRelativeTimestamp(balanceData.balances.updatedAt)
+                  : "Waiting"}
+              </span>
+            </div>
 
-                <div className="col-span-2 flex min-h-0 flex-col rounded-[1.6rem] border border-white/[0.06] bg-white/[0.04] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
-                        Live Pulse
-                      </p>
-                      <p className="mt-1 text-base font-semibold text-[#f5f7fb]">
-                        {latestActivitySummary ? latestActivitySummary.title : "Everything looks calm"}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[10px] text-white/30">
-                      {balanceData?.balances.updatedAt
-                        ? formatRelativeTimestamp(balanceData.balances.updatedAt)
-                        : "Waiting"}
+            <div className="mt-2 grid grid-cols-[1.28fr_0.72fr] items-end gap-4">
+              <div className="min-w-0">
+                <p className="line-clamp-2 text-sm leading-6 text-white/43">
+                  {latestActivitySummary
+                    ? latestActivitySummary.detail
+                    : "Orders, payouts, and balance updates will show up here as your store moves."}
+                </p>
+                <div className="mt-3 flex items-center gap-5 text-xs">
+                  <div>
+                    <span className="block text-white/28">Transfer</span>
+                    <span className="mt-1 block font-medium text-white/74">
+                      {latestWithdrawal
+                        ? formatMoneyFromCents(clampNonNegativeCents(latestWithdrawal.amount_cents))
+                        : stripeConnected
+                          ? "None yet"
+                          : "Setup"}
                     </span>
                   </div>
-
-                  <div className="mt-3 grid flex-1 min-h-0 grid-cols-[1.12fr_0.88fr] gap-3">
-                    <div className="flex min-h-0 flex-col justify-between rounded-[1.35rem] bg-black/20 px-3.5 py-3">
-                      <div>
-                        <p className="text-sm leading-6 text-white/70">
-                          {latestActivitySummary
-                            ? latestActivitySummary.detail
-                            : "Orders, payouts, and balance updates will surface here as your store picks up pace."}
-                        </p>
-                      </div>
-
-                      <div className="mt-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">
-                          Latest transfer
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-[#f5f7fb]">
-                          {latestWithdrawal
-                            ? formatMoneyFromCents(clampNonNegativeCents(latestWithdrawal.amount_cents))
-                            : stripeConnected
-                              ? "None yet"
-                              : "Stripe needed"}
-                        </p>
-                        <div className="mt-1 flex items-center justify-between gap-2">
-                          <p className="truncate text-xs capitalize text-white/40">
-                            {latestWithdrawal
-                              ? latestWithdrawal.status.replace(/_/g, " ")
-                              : stripeConnected
-                                ? "Ready when you are"
-                                : "Connect in Settings"}
-                          </p>
-                          <button
-                            onClick={() => void openStripeDashboard()}
-                            className="shrink-0 text-xs text-[#8fb1ff]"
-                            type="button"
-                          >
-                            Stripe
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[1.35rem] bg-black/20 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Trend</p>
-                      <div className="mt-3 h-[5.75rem]">
-                        {chartData.length > 0 && chartData[0].month !== "No data" ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={chartData}>
-                              <defs>
-                                <linearGradient id="mobileRevenueGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#5f8fff" stopOpacity={0.3} />
-                                  <stop offset="95%" stopColor="#5f8fff" stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <Area
-                                type="monotone"
-                                dataKey="revenue"
-                                fill="url(#mobileRevenueGradient)"
-                                stroke="#7ca6ff"
-                                strokeWidth={2}
-                                dot={false}
-                                isAnimationActive
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-white/22">
-                            No trend yet
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-3 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-white/35">Conversations</span>
-                          <span className="font-medium text-white/75">{metrics.totalConversations}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-white/35">Avg order</span>
-                          <span className="font-medium text-white/75">
-                            {formatMoney(metrics.avgOrderValue)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                  <div>
+                    <span className="block text-white/28">Avg order</span>
+                    <span className="mt-1 block font-medium text-white/74">
+                      {formatMoney(metrics.avgOrderValue)}
+                    </span>
                   </div>
                 </div>
               </div>
-            )}
+
+              <div>
+                <div className="h-14">
+                  {chartData.length > 0 && chartData[0].month !== "No data" ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="mobileRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#5f8fff" stopOpacity={0.28} />
+                            <stop offset="95%" stopColor="#5f8fff" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="revenue"
+                          fill="url(#mobileRevenueGradient)"
+                          stroke="#7ca6ff"
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-[10px] text-white/22">
+                      No trend
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 text-right text-xs">
+                  <span className="text-white/28">Conversations </span>
+                  <span className="font-medium text-white/74">{metrics.totalConversations}</span>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          <div className="mt-auto flex items-center justify-between border-t border-white/[0.08] pt-4 text-xs">
+            <Link href="/inventory/bulk-import" className="text-white/38 active:text-white/70">
+              Bulk Import
+            </Link>
+            <button
+              onClick={() => void openStripeDashboard()}
+              className="text-[#8fb1ff]"
+              type="button"
+            >
+              Stripe Dashboard
+            </button>
           </div>
         </div>
+
+        {withdrawOpen && (
+          <div className="absolute inset-0 z-20 flex items-end bg-[#05060a]/80 backdrop-blur-md">
+            <button
+              aria-label="Close withdrawal"
+              className="absolute inset-0"
+              onClick={() => setWithdrawOpen(false)}
+              type="button"
+            />
+            <div className="relative w-full rounded-t-[2rem] border-t border-white/10 bg-[#0d1017]/96 px-5 pb-[calc(18px+env(safe-area-inset-bottom,0px))] pt-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Withdraw</p>
+                  <p className="mt-1 text-lg font-semibold text-[#f5f7fb]">Move funds to Stripe</p>
+                </div>
+                <button
+                  onClick={() => setWithdrawOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.05] text-white/65"
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Amount</p>
+                  <p className="mt-1 font-semibold text-[#f5f7fb]">
+                    {formatMoneyFromCents(withdrawalAmountCents)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Fee</p>
+                  <p className="mt-1 font-semibold text-white/74">
+                    {formatMoneyFromCents(transferFeeCents)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Receive</p>
+                  <p className="mt-1 font-semibold text-emerald-300">
+                    {formatMoneyFromCents(netTransferAmountCents)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="mobile-withdraw-amount" className="text-xs text-white/50">
+                  Withdrawal amount
+                </label>
+                <input
+                  id="mobile-withdraw-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={withdrawAmount}
+                  onChange={(event) => setWithdrawAmount(event.target.value)}
+                  placeholder="0.00"
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-[#f5f7fb] outline-none transition-colors focus:border-[#5f8fff]"
+                />
+                <p className="mt-2 text-xs text-white/35">
+                  Max {formatMoneyFromCents(availableForWithdrawalCents)}.
+                </p>
+              </div>
+
+              <div className="mt-5 flex gap-2">
+                <button
+                  onClick={() => void handleWithdrawalSubmit()}
+                  disabled={
+                    withdrawSubmitting ||
+                    !stripeConnected ||
+                    withdrawalAmountCents <= 0 ||
+                    withdrawalAmountCents > availableForWithdrawalCents ||
+                    netTransferAmountCents <= 0
+                  }
+                  className="relay-button-primary min-h-[3rem] flex-1 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {withdrawSubmitting ? "Processing..." : "Confirm"}
+                </button>
+                <button
+                  onClick={() => void openStripeDashboard()}
+                  className="relay-button-secondary min-h-[3rem] px-4"
+                >
+                  Stripe
+                </button>
+              </div>
+
+              {!balanceLoading && latestWithdrawal && (
+                <div className="mt-4 border-t border-white/[0.08] pt-3 text-xs text-white/42">
+                  Latest transfer {formatMoneyFromCents(clampNonNegativeCents(latestWithdrawal.amount_cents))} -{" "}
+                  {latestWithdrawal.status.replace(/_/g, " ")} -{" "}
+                  {formatRelativeTimestamp(latestWithdrawal.created_at)}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Desktop Dashboard (unchanged) */}

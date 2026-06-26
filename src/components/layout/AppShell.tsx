@@ -30,6 +30,7 @@ import {
   Wallet,
   CircleDollarSign,
   RefreshCcw,
+  Menu,
 } from "lucide-react";
 
 // Routes accessible without authentication
@@ -62,6 +63,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       router.replace("/auth/login");
     }
   }, [currentUser, isLoading, pathname, router]);
+
+  useEffect(() => {
+    if (!isSellerMobileDashboardRoute || typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    if (!mediaQuery.matches) {
+      return;
+    }
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverscroll = html.style.overscrollBehavior;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+
+    const preventTouchMove = (event: TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-allow-touch-scroll='true']")) {
+        return;
+      }
+
+      event.preventDefault();
+    };
+
+    document.addEventListener("touchmove", preventTouchMove, { passive: false });
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      html.style.overscrollBehavior = previousHtmlOverscroll;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+      document.removeEventListener("touchmove", preventTouchMove);
+    };
+  }, [isSellerMobileDashboardRoute]);
 
   // While checking auth for protected routes, show loading
   if (!isLoading && !currentUser && !isPublicRoute(pathname)) {
@@ -166,7 +209,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Drawer Nav Links */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
+        <nav
+          data-allow-touch-scroll="true"
+          className="flex-1 overflow-y-auto space-y-1 px-3 py-4"
+        >
           {mobileLinks.map((link) => {
             if (link.href === "divider") {
               return (
@@ -249,7 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div
           className={
             isSellerMobileDashboardRoute
-              ? "h-[calc(100dvh-64px-env(safe-area-inset-bottom,0px))] overflow-hidden p-0 lg:h-auto lg:overflow-visible lg:px-10 lg:pt-8 lg:pb-8"
+              ? "h-[100dvh] overflow-hidden overscroll-none p-0 lg:h-auto lg:overflow-visible lg:px-10 lg:pt-8 lg:pb-8"
               : "pt-3 lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10"
           }
         >
@@ -257,8 +303,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
+      {isSellerMobileDashboardRoute && (
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+14px)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#0d1017]/80 text-white/70 backdrop-blur-xl lg:hidden"
+          type="button"
+        >
+          <span className="relative flex items-center justify-center">
+            <Menu size={18} />
+            {(hasUnreadMessages || hasUnseenOrders) && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-[#5f8fff]" />
+            )}
+          </span>
+        </button>
+      )}
+
       {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden">
+      <div className={`lg:hidden ${isSellerMobileDashboardRoute ? "hidden" : ""}`}>
         <MobileBottomBar onMenuOpen={() => setMobileMenuOpen(true)} />
       </div>
     </div>
