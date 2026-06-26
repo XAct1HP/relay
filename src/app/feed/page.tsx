@@ -286,14 +286,14 @@ export default function FeedPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-20 pb-20 lg:pb-0">
         <Loader2 className="w-6 h-6 text-[#5f8fff] animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-12">
+    <div className="max-w-2xl mx-auto pb-20 lg:pb-12">
       <div className="mb-8">
         <p className="relay-eyebrow text-[#5f8fff]">YOUR FEED</p>
         <h1 className="relay-title">Discover</h1>
@@ -355,15 +355,15 @@ export default function FeedPage() {
 
               {/* Images */}
               {post.images.length > 0 && (
-                <div className="mb-4">
+                <div className="mb-4 -mx-4 sm:mx-0">
                   {post.images.length === 1 ? (
-                    <div className="w-full aspect-video rounded-xl overflow-hidden border border-white/5">
+                    <div className="w-full aspect-video rounded-none sm:rounded-xl overflow-hidden border border-white/5">
                       <img src={post.images[0]} alt="Post" className="w-full h-full object-cover" />
                     </div>
                   ) : post.images.length === 2 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {post.images.map((img, idx) => (
-                        <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-white/5">
+                        <div key={idx} className="aspect-square rounded-lg sm:rounded-xl overflow-hidden border border-white/5">
                           <img src={img} alt={"Post " + (idx + 1)} className="w-full h-full object-cover" />
                         </div>
                       ))}
@@ -371,7 +371,7 @@ export default function FeedPage() {
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {post.images.map((img, idx) => (
-                        <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-white/5">
+                        <div key={idx} className="aspect-square rounded-lg sm:rounded-xl overflow-hidden border border-white/5">
                           <img src={img} alt={"Post " + (idx + 1)} className="w-full h-full object-cover" />
                         </div>
                       ))}
@@ -394,7 +394,7 @@ export default function FeedPage() {
                       <h4 className="text-sm font-semibold text-relay-text mt-0.5 truncate">{post.relatedListing.name}</h4>
                       <p className="text-sm font-bold text-relay-accent mt-1">{"$" + post.relatedListing.price}</p>
                     </div>
-                    <span className="px-3 py-1.5 rounded-lg bg-relay-accent text-relay-bg text-xs font-semibold whitespace-nowrap flex-shrink-0">View</span>
+                    <span className="px-3 py-2 sm:py-1.5 rounded-lg bg-relay-accent text-relay-bg text-xs font-semibold whitespace-nowrap flex-shrink-0">View</span>
                   </div>
                 </Link>
               )}
@@ -405,13 +405,13 @@ export default function FeedPage() {
           <div ref={sentinelRef} className="h-px" />
 
           {loadingMore && (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-8 pb-20 lg:pb-0">
               <Loader2 className="w-5 h-5 text-[#5f8fff] animate-spin" />
             </div>
           )}
 
           {!hasMore && posts.length > 0 && (
-            <p className="text-center text-white/30 text-sm py-8">You&apos;re all caught up</p>
+            <p className="text-center text-white/30 text-sm py-8 pb-20 lg:pb-8">You&apos;re all caught up</p>
           )}
         </div>
       ) : (

@@ -295,9 +295,9 @@ function MetricCard({ icon: Icon, label, value, trend, trendValue }: any) {
 
 function ChartCard({ title, children }: any) {
   return (
-    <div className="relay-card p-6">
-      <h3 className="text-lg font-semibold text-[#f5f7fb] mb-6">{title}</h3>
-      <div className="h-80">
+    <div className="relay-card p-4 sm:p-6">
+      <h3 className="text-base sm:text-lg font-semibold text-[#f5f7fb] mb-4 sm:mb-6">{title}</h3>
+      <div className="h-52 sm:h-80">
         {children}
       </div>
     </div>
@@ -565,7 +565,7 @@ export default function DashboardPage() {
   }
 
   return (
-      <div className="space-y-8 pb-12">
+      <div className="space-y-8 pb-20 lg:pb-12">
         {/* Header */}
         <div className="space-y-6">
           <div>
@@ -573,10 +573,13 @@ export default function DashboardPage() {
             <h1 className="text-4xl font-bold text-[#f5f7fb]">Dashboard</h1>
           </div>
 
-          {/* Quick Actions */}
-          <div className="flex flex-wrap gap-3">
-            <Link href={`/profile/${currentUser?.username}`}>
-              <button className="relay-button-primary">View Profile</button>
+          {/* Quick Actions - horizontal scroll on mobile, wrap on desktop */}
+          <div className="flex gap-2 sm:gap-3 sm:flex-wrap overflow-x-auto pb-2 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
+            <Link href="/sell" className="flex-shrink-0">
+              <button className="relay-button-primary text-sm sm:text-base whitespace-nowrap">Create Listing</button>
+            </Link>
+            <Link href={`/profile/${currentUser?.username}`} className="flex-shrink-0">
+              <button className="relay-button-secondary text-sm sm:text-base whitespace-nowrap">View Profile</button>
             </Link>
             <button
               onClick={async () => {
@@ -589,24 +592,21 @@ export default function DashboardPage() {
                   alert(err.message || 'Failed to open Stripe dashboard')
                 }
               }}
-              className="relay-button-secondary flex items-center gap-2"
+              className="relay-button-secondary flex items-center gap-2 text-sm sm:text-base whitespace-nowrap flex-shrink-0"
             >
               <ExternalLink className="w-4 h-4" />
-              Stripe Dashboard
+              Stripe
             </button>
-            <Link href="/sell">
-              <button className="relay-button-primary">Create Listing</button>
-            </Link>
-            <Link href="/inventory/bulk-import">
-              <button className="relay-button-secondary flex items-center gap-2">
+            <Link href="/inventory/bulk-import" className="flex-shrink-0">
+              <button className="relay-button-secondary flex items-center gap-2 text-sm sm:text-base whitespace-nowrap">
                 <FileSpreadsheet className="w-4 h-4" />
-                Bulk Import
+                Import
               </button>
             </Link>
-            <Link href="/tags">
-              <button className="relay-button-secondary flex items-center gap-2">
+            <Link href="/tags" className="flex-shrink-0">
+              <button className="relay-button-secondary flex items-center gap-2 text-sm sm:text-base whitespace-nowrap">
                 <Tag className="w-4 h-4" />
-                Relay Tags
+                Tags
               </button>
             </Link>
           </div>
@@ -657,11 +657,11 @@ export default function DashboardPage() {
               </div>
 
               {/* Large total balance */}
-              <div className="mb-6">
-                <p className="text-4xl sm:text-5xl font-bold text-[#f5f7fb] tracking-tight">
+              <div className="mb-6 text-center sm:text-left">
+                <p className="text-3xl sm:text-5xl font-bold text-[#f5f7fb] tracking-tight">
                   {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents + availableBalanceCents)}
                 </p>
-                <p className="text-white/40 text-sm mt-2">Total balance across all states</p>
+                <p className="text-white/40 text-xs sm:text-sm mt-2">Total balance across all states</p>
               </div>
 
               {/* Composition bar */}
@@ -1082,12 +1082,12 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Orders and Messages */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Recent Orders */}
-          <div className="relay-card p-5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-[#f5f7fb] flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-[#5f8fff]" />
+          <div className="relay-card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-semibold text-[#f5f7fb] flex items-center gap-2">
+                <ShoppingCart className="w-4 sm:w-5 h-4 sm:h-5 text-[#5f8fff]" />
                 Recent Orders
               </h3>
               <Link href="/orders">
@@ -1110,10 +1110,10 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Messages */}
-          <div className="relay-card p-5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-[#f5f7fb] flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-[#5f8fff]" />
+          <div className="relay-card p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h3 className="text-base sm:text-lg font-semibold text-[#f5f7fb] flex items-center gap-2">
+                <MessageSquare className="w-4 sm:w-5 h-4 sm:h-5 text-[#5f8fff]" />
                 Recent Messages
               </h3>
               <Link href="/messages">

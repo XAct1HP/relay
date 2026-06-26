@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import {
   BUYER_DISPUTE_CATEGORIES,
@@ -26,6 +27,7 @@ import {
   ChevronDown,
   QrCode,
   Loader2,
+  Camera,
 } from "lucide-react"
 import { normalizeShippingAddress, toShippoAddress } from "@/lib/shipping-addresses"
 
@@ -1507,7 +1509,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20 lg:pb-0">
       {/* Error banner */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center gap-3">
@@ -1576,9 +1578,9 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
       {/* Order Summary Card */}
       <div className="relay-card p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Shoe Image & Info */}
-          <div className="md:col-span-1">
+          <div className="lg:col-span-1">
             <div className="bg-white/5 aspect-square rounded-xl mb-4 flex items-center justify-center overflow-hidden">
               {order.shoeImage && order.shoeImage !== "/placeholder-shoe.png" ? (
                 <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="w-full h-full object-cover" />
@@ -1593,7 +1595,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           {/* Price Breakdown */}
-          <div className="md:col-span-2">
+          <div className="lg:col-span-2">
             <h3 className="text-sm font-semibold text-[#f5f7fb] mb-4">Price Breakdown</h3>
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between text-[#7ca6ff]">
@@ -1778,33 +1780,49 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               </div>
             </div>
 
-            {/* Start Authentication — always show QR code for mobile-only capture */}
-            <button
-              onClick={() => setShowQrCode((prev) => !prev)}
-              className="relay-button-primary w-full flex items-center justify-center gap-2 mb-4"
-            >
-              <QrCode className="w-4 h-4" />
-              {showQrCode ? "Hide QR Code" : "Start Authentication"}
-            </button>
+            {/* Mobile: Direct authentication button */}
+            <div className="block lg:hidden mb-4">
+              <Link
+                href={`/mobile-auth/${order.id}`}
+                className="bg-[#5f8fff] hover:bg-[#4a7aef] text-white font-medium py-3 px-6 rounded-xl w-full flex items-center justify-center gap-2 transition-colors"
+              >
+                <Camera className="w-5 h-5" />
+                Start Authentication
+              </Link>
+              <p className="text-xs text-white/40 text-center mt-2">
+                Take custody photos directly on this device
+              </p>
+            </div>
 
-            {showQrCode && (
-              <div className="bg-white/5 border border-white/10 rounded-lg p-6 mb-4 text-center">
-                <p className="text-sm text-[#7ca6ff] mb-1 font-semibold">Scan with your phone to continue</p>
-                <p className="text-xs text-white/40 mb-4">
-                  Live camera photos are required — you must use your phone to take real-time photos of the item.
-                </p>
-                <img
-                  src={qrUrl}
-                  alt="QR Code for mobile authentication"
-                  className="mx-auto rounded-lg"
-                  width={200}
-                  height={200}
-                />
-                <p className="text-xs text-white/30 mt-4">
-                  Make sure you&apos;re logged into Relay on your phone before scanning.
-                </p>
-              </div>
-            )}
+            {/* Desktop: QR code for mobile-only capture */}
+            <div className="hidden lg:block">
+              <button
+                onClick={() => setShowQrCode((prev) => !prev)}
+                className="relay-button-primary w-full flex items-center justify-center gap-2 mb-4"
+              >
+                <QrCode className="w-4 h-4" />
+                {showQrCode ? "Hide QR Code" : "Start Authentication"}
+              </button>
+
+              {showQrCode && (
+                <div className="bg-white/5 border border-white/10 rounded-lg p-6 mb-4 text-center">
+                  <p className="text-sm text-[#7ca6ff] mb-1 font-semibold">Scan with your phone to continue</p>
+                  <p className="text-xs text-white/40 mb-4">
+                    Live camera photos are required — you must use your phone to take real-time photos of the item.
+                  </p>
+                  <img
+                    src={qrUrl}
+                    alt="QR Code for mobile authentication"
+                    className="mx-auto rounded-lg"
+                    width={200}
+                    height={200}
+                  />
+                  <p className="text-xs text-white/30 mt-4">
+                    Make sure you&apos;re logged into Relay on your phone before scanning.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Shipping deadline warning */}
             {order.shippingDeadline && (

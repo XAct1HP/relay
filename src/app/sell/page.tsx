@@ -741,7 +741,7 @@ export default function SellPage() {
 
   if (publishSuccess) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto px-4 sm:px-0">
           <div className="relay-card p-12 text-center">
             <div className="flex justify-center mb-6">
               <div className={`w-16 h-16 rounded-full flex items-center justify-center ${publishedNeedsReview ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
@@ -782,7 +782,7 @@ export default function SellPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto pb-20 lg:pb-0">
         {/* Page Header */}
         <div className="mb-8">
           <div className="relay-eyebrow text-relay-accent">NEW LISTING</div>
@@ -851,7 +851,7 @@ export default function SellPage() {
               return (
                 <div key={stepNum} className="flex-1 flex items-center">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
+                    className={`w-8 h-8 sm:w-10 sm:h-10 text-sm sm:text-base rounded-full flex items-center justify-center font-semibold transition-all ${
                       isActive
                         ? "bg-relay-accent-strong text-white"
                         : isCompleted
@@ -859,14 +859,14 @@ export default function SellPage() {
                         : "bg-white/5 text-relay-muted border border-white/10"
                     }`}
                   >
-                    {isCompleted ? <Check size={20} /> : stepNum}
+                    {isCompleted ? <Check size={16} className="sm:w-5 sm:h-5" /> : stepNum}
                   </div>
                   <div className={`hidden sm:block text-xs font-medium ml-2 ${isActive ? "text-relay-accent" : "text-relay-subtle"}`}>
                     {label}
                   </div>
                   {index < currentStepLabels.length - 1 && (
                     <div
-                      className={`flex-1 h-1 mx-2 rounded-full ${
+                      className={`flex-1 h-1 mx-1 sm:mx-2 rounded-full ${
                         isCompleted ? "bg-emerald-500/30" : "bg-white/10"
                       }`}
                     ></div>
@@ -2075,7 +2075,7 @@ export default function SellPage() {
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex gap-4 mt-8 pt-8 border-t border-white/10">
+          <div className="flex flex-col sm:flex-row gap-4 mt-8 pt-8 border-t border-white/10">
             {currentStep > 1 && (
               <button
                 onClick={handlePreviousStep}

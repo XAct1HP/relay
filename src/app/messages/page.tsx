@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Send,
   Search,
@@ -11,6 +11,7 @@ import {
   X,
   MoreVertical,
   MessageCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { CustomOfferModal } from "@/components/messages/CustomOfferModal";
 import { formatOfferListingName } from "@/lib/offers";
@@ -198,16 +199,16 @@ function ConversationList({
   conversations,
   selectedId,
   onSelect,
-  onMobileSelect,
   searchQuery,
   onSearchChange,
+  mobileHidden,
 }: {
   conversations: ConversationData[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onMobileSelect: (id: string) => void;
   searchQuery: string;
   onSearchChange: (value: string) => void;
+  mobileHidden: boolean;
 }) {
   const filtered = conversations.filter((c) => {
     const name = c.otherUser?.display_name || c.otherUser?.full_name || "";
@@ -215,7 +216,7 @@ function ConversationList({
   });
 
   return (
-    <div className="w-full lg:w-80 lg:border-r border-white/10 flex flex-col max-h-[calc(100vh-200px)] bg-white/[0.02]">
+    <div className={`w-full lg:w-80 lg:border-r border-white/10 flex flex-col h-[calc(100vh-200px)] bg-white/[0.02] ${mobileHidden ? 'hidden lg:flex' : ''}`}>
       <div className="p-4 border-b border-white/10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -236,11 +237,8 @@ function ConversationList({
           return (
             <button
               key={conv.id}
-              onClick={() => {
-                onSelect(conv.id);
-                onMobileSelect(conv.id);
-              }}
-              className={`w-full p-4 border-b border-white/5 hover:bg-white/[0.03] transition-colors text-left ${
+              onClick={() => onSelect(conv.id)}
+              className={`w-full p-4 min-h-[56px] border-b border-white/5 hover:bg-white/[0.03] transition-colors text-left ${
                 selectedId === conv.id ? "bg-white/[0.06]" : ""
               }`}
             >
@@ -293,6 +291,7 @@ function ChatArea({
   onAcceptOffer,
   onDeclineOffer,
   onGoToCheckout,
+  onBack,
 }: {
   conversation: ConversationData | null;
   currentUserId: string;
@@ -303,6 +302,7 @@ function ChatArea({
   onAcceptOffer: (messageId: string) => Promise<void>;
   onDeclineOffer: (messageId: string) => Promise<void>;
   onGoToCheckout: (msg: MessageData) => void;
+  onBack: () => void;
 }) {
   const [inputValue, setInputValue] = useState("");
   const [sending, setSending] = useState(false);
@@ -355,6 +355,12 @@ function ChatArea({
     <div className="flex-1 flex flex-col bg-white/[0.01]">
       <div className="border-b border-white/10 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="lg:hidden p-1.5 -ml-1.5 hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 text-white/60" />
+          </button>
           <Avatar name={otherName} avatarUrl={conversation.otherUser?.avatar_url} />
           <div>
             <div className="flex items-center gap-1.5">
@@ -443,7 +449,7 @@ function ChatArea({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-white/10 p-4 space-y-3">
+      <div className="border-t border-white/10 p-4 pb-20 lg:pb-4 space-y-3">
         {messagingDisabledReason && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
             <p className="text-sm text-amber-200">{messagingDisabledReason}</p>
@@ -489,7 +495,6 @@ function ChatArea({
 }
 
 export default function MessagesPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useAuth();
   const { markMessagesRead } = useNotificationStore();
@@ -603,8 +608,8 @@ export default function MessagesPage() {
 
       setConversations(formatted);
 
-      // Auto-select first conversation if none selected
-      if (!selectedConversation && formatted.length > 0) {
+      // Auto-select first conversation if none selected (desktop only)
+      if (!selectedConversation && formatted.length > 0 && window.innerWidth >= 1024) {
         setSelectedConversation(formatted[0].id);
       }
     } catch (error) {
@@ -906,18 +911,13 @@ export default function MessagesPage() {
             conversations={conversations}
             selectedId={selectedConversation}
             onSelect={setSelectedConversation}
-            onMobileSelect={(id) => {
-              // On mobile, navigate to the dedicated conversation page
-              if (window.innerWidth < 1024) {
-                router.push(`/messages/${id}`);
-              }
-            }}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            mobileHidden={!!selectedConversation}
           />
 
-          {/* Chat area: hidden on mobile, visible on lg+ */}
-          <div className="hidden lg:flex flex-1">
+          {/* Chat area: hidden on mobile when no conversation selected, always visible on lg+ */}
+          <div className={`flex-1 ${!selectedConversation ? 'hidden lg:flex' : 'flex'}`}>
             <ChatArea
               conversation={currentConv}
               currentUserId={currentUser?.id || ""}
@@ -928,6 +928,7 @@ export default function MessagesPage() {
               onAcceptOffer={handleAcceptOffer}
               onDeclineOffer={handleDeclineOffer}
               onGoToCheckout={handleGoToCheckout}
+              onBack={() => setSelectedConversation(null)}
             />
           </div>
         </div>

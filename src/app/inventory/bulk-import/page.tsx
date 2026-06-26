@@ -104,17 +104,17 @@ export default function BulkImportPage() {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-20 lg:pb-0">
       <div className="space-y-2 mb-8">
         <p className="relay-eyebrow text-[#5f8fff]">INVENTORY</p>
         <h1 className="relay-title">Bulk Import</h1>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <Link href="/dashboard/inventory" className="relay-button-secondary">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+        <Link href="/dashboard/inventory" className="w-full sm:w-auto relay-button-secondary text-center">
           Back to My Listings
         </Link>
-        <Link href="/sell" className="relay-button-primary">
+        <Link href="/sell" className="w-full sm:w-auto relay-button-primary text-center">
           Create Single Listing
         </Link>
       </div>
@@ -154,7 +154,7 @@ export default function BulkImportPage() {
                     )}
                   </div>
                   <span
-                    className="text-xs font-medium tracking-wide transition-colors duration-300"
+                    className="text-[10px] sm:text-xs font-medium tracking-wide transition-colors duration-300"
                     style={{ color: isActive ? "#7ca6ff" : "rgba(255,255,255,0.35)" }}
                   >
                     {s.label}
@@ -274,12 +274,12 @@ export default function BulkImportPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <button
               type="button"
               onClick={runPreview}
               disabled={!selectedFile || isPending}
-              className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isPending && lastAction === "preview" ? "Generating Preview..." : "Generate Preview"}
             </button>
@@ -287,7 +287,7 @@ export default function BulkImportPage() {
               type="button"
               onClick={runImport}
               disabled={!canImport}
-              className="relay-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto relay-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isPending && lastAction === "import" ? "Importing..." : "Import Inventory"}
             </button>
@@ -303,7 +303,7 @@ export default function BulkImportPage() {
                     fileInputRef.current.value = "";
                   }
                 }}
-                className="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-relay-text font-medium transition-colors"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-relay-text font-medium transition-colors"
               >
                 <RefreshCw size={16} />
                 Reset
@@ -452,7 +452,7 @@ export default function BulkImportPage() {
           </div>
 
           {/* Metric cards with colored top borders */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto">
             <MetricCard label="Rows Read" value={report.rows_read} color="#5f8fff" />
             <MetricCard label="Valid Rows" value={report.rows_valid} color="#34d399" />
             <MetricCard label="Invalid Rows" value={report.rows_invalid} color="#ef4444" />

@@ -488,7 +488,7 @@ export default function SellerInventoryDashboard() {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-20 lg:pb-12">
       <div className="space-y-2">
         <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
         <h1 className="relay-title">Inventory Dashboard</h1>
@@ -558,7 +558,7 @@ export default function SellerInventoryDashboard() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto flex-nowrap scrollbar-hide pb-1">
           {(["all", "active", "inactive", "sold_out", "low_stock"] as const).map((status) => (
             <button
               key={status}
@@ -582,7 +582,7 @@ export default function SellerInventoryDashboard() {
       </div>
 
       {selectedSourceCount > 0 && (
-        <div className="relay-card p-4 sm:p-5 space-y-4">
+        <div className="relay-card p-4 sm:p-5 space-y-4 sticky top-0 z-10">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
               <p className="text-relay-text font-semibold">Bulk edit selected inventory</p>
@@ -599,8 +599,8 @@ export default function SellerInventoryDashboard() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px_auto] gap-3 items-end">
-            <label className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_220px_auto] gap-3 items-end">
+            <label className="space-y-2 sm:col-span-2 lg:col-span-1">
               <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">Bulk Action</span>
               <select
                 value={bulkAction}
@@ -942,7 +942,7 @@ export default function SellerInventoryDashboard() {
                             </div>
 
                             {variant.id ? (
-                              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
                                 <label className="space-y-2">
                                   <span className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                                     Price

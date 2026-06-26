@@ -198,14 +198,14 @@ export default function ProfileStudioPage() {
   const activeTheme = THEMES.find((t) => t.id === selectedTheme) || THEMES[0];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-20 lg:pb-12">
       <div className="space-y-2 mb-8">
         <p className="relay-eyebrow text-[#5f8fff]">CUSTOMIZE</p>
         <h1 className="relay-title">Profile Studio</h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+        <div className="order-last lg:order-first lg:col-span-2 space-y-6">
           {/* Section 1 - Branding */}
           <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
             {/* Gradient top accent bar */}
@@ -425,9 +425,12 @@ export default function ProfileStudioPage() {
         </div>
 
         {/* Right Section - Profile Preview Card */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-6 space-y-4">
+        <div className="order-first lg:order-last lg:col-span-1">
+          <div className="lg:sticky lg:top-6 space-y-4">
             {/* Live Preview Card */}
+            <div className="relative max-h-[300px] lg:max-h-none overflow-hidden rounded-[1.5rem]">
+            {/* Gradient fade overlay for mobile */}
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 z-10 lg:hidden" style={{ background: 'linear-gradient(to top, #06070a 0%, transparent 100%)' }} />
             <div
               className="backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden transition-shadow duration-500"
               style={{
@@ -495,6 +498,7 @@ export default function ProfileStudioPage() {
                 </div>
                 <p className="text-[10px] mt-3 text-center font-medium tracking-wide uppercase" style={{ color: activeTheme.textHighlight + '90' }}>{activeTheme.name} theme</p>
               </div>
+            </div>
             </div>
 
             {/* Action buttons */}

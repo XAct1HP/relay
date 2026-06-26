@@ -353,7 +353,7 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-20 lg:pb-0">
       {/* Header */}
       <div className="space-y-2 mb-8">
         <p className="relay-eyebrow text-relay-accent">ACCOUNT</p>
@@ -361,7 +361,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Section Tabs */}
-      <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+      <div className="flex gap-2 mb-8 overflow-x-auto scrollbar-hide flex-nowrap pb-2">
         {sections.map((section) => (
           <button
             key={section.id}
@@ -744,7 +744,7 @@ export default function SettingsPage() {
                 <p className="text-amber-100/70 text-xs mt-4 mb-2">
                   {generatedApiKey.name} · {generatedApiKey.prefix}...
                 </p>
-                <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 overflow-x-auto">
                   <p className="text-white font-mono text-sm break-all">{generatedApiKey.value}</p>
                 </div>
               </div>
@@ -919,7 +919,7 @@ export default function SettingsPage() {
           </p>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="px-6 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-medium rounded-lg transition-colors border border-red-500/30"
+            className="w-full sm:w-auto px-6 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 font-medium rounded-lg transition-colors border border-red-500/30"
           >
             Delete Account
           </button>
@@ -928,11 +928,11 @@ export default function SettingsPage() {
 
         {/* Save Changes */}
         {(activeSection === 'profile' || activeSection === 'seller') && (
-        <div className="mt-8 flex gap-3">
+        <div className="mt-8 flex flex-col sm:flex-row gap-3">
           <button
             onClick={handleSaveChanges}
             disabled={saving}
-            className="px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
@@ -945,7 +945,7 @@ export default function SettingsPage() {
               setVacationModeEnabled(!!currentUser?.vacation_mode_enabled)
               setOffersEnabled(!!currentUser?.offers_enabled)
             }}
-            className="px-6 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] font-medium rounded-lg transition-colors border border-white/10"
+            className="w-full sm:w-auto px-6 py-2 bg-white/[0.04] text-white/70 hover:bg-white/[0.08] font-medium rounded-lg transition-colors border border-white/10"
           >
             Cancel
           </button>
