@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, Plus, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, Plus, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote, X } from "lucide-react";
 import {
   LineChart,
   Line,
