@@ -49,6 +49,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isSellerMobileDashboardRoute =
+    pathname === "/dashboard" && currentUser?.role === "seller";
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -244,7 +246,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Mobile top bar removed - navigation via bottom bar */}
 
         {/* Content Area */}
-        <div className="pt-3 lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10">
+        <div
+          className={
+            isSellerMobileDashboardRoute
+              ? "h-[calc(100dvh-64px-env(safe-area-inset-bottom,0px))] overflow-hidden p-0 lg:h-auto lg:overflow-visible lg:px-10 lg:pt-8 lg:pb-8"
+              : "pt-3 lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10"
+          }
+        >
           {children}
         </div>
       </main>
