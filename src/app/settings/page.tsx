@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [generatedApiKey, setGeneratedApiKey] = useState<GeneratedApiKeyState | null>(null)
   const [apiKeyError, setApiKeyError] = useState('')
   const [apiKeySuccess, setApiKeySuccess] = useState('')
+  const [activeSection, setActiveSection] = useState('profile')
 
   // Handle return from Stripe onboarding
   useEffect(() => {
@@ -333,13 +334,23 @@ export default function SettingsPage() {
     }
   }
 
+  const isApprovedSeller = sellerApplicationStatus === 'approved' && currentUser?.role === 'seller'
+
   if (loading) {
     return (
       <div className="text-center text-white/40 py-12">Loading...</div>
     )
   }
 
-  const isApprovedSeller = sellerApplicationStatus === 'approved' && currentUser?.role === 'seller'
+  const sections = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'security', label: 'Security' },
+    { id: 'notifications', label: 'Notifications' },
+    ...(isApprovedSeller ? [{ id: 'seller', label: 'Seller' }] : []),
+    ...(isApprovedSeller ? [{ id: 'api-keys', label: 'API Keys' }] : []),
+    ...((currentUser?.role === 'seller' || currentUser?.role === 'admin' || (sellerApplicationStatus && sellerApplicationStatus !== 'none')) ? [{ id: 'accounts', label: 'Connected Accounts' }] : []),
+    { id: 'danger', label: 'Danger Zone' },
+  ]
 
   return (
     <div className="space-y-6 pb-12">
@@ -349,9 +360,27 @@ export default function SettingsPage() {
         <h1 className="relay-title">Settings</h1>
       </div>
 
+      {/* Section Tabs */}
+      <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+        {sections.map((section) => (
+          <button
+            key={section.id}
+            onClick={() => setActiveSection(section.id)}
+            className={`px-4 py-2 rounded-full whitespace-nowrap font-medium transition-all text-sm ${
+              activeSection === section.id
+                ? 'bg-[#5f8fff] text-white'
+                : 'bg-white/[0.04] text-white/60 border border-white/10 hover:bg-white/[0.08]'
+            }`}
+          >
+            {section.label}
+          </button>
+        ))}
+      </div>
+
       {/* Content */}
       <div>
         {/* Profile Information */}
+        {activeSection === 'profile' && (<>
         <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
           <h2 className="text-xl font-semibold text-white mb-6">Profile Information</h2>
 
@@ -485,8 +514,10 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+        </>)}
 
         {/* Password */}
+        {activeSection === 'security' && (
         <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
           <h2 className="text-xl font-semibold text-white mb-6">Password</h2>
 
@@ -538,8 +569,10 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+        )}
 
         {/* Notifications */}
+        {activeSection === 'notifications' && (
         <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
           <h2 className="text-xl font-semibold text-white mb-6">Notifications</h2>
 
@@ -587,8 +620,9 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+        )}
 
-        {isApprovedSeller && (
+        {activeSection === 'seller' && isApprovedSeller && (
           <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
             <h2 className="text-xl font-semibold text-white mb-6">Seller Settings</h2>
 
@@ -650,7 +684,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {isApprovedSeller && (
+        {activeSection === 'api-keys' && isApprovedSeller && (
           <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
             <div className="flex items-start gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-[#5f8fff]/15 border border-[#5f8fff]/25 flex items-center justify-center flex-shrink-0">
@@ -787,7 +821,7 @@ export default function SettingsPage() {
         )}
 
         {/* Connected Accounts — only show for sellers or users with an active seller application */}
-        {(currentUser?.role === 'seller' || currentUser?.role === 'admin' || (sellerApplicationStatus && sellerApplicationStatus !== 'none')) && (
+        {activeSection === 'accounts' && (currentUser?.role === 'seller' || currentUser?.role === 'admin' || (sellerApplicationStatus && sellerApplicationStatus !== 'none')) && (
           <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
             <h2 className="text-xl font-semibold text-white mb-6">Connected Accounts</h2>
 
@@ -876,6 +910,7 @@ export default function SettingsPage() {
         )}
 
         {/* Danger Zone */}
+        {activeSection === 'danger' && (
         <div className="bg-red-500/10 backdrop-blur-xl rounded-[1.5rem] border border-red-500/30 p-8">
           <h2 className="text-xl font-semibold text-red-300 mb-4">Danger Zone</h2>
           <p className="text-white/60 text-sm mb-6">
@@ -889,8 +924,10 @@ export default function SettingsPage() {
             Delete Account
           </button>
         </div>
+        )}
 
         {/* Save Changes */}
+        {(activeSection === 'profile' || activeSection === 'seller') && (
         <div className="mt-8 flex gap-3">
           <button
             onClick={handleSaveChanges}
@@ -913,6 +950,7 @@ export default function SettingsPage() {
             Cancel
           </button>
         </div>
+        )}
       </div>
 
       {/* Delete Confirmation Modal */}

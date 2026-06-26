@@ -105,16 +105,9 @@ export default function BulkImportPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Page header with gradient accent */}
-      <div className="relative overflow-hidden rounded-2xl p-6" style={{ background: "linear-gradient(135deg, rgba(95,143,255,0.12) 0%, rgba(124,166,255,0.06) 50%, rgba(245,247,251,0.03) 100%)" }}>
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #5f8fff 0%, transparent 70%)", transform: "translate(30%, -40%)" }} />
-        <div className="relative space-y-2">
-          <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
-          <h1 className="relay-title">Bulk Import</h1>
-          <p className="text-relay-subtle max-w-3xl">
-            Upload a CSV of SKU inventory to preview validation results, then import it into your existing Relay SKU listings.
-          </p>
-        </div>
+      <div className="space-y-2 mb-8">
+        <p className="relay-eyebrow text-[#5f8fff]">INVENTORY</p>
+        <h1 className="relay-title">Bulk Import</h1>
       </div>
 
       <div className="flex flex-wrap gap-3">

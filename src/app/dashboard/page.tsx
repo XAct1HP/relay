@@ -617,88 +617,127 @@ export default function DashboardPage() {
           {/* Hero Balance Display */}
           <div className="relay-card relative overflow-hidden">
             {/* Subtle gradient background accent */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#5f8fff]/[0.06] via-transparent to-emerald-500/[0.04] pointer-events-none" />
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#5f8fff]/[0.03] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#5f8fff]/[0.08] via-transparent to-emerald-500/[0.04] pointer-events-none" />
+            <div className="absolute top-0 right-0 w-80 h-80 bg-[#5f8fff]/[0.04] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/[0.03] rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 pointer-events-none" />
 
             <div className="relative p-6 sm:p-8">
-              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <div className="p-2 rounded-xl bg-[#5f8fff]/15">
-                      <Wallet className="w-5 h-5 text-[#7ca6ff]" />
-                    </div>
+              {/* Top row: label + actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-[#5f8fff]/15 border border-[#5f8fff]/20">
+                    <Wallet className="w-5 h-5 text-[#7ca6ff]" />
+                  </div>
+                  <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-[#7ca6ff] font-semibold">Relay Balance</p>
-                    {isFoundingSeller && <FoundingSellerBadge compact />}
                   </div>
-                  <p className="text-white/50 text-sm">
-                    Launch balances keep things simple: pending first, then available.
-                  </p>
+                  {isFoundingSeller && <FoundingSellerBadge compact />}
                 </div>
-
-                <div className="flex flex-col items-start lg:items-end gap-4">
-                  <div className="flex items-center gap-3">
-                    {balanceData?.profile.stripeConnected ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400/70">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        Stripe connected
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-amber-400/70">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        Stripe not connected
-                      </span>
-                    )}
-                    <button
-                      onClick={() => setWithdrawOpen((open) => !open)}
-                      disabled={!balanceData?.profile.stripeConnected || availableForWithdrawalCents <= 0}
-                      className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                    >
-                      <Banknote className="w-4 h-4" />
-                      Withdraw
-                    </button>
-                  </div>
+                <div className="flex items-center gap-3">
+                  {balanceData?.profile.stripeConnected ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400/70">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Stripe connected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-amber-400/70">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      Stripe not connected
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setWithdrawOpen((open) => !open)}
+                    disabled={!balanceData?.profile.stripeConnected || availableForWithdrawalCents <= 0}
+                    className="relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  >
+                    <Banknote className="w-4 h-4" />
+                    Withdraw
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Large total balance */}
+              <div className="mb-6">
+                <p className="text-4xl sm:text-5xl font-bold text-[#f5f7fb] tracking-tight">
+                  {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents + availableBalanceCents)}
+                </p>
+                <p className="text-white/40 text-sm mt-2">Total balance across all states</p>
+              </div>
+
+              {/* Composition bar */}
+              {!balanceLoading && (pendingBalanceCents + availableBalanceCents) > 0 && (
+                <div className="mb-6">
+                  <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-white/[0.04]">
+                    {(() => {
+                      const total = pendingBalanceCents + availableBalanceCents;
+                      const pendingPct = total > 0 ? (pendingBalanceCents / total) * 100 : 0;
+                      const availablePct = total > 0 ? (availableBalanceCents / total) * 100 : 0;
+                      return (
+                        <>
+                          {pendingPct >= 0.5 && (
+                            <div
+                              className="h-full rounded-full bg-[#5f8fff] transition-all"
+                              style={{ width: `${Math.max(pendingPct, 4)}%` }}
+                              title={`Pending: ${formatMoneyFromCents(pendingBalanceCents)} (${pendingPct.toFixed(1)}%)`}
+                            />
+                          )}
+                          {availablePct >= 0.5 && (
+                            <div
+                              className="h-full rounded-full bg-emerald-400 transition-all"
+                              style={{ width: `${Math.max(availablePct, 4)}%` }}
+                              title={`Available: ${formatMoneyFromCents(availableBalanceCents)} (${availablePct.toFixed(1)}%)`}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-6 mt-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#5f8fff]" />
+                      <span className="text-xs text-white/50">Pending</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                      <span className="text-xs text-white/50">Available</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending / Available cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4">
                   <p className="text-white/45 text-xs uppercase tracking-[0.16em] mb-2">
-                    Pending Balance
+                    Pending
                   </p>
-                  <p className="text-3xl font-bold text-[#f5f7fb] tracking-tight">
+                  <p className="text-2xl font-bold text-[#f5f7fb] tracking-tight">
                     {balanceLoading ? "..." : formatMoneyFromCents(pendingBalanceCents)}
                   </p>
-                  <p className="text-white/55 text-sm mt-3">
-                    Pending funds become available after the order is completed and payment settlement clears.
+                  <p className="text-white/45 text-xs mt-2">
+                    Clears after order completion and settlement
                   </p>
                 </div>
                 <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4">
                   <p className="text-white/45 text-xs uppercase tracking-[0.16em] mb-2">
-                    Available Balance
+                    Available
                   </p>
-                  <p className="text-3xl font-bold text-emerald-300 tracking-tight">
+                  <p className="text-2xl font-bold text-emerald-300 tracking-tight">
                     {balanceLoading ? "..." : formatMoneyFromCents(availableBalanceCents)}
                   </p>
-                  <p className="text-white/55 text-sm mt-3">
-                    Available funds can be withdrawn or used to buy on Relay.
+                  <p className="text-white/45 text-xs mt-2">
+                    Ready to withdraw or use on Relay
                   </p>
                 </div>
               </div>
 
+              {/* Info banners */}
               <div className="mt-5 grid grid-cols-1 gap-3">
                 {isFoundingSeller && (
                   <div className="rounded-xl bg-amber-500/[0.08] border border-amber-500/20 px-4 py-3">
                     <p className="text-amber-200 text-sm font-medium">Founding Seller Benefits</p>
-                    <div className="mt-2 space-y-1 text-amber-100/80 text-sm">
-                      <p>Free monthly Relay tag shipments</p>
-                      <p>Direct support and feedback access</p>
-                      <p>API onboarding assistance</p>
-                      <p>Early feature access</p>
-                      <p>Priority visibility where already supported</p>
-                      <p>Founding Seller badge across Relay</p>
-                    </div>
-                    <p className="text-amber-100/65 text-xs mt-3">
-                      Founding seller status is a launch program badge. Payout timing is the same as standard sellers at launch.
+                    <p className="text-amber-100/70 text-xs mt-2">
+                      Free monthly tag shipments, direct support access, API onboarding assistance, early feature access, priority visibility, and Founding Seller badge across Relay.
                     </p>
                   </div>
                 )}
@@ -872,7 +911,7 @@ export default function DashboardPage() {
                   <p className="text-white/25 text-xs mt-1">Activity will appear here as orders come in</p>
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative max-h-[400px] overflow-y-auto pr-1">
                   {/* Timeline line */}
                   <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/[0.06]" />
 
@@ -1097,42 +1136,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Stats Bottom */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="relay-card p-4 sm:p-5 text-center">
-            <TrendingUp className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
-            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Total Sales</p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
-              {metrics.totalSales}
-            </p>
-            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">lifetime orders</p>
-          </div>
-
-          <div className="relay-card p-4 sm:p-5 text-center">
-            <DollarSign className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
-            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Avg Order</p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
-              {"$"}{metrics.avgOrderValue.toFixed(0)}
-            </p>
-            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">per transaction</p>
-          </div>
-
-          <div className="relay-card p-4 sm:p-5 text-center">
-            <MessageSquare className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
-            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Conversations</p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">{metrics.totalConversations}</p>
-            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">active threads</p>
-          </div>
-
-          <div className="relay-card p-4 sm:p-5 text-center">
-            <Star className="w-5 sm:w-6 h-5 sm:h-6 text-[#5f8fff] mx-auto mb-2 sm:mb-3" />
-            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Rating</p>
-            <p className="text-2xl sm:text-3xl font-bold text-[#f5f7fb]">
-              {metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : "N/A"}
-            </p>
-            <p className="text-white/40 text-[10px] sm:text-xs mt-1 sm:mt-2">{metrics.ratingTrend.value}</p>
-          </div>
-        </div>
       </div>
   );
 }

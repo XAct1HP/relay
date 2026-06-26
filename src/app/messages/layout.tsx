@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata = {
-  title: "Messages - Relay",
+  title: "Messages",
   description: "Manage your conversations with buyers and sellers",
 };
 

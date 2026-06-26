@@ -215,7 +215,7 @@ function ConversationList({
   });
 
   return (
-    <div className="w-full lg:w-80 lg:border-r border-white/10 flex flex-col max-h-[calc(100vh-200px)]">
+    <div className="w-full lg:w-80 lg:border-r border-white/10 flex flex-col max-h-[calc(100vh-200px)] bg-white/[0.02]">
       <div className="p-4 border-b border-white/10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -352,7 +352,7 @@ function ChatArea({
   );
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col bg-white/[0.01]">
       <div className="border-b border-white/10 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Avatar name={otherName} avatarUrl={conversation.otherUser?.avatar_url} />
@@ -896,12 +896,12 @@ export default function MessagesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="relay-eyebrow text-relay-accent mb-2">INBOX</p>
+        <p className="relay-eyebrow text-[#5f8fff]">CONVERSATIONS</p>
         <h1 className="relay-title">Messages</h1>
       </div>
 
       {conversations.length > 0 ? (
-        <div className="relay-card p-0 flex h-[calc(100vh-300px)] overflow-hidden">
+        <div className="flex h-[calc(100vh-200px)] overflow-hidden rounded-xl border border-white/[0.06]">
           <ConversationList
             conversations={conversations}
             selectedId={selectedConversation}

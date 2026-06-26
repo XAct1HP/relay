@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   applyBulkInventoryAction,
   deleteInventoryListingAction,
@@ -98,6 +98,7 @@ export default function SellerInventoryDashboard() {
   const [variantMessages, setVariantMessages] = useState<
     Record<string, { type: "error" | "success"; message: string }>
   >({});
+  const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   async function loadListings(sellerId: string, options?: { showLoading?: boolean }) {
@@ -189,6 +190,25 @@ export default function SellerInventoryDashboard() {
 
     return sortedListings;
   }, [deferredSearchQuery, filter, listings, sortBy]);
+
+  const groupedByBrand = useMemo(() => {
+    const groups: Record<string, typeof filteredListings> = {};
+    filteredListings.forEach((listing) => {
+      const brand = listing.brand || "Other";
+      if (!groups[brand]) groups[brand] = [];
+      groups[brand].push(listing);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredListings]);
+
+  const toggleBrand = (brand: string) => {
+    setExpandedBrands((prev) => {
+      const next = new Set(prev);
+      if (next.has(brand)) next.delete(brand);
+      else next.add(brand);
+      return next;
+    });
+  };
 
   const activeListingsCount = listings.filter((listing) => listing.status === "active").length;
   const lowStockCount = listings.filter(
@@ -689,16 +709,36 @@ export default function SellerInventoryDashboard() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredListings.map((listing) => {
-            const badge = STATUS_BADGES[listing.status];
-            const isExpanded = expandedListingId === listing.id;
-            const selectedVariantCount = listing.variants.filter(
-              (variant) => variant.id && selectedVariantIds.includes(variant.id)
-            ).length;
+        <div className="space-y-6">
+          {groupedByBrand.map(([brand, brandListings]) => (
+            <div key={brand} className="space-y-3">
+              <button
+                onClick={() => toggleBrand(brand)}
+                className="w-full flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <ChevronRight
+                    size={18}
+                    className={`text-white/40 transition-transform ${expandedBrands.has(brand) ? "rotate-90" : ""}`}
+                  />
+                  <span className="text-[#f5f7fb] font-semibold">{brand}</span>
+                  <span className="text-white/40 text-sm">
+                    {brandListings.length} listing{brandListings.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              </button>
 
-            return (
-              <div key={listing.id} className="relay-card p-0 overflow-hidden">
+              {expandedBrands.has(brand) && (
+                <div className="space-y-4 pl-2">
+                  {brandListings.map((listing) => {
+                    const badge = STATUS_BADGES[listing.status];
+                    const isExpanded = expandedListingId === listing.id;
+                    const selectedVariantCount = listing.variants.filter(
+                      (variant) => variant.id && selectedVariantIds.includes(variant.id)
+                    ).length;
+
+                    return (
+                      <div key={listing.id} className="relay-card p-0 overflow-hidden">
                 <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/8 bg-white/[0.02]">
                   <label className="inline-flex items-center gap-3 text-sm text-white/75">
                     <input
@@ -981,8 +1021,12 @@ export default function SellerInventoryDashboard() {
                   </div>
                 )}
               </div>
-            );
-          })}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

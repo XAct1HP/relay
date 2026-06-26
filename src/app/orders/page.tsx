@@ -278,8 +278,8 @@ export default function OrdersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <p className="text-sm font-medium text-[#7ca6ff] tracking-wider">MY ORDERS</p>
-        <h1 className="mt-2 text-4xl font-bold text-[#f5f7fb]">Orders</h1>
+        <p className="relay-eyebrow text-[#5f8fff]">MY ORDERS</p>
+        <h1 className="relay-title">Orders</h1>
       </div>
 
       {/* Filter Tabs */}
@@ -288,7 +288,7 @@ export default function OrdersPage() {
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`rounded-lg px-4 py-2 font-medium transition-all ${
+            className={`rounded-full px-4 py-2 font-medium transition-all ${
               filter === tab ? "bg-[#5f8fff] text-white" : "text-[#7ca6ff] hover:bg-white/5"
             }`}
           >

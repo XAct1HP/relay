@@ -741,7 +741,7 @@ export default function SellPage() {
 
   if (publishSuccess) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto">
           <div className="relay-card p-12 text-center">
             <div className="flex justify-center mb-6">
               <div className={`w-16 h-16 rounded-full flex items-center justify-center ${publishedNeedsReview ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
@@ -782,12 +782,12 @@ export default function SellPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
         {/* Page Header */}
         <div className="mb-8">
           <div className="relay-eyebrow text-relay-accent">NEW LISTING</div>
           <h1 className="relay-title text-relay-text mt-2">Sell Your Shoes</h1>
-          <p className="text-relay-subtle mt-3 max-w-2xl">
+          <p className="text-relay-subtle mt-3 max-w-4xl">
             Choose a catalog sneaker listing for SKU-based inventory, or keep the existing manual flow for customs and non-standard products.
           </p>
         </div>

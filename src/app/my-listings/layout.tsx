@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { AppShell } from "@/components/layout/AppShell"
 
 export const metadata = {
-  title: 'My Listings - Relay',
+  title: 'My Listings',
   description: 'Manage your shoe listings',
 }
 

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata = {
-  title: "Inventory - Relay",
+  title: "Inventory",
   description: "Manage seller inventory tools",
 };
 

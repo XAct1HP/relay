@@ -199,15 +199,9 @@ export default function ProfileStudioPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Page Header with gradient accent */}
-      <div className="relative mb-10 overflow-hidden rounded-[1.5rem] p-8" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.12) 0%, rgba(124, 166, 255, 0.04) 50%, rgba(95, 143, 255, 0.08) 100%)' }}>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 30% 50%, rgba(95, 143, 255, 0.15) 0%, transparent 70%)' }} />
-        <div className="relative z-10">
-          <p className="relay-eyebrow text-relay-accent tracking-widest mb-2">CUSTOMIZE</p>
-          <h1 className="relay-title text-3xl font-extrabold tracking-tight">Profile Studio</h1>
-          <p className="text-white/50 text-sm mt-2">Make your shop stand out.</p>
-        </div>
-        <Sparkles size={64} className="absolute right-8 top-1/2 -translate-y-1/2 text-relay-accent/10" />
+      <div className="space-y-2 mb-8">
+        <p className="relay-eyebrow text-[#5f8fff]">CUSTOMIZE</p>
+        <h1 className="relay-title">Profile Studio</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -432,7 +426,7 @@ export default function ProfileStudioPage() {
 
         {/* Right Section - Profile Preview Card */}
         <div className="lg:col-span-1">
-          <div className="sticky top-24 space-y-4">
+          <div className="sticky top-6 space-y-4">
             {/* Live Preview Card */}
             <div
               className="backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden transition-shadow duration-500"

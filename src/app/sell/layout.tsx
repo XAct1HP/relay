@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata = {
-  title: "Sell Your Shoes | Relay",
+  title: "Sell",
   description: "Create a listing and start selling your shoes on Relay",
 };
 
