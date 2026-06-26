@@ -104,23 +104,26 @@ export default function BulkImportPage() {
   }
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-0">
-      <div className="space-y-2 mb-8">
+    <div className="space-y-4 lg:space-y-6 pb-20 lg:pb-0 overflow-auto h-[calc(100dvh-80px-env(safe-area-inset-bottom,0px))] lg:h-auto lg:overflow-visible">
+      <div className="space-y-2 mb-4 lg:mb-8">
+        <p className="lg:hidden text-white/30 text-xs font-medium tracking-wider mb-2">IMPORT</p>
         <p className="relay-eyebrow text-[#5f8fff]">INVENTORY</p>
         <h1 className="relay-title">Bulk Import</h1>
       </div>
 
-      <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-        <Link href="/dashboard/inventory" className="w-full sm:w-auto relay-button-secondary text-center">
-          Back to My Listings
+      <div className="flex flex-row lg:flex-col lg:flex-row flex-wrap gap-2 lg:gap-3">
+        <Link href="/dashboard/inventory" className="flex-1 lg:flex-none lg:w-auto relay-button-secondary text-center text-sm lg:text-base py-2.5 lg:py-3">
+          <span className="lg:hidden">Listings</span>
+          <span className="hidden lg:inline">Back to My Listings</span>
         </Link>
-        <Link href="/sell" className="w-full sm:w-auto relay-button-primary text-center">
-          Create Single Listing
+        <Link href="/sell" className="flex-1 lg:flex-none lg:w-auto relay-button-primary text-center text-sm lg:text-base py-2.5 lg:py-3">
+          <span className="lg:hidden">New Listing</span>
+          <span className="hidden lg:inline">Create Single Listing</span>
         </Link>
       </div>
 
       {/* Horizontal stepper */}
-      <div className="relay-card p-5">
+      <div className="relay-card p-3 lg:p-5">
         <div className="flex items-center justify-center gap-0">
           {[
             { step: 1, label: "Upload" },
@@ -154,7 +157,7 @@ export default function BulkImportPage() {
                     )}
                   </div>
                   <span
-                    className="text-[10px] sm:text-xs font-medium tracking-wide transition-colors duration-300"
+                    className="hidden lg:block text-[10px] sm:text-xs font-medium tracking-wide transition-colors duration-300"
                     style={{ color: isActive ? "#7ca6ff" : "rgba(255,255,255,0.35)" }}
                   >
                     {s.label}
@@ -162,7 +165,7 @@ export default function BulkImportPage() {
                 </div>
                 {i < 2 && (
                   <div
-                    className="w-16 sm:w-24 h-0.5 mx-3 mb-6 rounded-full transition-colors duration-500"
+                    className="w-10 sm:w-24 h-0.5 mx-2 lg:mx-3 mb-0 lg:mb-6 rounded-full transition-colors duration-500"
                     style={{
                       background: currentStep > s.step
                         ? "linear-gradient(90deg, #5f8fff, #7ca6ff)"
@@ -180,12 +183,12 @@ export default function BulkImportPage() {
         {/* Main upload card */}
         <div className="relay-card p-6 space-y-6">
           <div className="flex items-start gap-3">
-            <div className="p-3 rounded-2xl bg-relay-accent/10 border border-relay-accent/20">
+            <div className="p-2 lg:p-3 rounded-xl lg:rounded-2xl bg-relay-accent/10 border border-relay-accent/20">
               <FileSpreadsheet className="w-5 h-5 text-relay-accent" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-relay-text">Upload CSV</h2>
-              <p className="text-sm text-relay-subtle mt-1">
+              <h2 className="text-base lg:text-lg font-semibold text-relay-text">Upload CSV</h2>
+              <p className="text-sm text-relay-subtle mt-1 hidden lg:block">
                 Photos are not required for bulk SKU imports. Relay will attach catalog data when available and use the current placeholder catalog behavior otherwise.
               </p>
             </div>
@@ -203,7 +206,7 @@ export default function BulkImportPage() {
             }}
           >
             <div
-              className="w-full rounded-[1.25rem] border-2 border-dashed transition-all duration-300 p-8"
+              className="w-full rounded-[1.25rem] border-2 border-dashed transition-all duration-300 p-4 lg:p-8"
               style={{
                 borderColor: selectedFile
                   ? "rgba(52,211,153,0.4)"
@@ -224,9 +227,9 @@ export default function BulkImportPage() {
               }}
             >
               {selectedFile ? (
-                <div className="flex flex-col items-center gap-4 py-2">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))", border: "2px solid rgba(52,211,153,0.3)" }}>
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                <div className="flex flex-col items-center gap-3 lg:gap-4 py-1 lg:py-2">
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.08))", border: "2px solid rgba(52,211,153,0.3)" }}>
+                    <CheckCircle2 className="w-6 h-6 lg:w-8 lg:h-8 text-emerald-400" />
                   </div>
                   <div className="text-center">
                     <p className="text-relay-text font-bold text-lg">{selectedFile.name}</p>
@@ -238,21 +241,22 @@ export default function BulkImportPage() {
                   <p className="text-xs text-white/40">Click to choose a different file</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-4 py-4">
+                <div className="flex flex-col items-center gap-3 lg:gap-4 py-2 lg:py-4">
                   <div
-                    className="w-20 h-20 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                    className="w-14 h-14 lg:w-20 lg:h-20 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
                     style={{
                       background: "linear-gradient(135deg, rgba(95,143,255,0.15), rgba(124,166,255,0.05))",
                       border: "1.5px solid rgba(95,143,255,0.2)",
                     }}
                   >
-                    <Upload className="w-9 h-9 text-[#5f8fff]" />
+                    <Upload className="w-6 h-6 lg:w-9 lg:h-9 text-[#5f8fff]" />
                   </div>
                   <div className="text-center">
-                    <p className="text-relay-text font-semibold text-lg">
-                      Drop your CSV here or click to browse
+                    <p className="text-relay-text font-semibold text-sm lg:text-lg">
+                      <span className="lg:hidden">Upload CSV</span>
+                      <span className="hidden lg:inline">Drop your CSV here or click to browse</span>
                     </p>
-                    <p className="text-sm text-relay-subtle mt-1">Accepted format: .csv</p>
+                    <p className="text-xs lg:text-sm text-relay-subtle mt-1">Accepted format: .csv</p>
                   </div>
                 </div>
               )}
@@ -319,8 +323,8 @@ export default function BulkImportPage() {
               <FileText className="w-5 h-5 text-relay-accent" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-relay-text">Required Format</h2>
-              <p className="text-sm text-relay-subtle mt-1">
+              <h2 className="text-base lg:text-lg font-semibold text-relay-text">Required Format</h2>
+              <p className="text-xs lg:text-sm text-relay-subtle mt-1 hidden lg:block">
                 Flexible headers are supported, but this is the recommended shape.
               </p>
             </div>
@@ -382,7 +386,7 @@ export default function BulkImportPage() {
           </div>
 
           {/* Format rules as mini table */}
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 hidden lg:block">
             {[
               { rule: "SKU, Size, Quantity, and Price are required columns." },
               { rule: "Aliases supported: style_id, styleId, shoe_size, qty, list_price." },
@@ -402,7 +406,7 @@ export default function BulkImportPage() {
         <div className="relay-card p-6 space-y-6">
           {/* Summary banner */}
           <div
-            className="rounded-2xl border px-5 py-5"
+            className="rounded-2xl border px-3 lg:px-5 py-3 lg:py-5"
             style={{
               borderColor:
                 reportTone === "success"
@@ -424,12 +428,12 @@ export default function BulkImportPage() {
           >
             <div className="flex items-start gap-4">
               {reportTone === "success" ? (
-                <div className="w-12 h-12 rounded-full flex items-center justify-center animate-pulse" style={{ background: "rgba(52,211,153,0.15)" }}>
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full flex items-center justify-center animate-pulse" style={{ background: "rgba(52,211,153,0.15)" }}>
+                  <CheckCircle2 className="w-5 h-5 lg:w-6 lg:h-6 text-emerald-400" />
                 </div>
               ) : reportTone === "warning" || reportTone === "error" ? (
-                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: reportTone === "warning" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)" }}>
-                  <AlertTriangle className={`w-6 h-6 ${reportTone === "warning" ? "text-amber-300" : "text-red-300"}`} />
+                <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-full flex items-center justify-center" style={{ background: reportTone === "warning" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)" }}>
+                  <AlertTriangle className={`w-5 h-5 lg:w-6 lg:h-6 ${reportTone === "warning" ? "text-amber-300" : "text-red-300"}`} />
                 </div>
               ) : (
                 <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(95,143,255,0.15)" }}>
@@ -437,7 +441,7 @@ export default function BulkImportPage() {
                 </div>
               )}
               <div>
-                <h2 className="text-xl font-bold text-relay-text">
+                <h2 className="text-base lg:text-xl font-bold text-relay-text">
                   {report.outcome === "committed"
                     ? "Import Complete"
                     : report.outcome === "preview"
@@ -452,7 +456,7 @@ export default function BulkImportPage() {
           </div>
 
           {/* Metric cards with colored top borders */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 lg:gap-4 pb-2 lg:pb-0">
             <MetricCard label="Rows Read" value={report.rows_read} color="#5f8fff" />
             <MetricCard label="Valid Rows" value={report.rows_valid} color="#34d399" />
             <MetricCard label="Invalid Rows" value={report.rows_invalid} color="#ef4444" />
@@ -498,11 +502,11 @@ export default function BulkImportPage() {
 function MetricCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div
-      className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:bg-white/[0.06] hover:border-white/15"
+      className="rounded-xl lg:rounded-2xl border border-white/10 bg-white/[0.03] p-3 lg:p-4 min-w-[120px] lg:min-w-0 snap-start transition-all duration-200 hover:bg-white/[0.06] hover:border-white/15"
       style={{ borderTop: `3px solid ${color}` }}
     >
-      <p className="text-xs uppercase tracking-[0.18em] text-white/40">{label}</p>
-      <p className="text-2xl font-bold text-relay-text mt-3">{value}</p>
+      <p className="text-[10px] lg:text-xs uppercase tracking-[0.18em] text-white/40 whitespace-nowrap">{label}</p>
+      <p className="text-lg lg:text-2xl font-bold text-relay-text mt-1.5 lg:mt-3">{value}</p>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase';
-import { Camera, Palette, User, MapPin, Edit3, Check, X, Eye, Upload, Send, Link as LinkIcon, Sparkles, Loader2, Trash2 } from 'lucide-react';
+import { Camera, Palette, User, MapPin, Edit3, Check, X, Eye, Upload, Send, Link as LinkIcon, Sparkles, Loader2, Trash2, ArrowLeft } from 'lucide-react';
 
 interface Theme {
   id: string;
@@ -82,6 +82,7 @@ export default function ProfileStudioPage() {
   );
 
   const [hasChanges, setHasChanges] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const postImageInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
@@ -202,10 +203,291 @@ export default function ProfileStudioPage() {
       <div className="space-y-2 mb-8">
         <p className="relay-eyebrow text-[#5f8fff]">CUSTOMIZE</p>
         <h1 className="relay-title">Profile Studio</h1>
+        <p className="lg:hidden text-white/30 text-xs font-medium tracking-wider mb-2">STUDIO</p>
       </div>
 
-      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
-        <div className="order-last lg:order-first lg:col-span-2 space-y-6">
+      {/* ====== MOBILE LAYOUT ====== */}
+      <div className="lg:hidden">
+        {/* Preview card - fills available viewport */}
+        <div className="h-[calc(100dvh-160px-env(safe-area-inset-bottom,0px))] overflow-hidden rounded-2xl">
+          <div
+            className="backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden h-full transition-shadow duration-500"
+            style={{
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.3), 0 0 60px ' + activeTheme.accent + '08',
+            }}
+          >
+            {/* Live Preview badge */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold text-white/60 tracking-wide uppercase">Live Preview</span>
+              </div>
+              <Eye size={14} className="text-white/30" />
+            </div>
+
+            {/* Banner blending into avatar area */}
+            <div className="relative">
+              <div className="h-28 w-full" style={{ backgroundImage: bannerPreview ? 'url(' + bannerPreview + ')' : activeTheme.bannerGradient, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+              <div className="absolute bottom-0 left-0 right-0 h-12" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%)' }} />
+              <div className="absolute -bottom-8 left-5">
+                <div className="h-16 w-16 rounded-full border-[3px] bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 shadow-lg" style={{ borderColor: 'rgba(20,20,40,0.9)' }}>
+                  {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-xl font-bold text-relay-bg">PK</span>)}
+                </div>
+              </div>
+            </div>
+
+            {/* Profile info */}
+            <div className="px-5 pt-12 pb-5">
+              <h4 className="font-bold text-base mb-0.5" style={{ color: activeTheme.textHighlight }}>{displayName || 'Shop Name'}</h4>
+              <p className="text-xs text-white/40 mb-3">@{username || 'username'}</p>
+              {bio && <p className="text-xs text-white/60 line-clamp-2 mb-4 leading-relaxed">{bio}</p>}
+              <div className="flex gap-2 mb-4">
+                <div className="flex-1 rounded-xl p-2.5 text-center" style={{ backgroundColor: activeTheme.cardBg, border: '1px solid ' + activeTheme.cardBorder }}>
+                  <p className="text-xs text-white/40">Rating</p>
+                  <p className="text-sm font-bold" style={{ color: activeTheme.textHighlight }}>4.9/5</p>
+                </div>
+                <div className="flex-1 rounded-xl p-2.5 text-center" style={{ backgroundColor: activeTheme.cardBg, border: '1px solid ' + activeTheme.cardBorder }}>
+                  <p className="text-xs text-white/40">Sales</p>
+                  <p className="text-sm font-bold" style={{ color: activeTheme.textHighlight }}>847</p>
+                </div>
+              </div>
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid ' + activeTheme.cardBorder, backgroundColor: activeTheme.cardBg }}>
+                <div className="h-14 w-full" style={{ background: activeTheme.bannerGradient }} />
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: activeTheme.accent + '20' }} />
+                    <div className="flex-1">
+                      <div className="h-2 w-16 rounded-full mb-1" style={{ backgroundColor: activeTheme.accent + '40' }} />
+                      <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: activeTheme.accentLight + '30' }} />
+                    </div>
+                    <div className="px-2 py-1 rounded-md text-[10px] font-bold" style={{ backgroundColor: activeTheme.accent, color: '#0a0a1a' }}>$180</div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <div className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: activeTheme.accent + '25' }} />
+                    <div className="h-1.5 w-8 rounded-full" style={{ backgroundColor: activeTheme.accentLight + '25' }} />
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] mt-3 text-center font-medium tracking-wide uppercase" style={{ color: activeTheme.textHighlight + '90' }}>{activeTheme.name} theme</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Customize button */}
+        <button
+          onClick={() => setEditorOpen(true)}
+          className="w-full bg-[#5f8fff] text-white rounded-xl py-3 font-medium mt-4 active:opacity-80 transition-opacity"
+        >
+          Customize
+        </button>
+
+        {/* Editor overlay */}
+        {editorOpen && (
+          <div className="fixed inset-0 z-40 bg-[#06070a] overflow-auto pt-4 pb-[100px]">
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-4 mb-6">
+              <button onClick={() => setEditorOpen(false)} className="flex items-center gap-2 text-[#5f8fff] text-sm font-medium active:opacity-70">
+                <ArrowLeft size={16} />
+                Preview
+              </button>
+              <button onClick={() => { handleSaveChanges(); setEditorOpen(false); }} className="text-[#5f8fff] text-sm font-semibold active:opacity-70">
+                Done
+              </button>
+            </div>
+
+            <div className="px-4 space-y-6">
+              {/* Branding */}
+              <div className="space-y-5">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><Camera size={20} className="text-relay-accent" /> Branding</h2>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Banner Image</label>
+                  <div className="relative w-full aspect-video rounded-xl border-2 border-dashed border-white/15 cursor-pointer flex items-center justify-center overflow-hidden" onClick={() => bannerInputRef.current?.click()}>
+                    {bannerPreview ? (
+                      <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-center p-4">
+                        <Upload className="text-relay-accent mx-auto mb-2" size={24} />
+                        <p className="text-xs text-white/60">Tap to upload banner</p>
+                      </div>
+                    )}
+                    <input ref={bannerInputRef} type="file" accept="image/*" onChange={handleBannerUpload} className="hidden" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Avatar</label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-20 w-20 rounded-full border-4 border-white/10 bg-gradient-to-br from-relay-accent-light to-relay-accent flex-shrink-0 flex items-center justify-center cursor-pointer overflow-hidden" onClick={() => avatarInputRef.current?.click()}>
+                      {avatarPreview ? (<img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />) : (<div className="text-2xl font-bold text-relay-bg">PK</div>)}
+                      <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                    </div>
+                    <p className="text-xs text-white/50">Tap to change</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Display Name</label>
+                  <input type="text" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" placeholder="Your display name" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Shop Name</label>
+                  <input type="text" value={shopName} onChange={(e) => { setShopName(e.target.value); setHasChanges(true); }} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" placeholder="Your shop name" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Bio</label>
+                  <textarea value={bio} onChange={(e) => { setBio(e.target.value.slice(0, 200)); setHasChanges(true); }} maxLength={200} rows={3} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all resize-none" placeholder="Tell buyers about your shop..." />
+                  <p className="text-xs text-white/40 mt-1">{bio.length}/200</p>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.06]" />
+
+              {/* Account */}
+              <div className="space-y-5">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><User size={20} className="text-relay-accent" /> Account</h2>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Username</label>
+                  <div className="relative">
+                    <input type="text" value={username} onChange={(e) => handleUsernameChange(e.target.value)} className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 pr-10 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" placeholder="username" />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {usernameAvailable === true && <Check size={18} className="text-green-400" />}
+                      {usernameAvailable === false && <X size={18} className="text-red-400" />}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-2 text-white/70">Email</label>
+                  <input type="email" value={email} disabled className="w-full bg-white/[0.02] border border-white/10 rounded-xl px-4 py-2.5 text-white/40 cursor-not-allowed opacity-60" />
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.06]" />
+
+              {/* Color Theme */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><Palette size={20} className="text-relay-accent" /> Color Theme</h2>
+                <div className="grid grid-cols-4 gap-3">
+                  {THEMES.map((theme) => (
+                    <button
+                      key={theme.id}
+                      onClick={() => handleThemeSelect(theme.id)}
+                      className={"relative p-2 rounded-xl border-2 transition-all " + (selectedTheme === theme.id ? 'bg-white/[0.08]' : 'border-white/10 bg-white/[0.02]')}
+                      style={selectedTheme === theme.id ? { borderColor: theme.accent } : undefined}
+                    >
+                      <div className="w-full h-5 rounded-lg mb-1.5" style={{ background: theme.bannerGradient }} />
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: theme.accent }} />
+                        <p className="text-[10px] font-semibold truncate" style={{ color: theme.textHighlight }}>{theme.name}</p>
+                      </div>
+                      {selectedTheme === theme.id && (
+                        <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.accent }}>
+                          <Check size={12} className="text-white" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.06]" />
+
+              {/* Ship From Address */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><MapPin size={20} className="text-relay-accent" /> Ship From Address</h2>
+                <div className="space-y-3">
+                  <input type="text" value={address.street} onChange={(e) => handleAddressChange('street', e.target.value)} placeholder="Street address" className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                  <input type="text" value={address.street2} onChange={(e) => handleAddressChange('street2', e.target.value)} placeholder="Apt, Suite, etc." className="w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" value={address.city} onChange={(e) => handleAddressChange('city', e.target.value)} placeholder="City" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                    <input type="text" value={address.state} onChange={(e) => handleAddressChange('state', e.target.value)} placeholder="State" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" value={address.zip} onChange={(e) => handleAddressChange('zip', e.target.value)} placeholder="ZIP code" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                    <input type="text" value={address.country} onChange={(e) => handleAddressChange('country', e.target.value)} placeholder="Country" className="bg-white/[0.05] border border-white/10 rounded-xl px-4 py-2.5 text-relay-text placeholder-white/30 focus:outline-none focus:border-relay-accent/50 transition-all" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.06]" />
+
+              {/* Create Post */}
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><Edit3 size={20} className="text-relay-accent" /> Create Post</h2>
+                {postSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center flex items-center justify-center gap-2">
+                    <Check size={16} className="text-emerald-400" />
+                    <p className="text-sm text-emerald-400 font-medium">Post published!</p>
+                  </div>
+                )}
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                  <div className="flex items-start gap-3 p-4">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 mt-0.5">
+                      {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-sm font-bold text-relay-bg">PK</span>)}
+                    </div>
+                    <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="Share what's new..." rows={3} className="flex-1 bg-transparent border-none text-relay-text placeholder-white/30 focus:outline-none resize-none text-sm leading-relaxed pt-1.5" />
+                  </div>
+                  {postImages.length > 0 && (
+                    <div className="px-4 pb-3">
+                      <div className="flex gap-2">
+                        {postImages.map((img, index) => (
+                          <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                            <img src={img} alt={"Post image " + (index + 1)} className="w-full h-full object-cover" />
+                            <button onClick={(e) => { e.stopPropagation(); removePostImage(index); }} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/70">
+                              <X size={10} className="text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      {[0, 1, 2, 3].map((index) => (
+                        <button key={index} onClick={() => !postImages[index] && postImageInputRefs.current[index]?.click()} className={"p-2 rounded-lg " + (postImages[index] ? 'text-relay-accent bg-relay-accent/10' : 'text-white/40')} title={"Image " + (index + 1)}>
+                          <Upload size={16} />
+                          <input ref={(el) => { postImageInputRefs.current[index] = el; }} type="file" accept="image/*" onChange={(e) => handlePostImageUpload(e, index)} className="hidden" />
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-white/25">{postContent.length > 0 ? postContent.length + ' chars' : ''}</span>
+                  </div>
+                </div>
+                {isCustomBrand && (
+                  <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.08) 0%, rgba(52, 211, 153, 0.06) 100%)', border: '1px solid rgba(95, 143, 255, 0.2)' }}>
+                    <Sparkles size={16} className="text-relay-accent flex-shrink-0" />
+                    <p className="text-xs text-relay-accent font-semibold">Indie Brand Boost Active</p>
+                  </div>
+                )}
+                <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent disabled:opacity-40 text-relay-bg font-semibold py-3 rounded-xl transition-all">
+                  {publishingPost ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Publish Post</>)}
+                </button>
+              </div>
+
+              {/* Save button at bottom of overlay */}
+              <div className="pt-4 space-y-3">
+                {saveSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center flex items-center justify-center gap-2">
+                    <Check size={16} className="text-emerald-400" />
+                    <p className="text-sm text-emerald-400 font-medium">Changes saved!</p>
+                  </div>
+                )}
+                <button
+                  onClick={handleSaveChanges}
+                  disabled={!hasChanges || saving}
+                  className={"w-full text-relay-bg font-semibold py-3 rounded-xl transition-all " + (hasChanges && !saving ? 'shadow-lg shadow-relay-accent/25' : 'disabled:opacity-40 disabled:cursor-not-allowed')}
+                  style={hasChanges && !saving ? { background: 'linear-gradient(135deg, ' + activeTheme.accent + ' 0%, ' + activeTheme.accentLight + ' 100%)' } : { backgroundColor: activeTheme.accent }}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button onClick={handleDiscardChanges} disabled={!hasChanges || saving} className="w-full bg-white/[0.04] border border-white/10 disabled:opacity-40 disabled:cursor-not-allowed font-semibold py-3 rounded-xl transition-colors">Discard Changes</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ====== DESKTOP LAYOUT (unchanged) ====== */}
+      <div className="hidden lg:grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Section 1 - Branding */}
           <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
             {/* Gradient top accent bar */}
@@ -424,13 +706,11 @@ export default function ProfileStudioPage() {
           </div>
         </div>
 
-        {/* Right Section - Profile Preview Card */}
-        <div className="order-first lg:order-last lg:col-span-1">
+        {/* Right Section - Profile Preview Card (Desktop) */}
+        <div className="lg:col-span-1">
           <div className="lg:sticky lg:top-6 space-y-4">
             {/* Live Preview Card */}
-            <div className="relative max-h-[300px] lg:max-h-none overflow-hidden rounded-[1.5rem]">
-            {/* Gradient fade overlay for mobile */}
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 z-10 lg:hidden" style={{ background: 'linear-gradient(to top, #06070a 0%, transparent 100%)' }} />
+            <div className="overflow-hidden rounded-[1.5rem]">
             <div
               className="backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden transition-shadow duration-500"
               style={{

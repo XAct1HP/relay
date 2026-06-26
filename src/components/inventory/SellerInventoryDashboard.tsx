@@ -488,8 +488,9 @@ export default function SellerInventoryDashboard() {
   }
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-12">
+    <div className="space-y-4 lg:space-y-6 pb-28 lg:pb-12">
       <div className="space-y-2">
+        <p className="lg:hidden text-white/30 text-xs font-medium tracking-wider mb-2">INVENTORY</p>
         <p className="relay-eyebrow text-relay-accent">INVENTORY</p>
         <h1 className="relay-title">Inventory Dashboard</h1>
         <p className="text-relay-subtle max-w-3xl">
@@ -497,7 +498,7 @@ export default function SellerInventoryDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-5 gap-2 lg:gap-4">
         <StatCard label="Active Listings" value={activeListingsCount} />
         <StatCard label="Unique SKU Listings" value={uniqueSkuCount} />
         <StatCard label="Units in Stock" value={listings.reduce((sum, listing) => sum + listing.totalQuantity, 0)} />
@@ -518,11 +519,11 @@ export default function SellerInventoryDashboard() {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search SKU, product name, brand, model, or colorway"
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] pl-11 pr-4 py-3 text-sm text-relay-text placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] pl-11 pr-4 py-2.5 lg:py-3 text-sm text-relay-text placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#5f8fff]/40"
               />
             </label>
 
-            <label className="sm:w-[220px]">
+            <label className="hidden lg:block sm:w-[220px]">
               <span className="sr-only">Sort inventory</span>
               <select
                 value={sortBy}
@@ -545,25 +546,25 @@ export default function SellerInventoryDashboard() {
               className="relay-button-secondary inline-flex items-center gap-2 disabled:opacity-50"
             >
               <Download size={16} />
-              {exporting ? "Exporting..." : "Export CSV"}
+              <span className="hidden lg:inline">{exporting ? "Exporting..." : "Export CSV"}</span>
             </button>
             <Link href="/inventory/bulk-import" className="relay-button-secondary inline-flex items-center gap-2">
               <FileSpreadsheet size={16} />
-              Bulk Import
+              <span className="hidden lg:inline">Bulk Import</span>
             </Link>
             <Link href="/sell" className="relay-button-primary inline-flex items-center gap-2">
               <Plus size={16} />
-              Create Listing
+              <span className="hidden lg:inline">Create Listing</span>
             </Link>
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto flex-nowrap scrollbar-hide pb-1">
+        <div className="flex gap-1.5 lg:gap-2 overflow-x-auto flex-nowrap scrollbar-hide pb-1">
           {(["all", "active", "inactive", "sold_out", "low_stock"] as const).map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-medium whitespace-nowrap transition-all ${
                 filter === status
                   ? "bg-[#5f8fff] text-white"
                   : "bg-white/[0.04] text-white/70 border border-white/10 hover:bg-white/[0.08]"
@@ -574,7 +575,7 @@ export default function SellerInventoryDashboard() {
                 : status === "sold_out"
                 ? "Sold Out"
                 : status === "low_stock"
-                ? `Low Stock (<=${LOW_STOCK_THRESHOLD})`
+                ? "Low Stock"
                 : status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
           ))}
@@ -582,7 +583,7 @@ export default function SellerInventoryDashboard() {
       </div>
 
       {selectedSourceCount > 0 && (
-        <div className="relay-card p-4 sm:p-5 space-y-4 sticky top-0 z-10">
+        <div className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] left-0 right-0 z-20 lg:relative lg:bottom-auto bg-[#0a0c14] border-t border-white/10 lg:border-t-0 p-3 sm:p-5 space-y-3 lg:space-y-4 lg:sticky lg:top-0 relay-card">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div>
               <p className="text-relay-text font-semibold">Bulk edit selected inventory</p>
@@ -702,34 +703,34 @@ export default function SellerInventoryDashboard() {
       )}
 
       {filteredListings.length === 0 ? (
-        <div className="relay-card p-12 text-center">
+        <div className="relay-card p-6 lg:p-12 text-center">
           <p className="text-relay-text mb-2">No inventory matched that search or filter.</p>
           <p className="text-relay-subtle text-sm">
             Try another SKU or product keyword, or switch filters to see more items.
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6 overflow-auto h-[calc(100dvh-200px-env(safe-area-inset-bottom,0px))] lg:h-auto lg:overflow-visible">
           {groupedByBrand.map(([brand, brandListings]) => (
             <div key={brand} className="space-y-3">
               <button
                 onClick={() => toggleBrand(brand)}
-                className="w-full flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04] transition-colors"
+                className="w-full flex items-center justify-between p-3 lg:p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04] transition-colors sticky top-0 z-[5] backdrop-blur-md"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 lg:gap-3">
                   <ChevronRight
-                    size={18}
-                    className={`text-white/40 transition-transform ${expandedBrands.has(brand) ? "rotate-90" : ""}`}
+                    size={16}
+                    className={`text-white/40 transition-transform lg:w-[18px] lg:h-[18px] ${expandedBrands.has(brand) ? "rotate-90" : ""}`}
                   />
-                  <span className="text-[#f5f7fb] font-semibold">{brand}</span>
-                  <span className="text-white/40 text-sm">
+                  <span className="text-[#f5f7fb] font-semibold text-sm lg:text-base">{brand}</span>
+                  <span className="text-white/40 text-xs lg:text-sm">
                     {brandListings.length} listing{brandListings.length !== 1 ? "s" : ""}
                   </span>
                 </div>
               </button>
 
               {expandedBrands.has(brand) && (
-                <div className="space-y-4 pl-2">
+                <div className="space-y-2 lg:space-y-4 pl-0 lg:pl-2">
                   {brandListings.map((listing) => {
                     const badge = STATUS_BADGES[listing.status];
                     const isExpanded = expandedListingId === listing.id;
@@ -738,8 +739,8 @@ export default function SellerInventoryDashboard() {
                     ).length;
 
                     return (
-                      <div key={listing.id} className="relay-card p-0 overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/8 bg-white/[0.02]">
+                      <div key={listing.id} className="relay-card p-0 overflow-hidden rounded-xl lg:rounded-[1.5rem]">
+                <div className="flex items-center justify-between gap-2 px-3 lg:px-6 py-2 lg:py-3 border-b border-white/8 bg-white/[0.02]">
                   <label className="inline-flex items-center gap-3 text-sm text-white/75">
                     <input
                       type="checkbox"
@@ -747,7 +748,7 @@ export default function SellerInventoryDashboard() {
                       onChange={() => handleToggleListingSelection(listing.id)}
                       className="h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff]"
                     />
-                    Select listing
+                    <span className="hidden lg:inline">Select listing</span>
                   </label>
 
                   {selectedVariantCount > 0 && (
@@ -757,9 +758,9 @@ export default function SellerInventoryDashboard() {
                   )}
                 </div>
 
-                <div className="p-4 sm:p-6">
-                  <div className="flex flex-col xl:flex-row gap-5 xl:items-start">
-                    <div className="w-full sm:w-28 h-28 rounded-2xl overflow-hidden bg-white/[0.04] border border-white/10 flex-shrink-0">
+                <div className="p-3 lg:p-6">
+                  <div className="flex flex-row lg:flex-col xl:flex-row gap-3 lg:gap-5 xl:items-start">
+                    <div className="w-16 h-16 lg:w-28 lg:h-28 rounded-xl lg:rounded-2xl overflow-hidden bg-white/[0.04] border border-white/10 flex-shrink-0">
                       {listing.displayImage && listing.displayImage !== "/placeholder-shoe.png" ? (
                         <img
                           src={listing.displayImage}
@@ -776,9 +777,9 @@ export default function SellerInventoryDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="mb-2">
+                          <div className="mb-1 lg:mb-2">
                             <h2
-                              className={`font-semibold leading-tight text-relay-text truncate xl:whitespace-nowrap ${getListingTitleClassName(
+                              className={`font-semibold leading-tight text-relay-text truncate xl:whitespace-nowrap text-sm lg:text-base ${getListingTitleClassName(
                                 listing.displayName
                               )}`}
                               title={listing.displayName}
@@ -786,8 +787,8 @@ export default function SellerInventoryDashboard() {
                               {listing.displayName}
                             </h2>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className={`${badge.color} border px-3 py-1 rounded-full text-xs font-semibold`}>
+                          <div className="flex flex-wrap items-center gap-1.5 lg:gap-2 mb-1 lg:mb-2">
+                            <span className={`${badge.color} border px-2 lg:px-3 py-0.5 lg:py-1 rounded-full text-[11px] lg:text-xs font-semibold`}>
                               {badge.label}
                             </span>
                             {listing.inventory_review_status === "legacy_used_photo_review_required" && (
@@ -808,7 +809,7 @@ export default function SellerInventoryDashboard() {
                             </p>
                           )}
 
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
+                          <div className="hidden lg:flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/55">
                             <span>SKU: {listing.displaySku || "Custom / Manual"}</span>
                             <span>
                               {listing.listing_type === "sku" ? "Catalog Listing" : "Manual Listing"}
@@ -816,7 +817,7 @@ export default function SellerInventoryDashboard() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap xl:flex-nowrap gap-2 xl:shrink-0 xl:self-start">
+                        <div className="hidden lg:flex flex-wrap xl:flex-nowrap gap-2 xl:shrink-0 xl:self-start">
                           <Link
                             href={`/listing/${listing.id}`}
                             className="px-3 py-2 bg-[#5f8fff]/20 text-[#7ca6ff] hover:bg-[#5f8fff]/30 text-xs xl:text-sm font-medium rounded-full transition-colors border border-[#5f8fff]/30 inline-flex items-center gap-2 whitespace-nowrap"
@@ -874,7 +875,7 @@ export default function SellerInventoryDashboard() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                      <div className="hidden lg:grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                         <Metric label="Available Sizes" value={listing.availableSizeSummary} />
                         <Metric label="Total Quantity" value={`${listing.totalQuantity} units`} />
                         <Metric
@@ -883,15 +884,20 @@ export default function SellerInventoryDashboard() {
                         />
                         <Metric label="Variants" value={`${listing.variants.length} total`} />
                       </div>
+                      <div className="flex items-center gap-3 mt-1 lg:hidden">
+                        <span className="text-sm font-semibold text-white">{listing.lowestPrice > 0 ? `$${listing.lowestPrice}` : "N/A"}</span>
+                        <span className="text-xs text-white/40">{listing.totalQuantity} units</span>
+                        <span className="text-xs text-white/40">{listing.variants.length} sizes</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="mt-5 pt-5 border-t border-white/8">
+                  <div className="mt-3 pt-3 lg:mt-5 lg:pt-5 border-t border-white/8">
                     <button
                       onClick={() =>
                         setExpandedListingId((current) => (current === listing.id ? null : listing.id))
                       }
-                      className="w-full sm:w-auto inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-sm font-medium text-relay-text hover:bg-white/[0.08] transition-colors"
+                      className="w-full sm:w-auto inline-flex items-center gap-2 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full bg-white/[0.04] border border-white/10 text-xs lg:text-sm font-medium text-relay-text hover:bg-white/[0.08] transition-colors"
                     >
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       {isExpanded ? "Hide Variants" : "Show Variants"}
@@ -1035,9 +1041,9 @@ export default function SellerInventoryDashboard() {
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-6">
-      <p className="text-white/70 text-sm mb-2">{label}</p>
-      <p className="text-3xl font-bold text-white">{value}</p>
+    <div className="bg-white/[0.04] backdrop-blur-xl rounded-xl lg:rounded-[1.5rem] border border-white/10 p-3 lg:p-6">
+      <p className="text-white/70 text-[11px] lg:text-sm mb-1 lg:mb-2">{label}</p>
+      <p className="text-xl lg:text-3xl font-bold text-white">{value}</p>
     </div>
   );
 }

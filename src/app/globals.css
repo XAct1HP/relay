@@ -104,6 +104,31 @@
     @apply rounded-[1.1rem] border border-white/10 bg-white/[0.03] backdrop-blur-xl sm:rounded-[1.25rem];
   }
 
+  /* Mobile: strip card chrome so content floats on the dark background */
+  @media (max-width: 1023px) {
+    .relay-card {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border-radius: 0;
+    }
+    .relay-card-soft {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .relay-eyebrow {
+      display: none;
+    }
+    .relay-title {
+      display: none;
+    }
+  }
+
   .relay-subcard {
     @apply rounded-2xl border border-white/10 bg-[#10131a];
   }

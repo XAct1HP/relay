@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, DollarSign, MessageSquare, Package, Plus, ShoppingCart, Star, TrendingUp, ExternalLink, FileSpreadsheet, Tag, Wallet, Banknote } from "lucide-react";
 import {
   LineChart,
   Line,
+  Area,
+  AreaChart,
   BarChart,
   Bar,
   XAxis,
@@ -565,7 +567,121 @@ export default function DashboardPage() {
   }
 
   return (
-      <div className="space-y-8 pb-20 lg:pb-12">
+    <>
+      {/* ── Mobile Dashboard ── */}
+      <div className="lg:hidden h-[calc(100dvh-80px-env(safe-area-inset-bottom,0px))] flex flex-col px-4 pt-2 overflow-hidden">
+        {/* Balance */}
+        <div className="text-center mb-4">
+          <p className="text-white/40 text-sm">{currentUser?.display_name?.split(' ')[0] || 'Hey'}</p>
+          <p className="text-4xl font-bold text-[#f5f7fb] tracking-tight mt-1">
+            {balanceLoading ? '...' : formatMoneyFromCents(pendingBalanceCents + availableBalanceCents)}
+          </p>
+          {/* Composition bar */}
+          {!balanceLoading && (pendingBalanceCents + availableBalanceCents) > 0 && (
+            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-white/[0.04] mt-3 mx-8">
+              {(() => {
+                const total = pendingBalanceCents + availableBalanceCents;
+                const pendingPct = total > 0 ? (pendingBalanceCents / total) * 100 : 0;
+                const availablePct = total > 0 ? (availableBalanceCents / total) * 100 : 0;
+                return (
+                  <>
+                    {pendingPct >= 0.5 && (
+                      <div
+                        className="h-full rounded-full bg-[#5f8fff] transition-all"
+                        style={{ width: `${Math.max(pendingPct, 4)}%` }}
+                      />
+                    )}
+                    {availablePct >= 0.5 && (
+                      <div
+                        className="h-full rounded-full bg-emerald-400 transition-all"
+                        style={{ width: `${Math.max(availablePct, 4)}%` }}
+                      />
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+
+        {/* Metrics 2x2 */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="flex items-center gap-2.5 bg-white/[0.03] rounded-2xl px-3.5 h-[44px]">
+            <DollarSign size={18} className="text-emerald-400 flex-shrink-0" />
+            <span className="text-lg font-semibold text-[#f5f7fb]">${metrics.totalRevenue.toFixed(0)}</span>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white/[0.03] rounded-2xl px-3.5 h-[44px]">
+            <Package size={18} className="text-[#5f8fff] flex-shrink-0" />
+            <span className="text-lg font-semibold text-[#f5f7fb]">{metrics.activeListings}</span>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white/[0.03] rounded-2xl px-3.5 h-[44px]">
+            <ShoppingCart size={18} className="text-amber-400 flex-shrink-0" />
+            <span className="text-lg font-semibold text-[#f5f7fb]">{metrics.ordersThisMonth}</span>
+          </div>
+          <div className="flex items-center gap-2.5 bg-white/[0.03] rounded-2xl px-3.5 h-[44px]">
+            <Star size={18} className="text-purple-400 flex-shrink-0" />
+            <span className="text-lg font-semibold text-[#f5f7fb]">{metrics.sellerRating > 0 ? metrics.sellerRating.toFixed(1) : '--'}</span>
+          </div>
+        </div>
+
+        {/* Sparkline chart - fills remaining space */}
+        <div className="flex-1 min-h-0 mb-3">
+          {chartData.length > 0 && chartData[0].month !== 'No data' ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="mobileRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#5f8fff" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#5f8fff" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="revenue" fill="url(#mobileRevenueGradient)" stroke="#5f8fff" strokeWidth={2} dot={false} isAnimationActive={true} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center text-white/20 text-sm">
+              No data yet
+            </div>
+          )}
+        </div>
+
+        {/* Quick action icons */}
+        <div className="flex justify-around pb-2">
+          <Link href="/sell" className="w-11 h-11 rounded-full bg-white/[0.04] flex items-center justify-center active:bg-white/[0.08] transition-colors">
+            <Plus size={20} className="text-white/60" />
+          </Link>
+          <Link href="/orders" className="w-11 h-11 rounded-full bg-white/[0.04] flex items-center justify-center relative active:bg-white/[0.08] transition-colors">
+            <Package size={20} className="text-white/60" />
+            {recentOrdersList.length > 0 && (
+              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-amber-400" />
+            )}
+          </Link>
+          <Link href="/messages" className="w-11 h-11 rounded-full bg-white/[0.04] flex items-center justify-center relative active:bg-white/[0.08] transition-colors">
+            <MessageSquare size={20} className="text-white/60" />
+            {recentMessagesList.length > 0 && (
+              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#5f8fff]" />
+            )}
+          </Link>
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/stripe/dashboard', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to open Stripe dashboard');
+                if (data.url) window.open(data.url, '_blank');
+              } catch (err: any) {
+                alert(err.message || 'Failed to open Stripe dashboard');
+              }
+            }}
+            className="w-11 h-11 rounded-full bg-white/[0.04] flex items-center justify-center active:bg-white/[0.08] transition-colors"
+          >
+            <ExternalLink size={20} className="text-white/60" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Desktop Dashboard (unchanged) ── */}
+      <div className="hidden lg:block space-y-8 pb-12">
         {/* Header */}
         <div className="space-y-6">
           <div>
@@ -1137,5 +1253,6 @@ export default function DashboardPage() {
         </div>
 
       </div>
+    </>
   );
 }

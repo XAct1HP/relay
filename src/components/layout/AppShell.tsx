@@ -241,45 +241,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isCollapsed ? "lg:ml-20" : "lg:ml-64"
         } pt-0`}
       >
-        {/* Mobile Top Bar */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 h-[72px] bg-relay-bg/80 backdrop-blur-xl border-b border-white/10 z-30 flex items-center px-4 gap-4">
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 rounded-lg hover:bg-white/[0.08] transition-colors"
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="text-relay-text"
-            >
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
-          <Image
-            src="/branding/logo-darkmode.png"
-            alt="Relay"
-            width={88}
-            height={32}
-            className="object-contain"
-            priority
-          />
-        </div>
+        {/* Mobile top bar removed - navigation via bottom bar */}
 
         {/* Content Area */}
-        <div className="pt-[88px] lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10">
+        <div className="pt-3 lg:pt-8 pb-[calc(80px+env(safe-area-inset-bottom,0px))] lg:pb-8 px-4 sm:px-6 md:px-10">
           {children}
         </div>
       </main>
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden">
-        <MobileBottomBar />
+        <MobileBottomBar onMenuOpen={() => setMobileMenuOpen(true)} />
       </div>
     </div>
   );

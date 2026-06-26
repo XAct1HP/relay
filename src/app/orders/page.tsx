@@ -280,6 +280,7 @@ export default function OrdersPage() {
       <div>
         <p className="relay-eyebrow text-[#5f8fff]">MY ORDERS</p>
         <h1 className="relay-title">Orders</h1>
+        <p className="lg:hidden text-white/30 text-xs font-medium tracking-wider mb-3">ORDERS</p>
       </div>
 
       {/* Filter Tabs */}
@@ -288,20 +289,20 @@ export default function OrdersPage() {
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`rounded-full px-4 py-2 font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+            className={`rounded-full px-3 py-1.5 lg:px-4 lg:py-2 text-xs lg:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
               filter === tab ? "bg-[#5f8fff] text-white" : "text-[#7ca6ff] hover:bg-white/5"
             }`}
           >
             {tab === "all" && "All"}
-            {tab === "in_progress" && "In Progress"}
+            {tab === "in_progress" && <><span className="lg:hidden">Active</span><span className="hidden lg:inline">In Progress</span></>}
             {tab === "completed" && "Completed"}
-            {tab === "cancelled" && "Cancelled/Disputed"}
+            {tab === "cancelled" && <><span className="lg:hidden">Cancelled</span><span className="hidden lg:inline">Cancelled/Disputed</span></>}
           </button>
         ))}
       </div>
 
       {/* Orders List */}
-      <div className="space-y-3">
+      <div className="lg:space-y-3 overflow-auto lg:overflow-visible h-[calc(100dvh-140px-env(safe-area-inset-bottom,0px))] lg:h-auto">
         {filteredOrders.length === 0 ? (
           <div className="relay-card p-8 text-center">
             <p className="text-relay-muted">No orders in this category</p>
@@ -310,13 +311,46 @@ export default function OrdersPage() {
           filteredOrders.map((order) => {
             const config = statusConfig[order.status]
 
+            // Status dot color mapping
+            const getStatusDotColor = (status: OrderStatus) => {
+              if (status === "completed" || status === "return_delivered" || status === "delivered") return "bg-emerald-400"
+              if (status === "disputed" || status === "cancelled" || status === "payout_failed") return "bg-red-400"
+              if (status === "review_window" || status === "refund_pending" || status === "return_pending") return "bg-amber-400"
+              return "bg-blue-400"
+            }
+
             return (
               <Link key={order.id} href={`/orders/${order.id}`}>
-                <div className="relay-card group mb-4 cursor-pointer p-3 lg:p-5 transition-all hover:bg-white/[0.06]">
-                  <div className="flex items-start lg:items-center gap-3 lg:gap-4 flex-wrap lg:flex-nowrap">
+                {/* Mobile: compact row */}
+                <div className="lg:hidden flex items-center gap-3 py-3 px-1 border-b border-white/[0.04] active:bg-white/[0.03] transition-colors">
+                  <div className="flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
+                      {order.shoeImage ? (
+                        <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="h-full w-full object-cover" />
+                      ) : (
+                        <Package className="h-5 w-5 text-[#7ca6ff]" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${getStatusDotColor(order.status)}`} />
+                      <p className="truncate text-sm font-medium text-[#f5f7fb]">{order.brand} {order.model}</p>
+                    </div>
+                    <p className="text-xs text-white/30">Size {order.size}</p>
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-sm font-semibold text-[#f5f7fb]">${order.price.toFixed(2)}</p>
+                  </div>
+                  <ChevronRight className="flex-shrink-0 h-4 w-4 text-white/20" />
+                </div>
+
+                {/* Desktop: existing card */}
+                <div className="hidden lg:block relay-card group mb-4 cursor-pointer p-5 transition-all hover:bg-white/[0.06]">
+                  <div className="flex items-center gap-4 flex-nowrap">
                     {/* Left: Image */}
                     <div className="flex-shrink-0">
-                      <div className="flex h-14 w-14 lg:h-16 lg:w-16 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
                         {order.shoeImage ? (
                           <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="h-full w-full object-cover" />
                         ) : (
@@ -328,37 +362,32 @@ export default function OrdersPage() {
                     {/* Middle: Info */}
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex items-center gap-2">
-                        <h3 className="truncate font-semibold text-[#f5f7fb] text-sm lg:text-base">
+                        <h3 className="truncate font-semibold text-[#f5f7fb] text-base">
                           {order.brand} {order.model}
                         </h3>
                       </div>
-                      <div className="mb-1 lg:mb-2 text-xs lg:text-sm text-[#7ca6ff]">
-                        Size {order.size} • {order.orderDate}
+                      <div className="mb-2 text-sm text-[#7ca6ff]">
+                        Size {order.size} &bull; {order.orderDate}
                       </div>
-                      <div className="text-xs text-white/40 hidden lg:block">{order.id}</div>
-                    </div>
-
-                    {/* Price (mobile: inline with info) */}
-                    <div className="flex-shrink-0 lg:hidden font-semibold text-[#f5f7fb] text-sm">
-                      {"$"}{order.price.toFixed(2)}
+                      <div className="text-xs text-white/40">{order.id}</div>
                     </div>
 
                     {/* Status & Role */}
-                    <div className="flex flex-shrink-0 items-center gap-2 lg:gap-3 w-full lg:w-auto">
+                    <div className="flex flex-shrink-0 items-center gap-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="relay-badge-info flex items-center gap-1 rounded-lg border-0 px-2 lg:px-3 py-1 text-xs">
+                        <span className="relay-badge-info flex items-center gap-1 rounded-lg border-0 px-3 py-1 text-xs">
                           {config.icon}
                           {config.label}
                         </span>
-                        <span className="relay-badge-neutral rounded-lg border-0 px-2 lg:px-3 py-1 text-xs">
+                        <span className="relay-badge-neutral rounded-lg border-0 px-3 py-1 text-xs">
                           {order.role === "buying" ? "Buying" : "Selling"}
                         </span>
                       </div>
                     </div>
 
                     {/* Price & Arrow (desktop) */}
-                    <div className="hidden lg:flex flex-shrink-0 items-center gap-3 text-right">
-                      <div className="font-semibold text-[#f5f7fb]">{"$"}{order.price.toFixed(2)}</div>
+                    <div className="flex flex-shrink-0 items-center gap-3 text-right">
+                      <div className="font-semibold text-[#f5f7fb]">${order.price.toFixed(2)}</div>
                       <ChevronRight className="h-5 w-5 text-[#7ca6ff] transition-transform group-hover:translate-x-1" />
                     </div>
                   </div>
@@ -370,7 +399,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between border-t border-white/10 pt-4">
+      <div className="hidden lg:flex items-center justify-between border-t border-white/10 pt-4">
         <p className="text-sm text-[#7ca6ff]">
           Showing {filteredOrders.length} of {orders.length} orders
         </p>

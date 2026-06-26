@@ -294,7 +294,7 @@ export default function FeedPage() {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-12">
-      <div className="mb-8">
+      <div className="mb-8 hidden lg:block">
         <p className="relay-eyebrow text-[#5f8fff]">YOUR FEED</p>
         <h1 className="relay-title">Discover</h1>
       </div>
@@ -302,7 +302,7 @@ export default function FeedPage() {
       {posts.length > 0 ? (
         <div className="space-y-5">
           {posts.map((post) => (
-            <div key={post.id} className="relay-card p-4 sm:p-5 hover:bg-white/[0.06] transition-colors relative overflow-visible">
+            <div key={post.id} className="relay-card p-4 sm:p-5 hover:bg-white/[0.06] transition-colors relative overflow-visible border-b border-white/[0.04] lg:border-b-0">
               {/* Like Badge */}
               <button
                 onClick={() => toggleLike(post.id)}
@@ -317,14 +317,14 @@ export default function FeedPage() {
               </button>
 
               {/* Post header */}
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2.5 lg:gap-3 mb-3 lg:mb-4">
                 <Link href={"/profile/" + post.sellerUsername.replace("@", "")}>
-                  <img src={post.sellerAvatar} alt={post.sellerName} className="w-10 h-10 rounded-full border border-white/10 hover:opacity-80 transition-opacity" />
+                  <img src={post.sellerAvatar} alt={post.sellerName} className="w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-white/10 hover:opacity-80 transition-opacity" />
                 </Link>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 lg:gap-2 flex-wrap">
                     <Link href={"/profile/" + post.sellerUsername.replace("@", "")} className="hover:underline">
-                      <h3 className="font-semibold text-relay-text">{post.sellerName}</h3>
+                      <h3 className="text-sm lg:text-base font-semibold text-relay-text">{post.sellerName}</h3>
                     </Link>
                     {post._isFollowed && (
                       <span className="text-[10px] font-semibold text-[#5f8fff]/70 uppercase tracking-wider">Following</span>
@@ -382,19 +382,19 @@ export default function FeedPage() {
 
               {/* Linked listing */}
               {post.relatedListing && !onboardingActive && (
-                <Link href={"/listing/" + post.relatedListing.id} className="block mb-4 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-colors">
-                  <div className="flex items-center gap-4">
+                <Link href={"/listing/" + post.relatedListing.id} className="block mb-4 p-2.5 lg:p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:bg-white/[0.06] transition-colors">
+                  <div className="flex items-center gap-3 lg:gap-4">
                     {post.relatedListing.image && (
-                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-white/10">
+                      <div className="w-10 h-10 lg:w-16 lg:h-16 rounded-lg overflow-hidden flex-shrink-0 border border-white/10">
                         <img src={post.relatedListing.image} alt={post.relatedListing.name} className="w-full h-full object-cover" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-relay-subtle uppercase tracking-wide">Linked Listing</p>
-                      <h4 className="text-sm font-semibold text-relay-text mt-0.5 truncate">{post.relatedListing.name}</h4>
-                      <p className="text-sm font-bold text-relay-accent mt-1">{"$" + post.relatedListing.price}</p>
+                      <p className="text-xs font-medium text-relay-subtle uppercase tracking-wide hidden lg:block">Linked Listing</p>
+                      <h4 className="text-sm font-semibold text-relay-text lg:mt-0.5 truncate">{post.relatedListing.name}</h4>
+                      <p className="text-sm font-bold text-relay-accent lg:mt-1">{"$" + post.relatedListing.price}</p>
                     </div>
-                    <span className="px-3 py-2 sm:py-1.5 rounded-lg bg-relay-accent text-relay-bg text-xs font-semibold whitespace-nowrap flex-shrink-0">View</span>
+                    <span className="px-3 py-2 sm:py-1.5 rounded-lg bg-relay-accent text-relay-bg text-xs font-semibold whitespace-nowrap flex-shrink-0 hidden lg:inline">View</span>
                   </div>
                 </Link>
               )}

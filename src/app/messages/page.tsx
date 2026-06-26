@@ -216,7 +216,7 @@ function ConversationList({
   });
 
   return (
-    <div className={`w-full lg:w-80 lg:border-r border-white/10 flex flex-col h-[calc(100vh-200px)] bg-white/[0.02] ${mobileHidden ? 'hidden lg:flex' : ''}`}>
+    <div className={`w-full lg:w-80 lg:border-r border-white/10 flex flex-col h-full lg:h-[calc(100vh-200px)] bg-transparent lg:bg-white/[0.02] ${mobileHidden ? 'hidden lg:flex' : ''}`}>
       <div className="p-4 border-b border-white/10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -238,7 +238,7 @@ function ConversationList({
             <button
               key={conv.id}
               onClick={() => onSelect(conv.id)}
-              className={`w-full p-4 min-h-[56px] border-b border-white/5 hover:bg-white/[0.03] transition-colors text-left ${
+              className={`w-full p-4 min-h-[56px] border-b border-white/[0.04] lg:border-white/5 hover:bg-white/[0.03] transition-colors text-left ${
                 selectedId === conv.id ? "bg-white/[0.06]" : ""
               }`}
             >
@@ -435,8 +435,8 @@ function ChatArea({
                   <div
                     className={`max-w-xs px-4 py-2 rounded-2xl ${
                       isUser
-                        ? "bg-relay-accent-strong/20 text-relay-text"
-                        : "bg-white/[0.06] text-relay-text"
+                        ? "bg-[#5f8fff]/20 rounded-br-sm lg:rounded-br-2xl lg:bg-relay-accent-strong/20 text-relay-text"
+                        : "bg-white/[0.06] rounded-bl-sm lg:rounded-bl-2xl text-relay-text"
                     }`}
                   >
                     <p className="text-sm">{msg.content}</p>
@@ -449,7 +449,7 @@ function ChatArea({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-white/10 p-4 pb-20 lg:pb-4 space-y-3">
+      <div className="border-t border-white/[0.04] lg:border-white/10 p-3 lg:p-4 pb-20 lg:pb-4 space-y-3">
         {messagingDisabledReason && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
             <p className="text-sm text-amber-200">{messagingDisabledReason}</p>
@@ -899,14 +899,14 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="lg:space-y-6">
+      <div className="hidden lg:block">
         <p className="relay-eyebrow text-[#5f8fff]">CONVERSATIONS</p>
         <h1 className="relay-title">Messages</h1>
       </div>
 
       {conversations.length > 0 ? (
-        <div className="flex h-[calc(100vh-200px)] overflow-hidden rounded-xl border border-white/[0.06]">
+        <div className="flex h-[calc(100dvh-80px-env(safe-area-inset-bottom,0px))] lg:h-[calc(100vh-200px)] overflow-hidden lg:rounded-xl lg:border lg:border-white/[0.06]">
           <ConversationList
             conversations={conversations}
             selectedId={selectedConversation}

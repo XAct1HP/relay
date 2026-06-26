@@ -782,17 +782,17 @@ export default function SellPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-20 lg:pb-0">
+    <div className="max-w-5xl mx-auto pb-36 lg:pb-0">
         {/* Page Header */}
-        <div className="mb-8">
+        <div className="mb-4 lg:mb-8">
           <div className="relay-eyebrow text-relay-accent">NEW LISTING</div>
           <h1 className="relay-title text-relay-text mt-2">Sell Your Shoes</h1>
-          <p className="text-relay-subtle mt-3 max-w-4xl">
+          <p className="hidden lg:block text-relay-subtle mt-3 max-w-4xl">
             Choose a catalog sneaker listing for SKU-based inventory, or keep the existing manual flow for customs and non-standard products.
           </p>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mb-4 lg:mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
           <button
             type="button"
             onClick={() => switchListingMode("catalog")}
@@ -841,8 +841,30 @@ export default function SellPage() {
         </div>
 
         {/* Step Indicator */}
-        <div className="mb-8">
-          <div className="flex justify-between mb-6">
+        <div className="mb-4 lg:mb-8">
+          {/* Mobile: minimal dots */}
+          <div className="flex lg:hidden flex-col items-center gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              {currentStepLabels.map((_, index) => {
+                const stepNum = (index + 1) as Step;
+                return (
+                  <div
+                    key={stepNum}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      stepNum === currentStep
+                        ? "bg-[#5f8fff]"
+                        : stepNum < currentStep
+                        ? "bg-emerald-400"
+                        : "bg-white/10"
+                    }`}
+                  />
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-white/40 font-medium tracking-wide">{currentStepLabels[currentStep - 1]}</p>
+          </div>
+          {/* Desktop: numbered circles */}
+          <div className="hidden lg:flex justify-between mb-6">
             {currentStepLabels.map((label, index) => {
               const stepNum = (index + 1) as Step;
               const isActive = stepNum === currentStep;
@@ -878,12 +900,12 @@ export default function SellPage() {
         </div>
 
         {/* Form Container */}
-        <div className="relay-card p-4 sm:p-8">
+        <div className="relay-card p-3 lg:p-8">
           {/* Step 1: Shoe Details */}
           {currentStep === 1 && (
-            <div className="space-y-6">
+            <div className="space-y-3 lg:space-y-6">
               {isCatalogListing ? (
-                <div className="space-y-6">
+                <div className="space-y-3 lg:space-y-6">
                   <div className="rounded-2xl border border-relay-accent/20 bg-relay-accent/5 p-5">
                     <div className="flex items-center gap-2 mb-2">
                       <Sparkles size={16} className="text-relay-accent" />
@@ -1150,7 +1172,7 @@ export default function SellPage() {
                 </div>
               )}
 
-              <div>
+              <div className="pt-3 lg:pt-0 border-t border-white/[0.04] lg:border-0">
                 <label className="block text-sm font-medium text-relay-text mb-2">Box Condition *</label>
                 <div className="relative">
                   <select
@@ -1169,7 +1191,7 @@ export default function SellPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="pt-3 lg:pt-0 border-t border-white/[0.04] lg:border-0">
                 <label className="block text-sm font-medium text-relay-text mb-2">Approximate Sizing *</label>
                 <div className="relative">
                   <select
@@ -2075,7 +2097,7 @@ export default function SellPage() {
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mt-8 pt-8 border-t border-white/10">
+          <div className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] left-0 right-0 px-4 py-3 bg-[#06070a]/90 backdrop-blur-xl z-20 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:px-0 lg:py-0 lg:bg-transparent lg:backdrop-blur-none lg:z-auto flex flex-col sm:flex-row gap-3 lg:gap-4 mt-0 lg:mt-8 pt-0 lg:pt-8 border-0 lg:border-t lg:border-white/10">
             {currentStep > 1 && (
               <button
                 onClick={handlePreviousStep}

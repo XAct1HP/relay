@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase'
-import { Clock, CheckCircle, XCircle, Upload, KeyRound, Copy } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, Upload, KeyRound, Copy, User, Shield, Bell, Store, Key, CreditCard, AlertTriangle, ChevronRight, ArrowLeft } from 'lucide-react'
 import type { SellerApiKey } from '@/types'
 
 interface GeneratedApiKeyState {
@@ -53,7 +53,10 @@ export default function SettingsPage() {
   const [generatedApiKey, setGeneratedApiKey] = useState<GeneratedApiKeyState | null>(null)
   const [apiKeyError, setApiKeyError] = useState('')
   const [apiKeySuccess, setApiKeySuccess] = useState('')
-  const [activeSection, setActiveSection] = useState('profile')
+  const [activeSection, setActiveSection] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) return 'menu'
+    return 'profile'
+  })
 
   // Handle return from Stripe onboarding
   useEffect(() => {
@@ -353,15 +356,16 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-0">
+    <div className="space-y-6 pb-20 lg:pb-0 overflow-auto h-[calc(100dvh-80px-env(safe-area-inset-bottom,0px))] lg:h-auto lg:overflow-visible">
       {/* Header */}
       <div className="space-y-2 mb-8">
         <p className="relay-eyebrow text-relay-accent">ACCOUNT</p>
         <h1 className="relay-title">Settings</h1>
+        <p className="lg:hidden text-white/30 text-xs font-medium tracking-wider mb-3">SETTINGS</p>
       </div>
 
-      {/* Section Tabs */}
-      <div className="flex gap-2 mb-8 overflow-x-auto scrollbar-hide flex-nowrap pb-2">
+      {/* Section Tabs - Desktop */}
+      <div className="hidden lg:flex gap-2 mb-8 overflow-x-auto scrollbar-hide flex-nowrap pb-2">
         {sections.map((section) => (
           <button
             key={section.id}
@@ -377,8 +381,50 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      {/* Section Nav - Mobile */}
+      <div className="lg:hidden mb-6">
+        {activeSection !== 'menu' ? (
+          <button
+            onClick={() => setActiveSection('menu')}
+            className="flex items-center gap-2 text-[#5f8fff] text-sm font-medium mb-4 active:opacity-70"
+          >
+            <ArrowLeft size={16} />
+            All Settings
+          </button>
+        ) : (
+          <div className="space-y-0.5">
+            {sections.map((section) => {
+              const iconMap: Record<string, React.ReactNode> = {
+                profile: <User size={20} />,
+                security: <Shield size={20} />,
+                notifications: <Bell size={20} />,
+                seller: <Store size={20} />,
+                'api-keys': <Key size={20} />,
+                accounts: <CreditCard size={20} />,
+                danger: <AlertTriangle size={20} className="text-red-400" />,
+              }
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className="w-full flex items-center gap-4 px-3 h-[52px] rounded-xl text-left active:bg-white/[0.06] transition-colors border-b border-white/[0.04] last:border-b-0"
+                >
+                  <span className={section.id === 'danger' ? 'text-red-400/70' : 'text-white/40'}>
+                    {iconMap[section.id]}
+                  </span>
+                  <span className={`flex-1 text-sm font-medium ${section.id === 'danger' ? 'text-red-300' : 'text-white/80'}`}>
+                    {section.label}
+                  </span>
+                  <ChevronRight size={16} className="text-white/20" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Content */}
-      <div>
+      <div className={activeSection === 'menu' ? 'hidden' : ''}>
         {/* Profile Information */}
         {activeSection === 'profile' && (<>
         <div className="bg-white/[0.04] backdrop-blur-xl rounded-[1.5rem] border border-white/10 p-8 mb-6">
@@ -387,7 +433,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             {/* Avatar */}
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-3">Avatar</label>
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-3">Avatar</label>
               <div className="flex items-center gap-6">
                 <div className="w-20 h-20 rounded-full overflow-hidden bg-white/5 flex-shrink-0">
                   {avatar && (
@@ -415,7 +461,7 @@ export default function SettingsPage() {
 
             {/* Full Name */}
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">
                 Full Name
               </label>
               <input
@@ -429,7 +475,7 @@ export default function SettingsPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">Email</label>
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">Email</label>
               <input
                 type="email"
                 value={email}
@@ -441,7 +487,7 @@ export default function SettingsPage() {
 
             {/* Instagram */}
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">
                 Instagram
               </label>
               <input
@@ -523,7 +569,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">
                 Current Password
               </label>
               <input
@@ -536,7 +582,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">
                 New Password
               </label>
               <input
@@ -549,7 +595,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-white/70 text-sm font-medium mb-2">
+              <label className="block text-white/70 text-xs lg:text-sm font-medium mb-2">
                 Confirm New Password
               </label>
               <input
@@ -701,7 +747,7 @@ export default function SettingsPage() {
             <div className="rounded-2xl border border-white/10 bg-black/20 p-5 mb-6">
               <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
                 <label className="flex-1">
-                  <span className="block text-white/70 text-sm font-medium mb-2">Key Name</span>
+                  <span className="block text-white/70 text-xs lg:text-sm font-medium mb-2">Key Name</span>
                   <input
                     type="text"
                     value={apiKeyName}
@@ -910,8 +956,9 @@ export default function SettingsPage() {
         )}
 
         {/* Danger Zone */}
-        {activeSection === 'danger' && (
-        <div className="bg-red-500/10 backdrop-blur-xl rounded-[1.5rem] border border-red-500/30 p-8">
+        {activeSection === 'danger' && (<>
+        {/* Desktop danger zone */}
+        <div className="hidden lg:block bg-red-500/10 backdrop-blur-xl rounded-[1.5rem] border border-red-500/30 p-8">
           <h2 className="text-xl font-semibold text-red-300 mb-4">Danger Zone</h2>
           <p className="text-white/60 text-sm mb-6">
             Deleting your account is permanent and cannot be undone. All your data will be
@@ -924,7 +971,17 @@ export default function SettingsPage() {
             Delete Account
           </button>
         </div>
-        )}
+        {/* Mobile danger zone - minimal */}
+        <div className="lg:hidden pt-8 pb-12 text-center">
+          <p className="text-white/40 text-xs mb-3">This action is permanent and cannot be undone.</p>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-red-400/70 text-sm font-medium active:text-red-400"
+          >
+            Delete Account
+          </button>
+        </div>
+        </>)}
 
         {/* Save Changes */}
         {(activeSection === 'profile' || activeSection === 'seller') && (
