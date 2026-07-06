@@ -189,7 +189,7 @@ export default function BulkImportPage() {
             <div>
               <h2 className="text-base lg:text-lg font-semibold text-relay-text">Upload CSV</h2>
               <p className="text-sm text-relay-subtle mt-1 hidden lg:block">
-                Photos are not required for bulk SKU imports. Relay will attach catalog data when available and use the current placeholder catalog behavior otherwise.
+                Photos are not required for bulk SKU imports. Relay will hydrate each SKU from the Relay sneaker database first, fall back to KicksDB when needed, and only use placeholder catalog data as a last resort.
               </p>
             </div>
           </div>
@@ -471,6 +471,7 @@ export default function BulkImportPage() {
               <div className="space-y-2 text-sm text-relay-subtle">
                 <p>Existing seller SKU listings are merged instead of duplicated.</p>
                 <p>Existing SKU + size rows update inventory and pricing through the Phase 1 SKU upsert logic.</p>
+                <p>Committed imports hydrate SKU details from Relay sneaker data first and use KicksDB to backfill missing sneaker records when available.</p>
                 <p>Preview never writes inventory. Validation errors block commit before any bad rows are applied.</p>
               </div>
             </div>

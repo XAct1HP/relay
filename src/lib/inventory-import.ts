@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveCatalogProductBySku } from "@/lib/catalog-server";
 import { InventoryUpsertError, upsertSellerSkuInventory } from "@/lib/inventory";
 import { normalizeSku } from "@/lib/listings";
+import { resolveSneakerBySku } from "@/lib/sneaker-server";
 
 type ImportMode = "preview" | "commit";
 type ImportOutcome = "preview" | "committed" | "blocked" | "partial_failure";
@@ -151,7 +152,10 @@ async function processBulkInventoryImport(
   for (const group of Array.from(validation.groups.values())) {
     try {
       const catalogProduct = await resolveCatalogProductBySku(supabase, group.sku);
-      if (!catalogProduct) {
+      const sneakerLookup = await resolveSneakerBySku(supabase, group.sku);
+      const sneaker = sneakerLookup?.sneaker || null;
+
+      if (!catalogProduct && !sneaker) {
         runtimeErrors.push(
           ...group.row_numbers.map((rowNumber) => ({
             row: rowNumber,
@@ -165,14 +169,26 @@ async function processBulkInventoryImport(
 
       await upsertSellerSkuInventory(supabase, {
         seller_id: sellerId,
-        sku: catalogProduct.sku,
+        sku: sneaker?.sku || catalogProduct?.sku || group.sku,
         product: {
-          catalog_product_id: catalogProduct.id,
-          brand: catalogProduct.brand,
-          model: catalogProduct.model,
-          nickname: catalogProduct.nickname,
-          description: catalogProduct.description,
-          images: catalogProduct.images,
+          sneaker_id: sneaker?.id || null,
+          catalog_product_id: catalogProduct?.id || null,
+          brand: sneaker?.brand || catalogProduct?.brand || "Catalog Sneaker",
+          model:
+            sneaker?.model ||
+            catalogProduct?.model ||
+            sneaker?.name ||
+            `SKU ${group.sku}`,
+          nickname: sneaker?.nickname || catalogProduct?.nickname || null,
+          description:
+            sneaker?.description ||
+            catalogProduct?.description ||
+            `Catalog placeholder for SKU ${group.sku}. Update this listing when richer product data is available.`,
+          images: buildImportListingImages({
+            sneakerGalleryImages: sneaker?.gallery_images || [],
+            sneakerImageUrl: sneaker?.image_url || null,
+            catalogImages: catalogProduct?.images || [],
+          }),
           condition: "new",
           box_condition: "perfect",
           approx_sizing: "normal",
@@ -566,4 +582,30 @@ function parseImportPrice(value: string): number | null {
   }
 
   return parsed;
+}
+
+function buildImportListingImages(input: {
+  sneakerGalleryImages: string[];
+  sneakerImageUrl: string | null;
+  catalogImages: string[];
+}): string[] {
+  const deduped: string[] = [];
+
+  for (const value of [
+    ...input.sneakerGalleryImages,
+    input.sneakerImageUrl,
+    ...input.catalogImages,
+  ]) {
+    const normalized = normalizeOptionalImageUrl(value);
+    if (normalized && !deduped.includes(normalized)) {
+      deduped.push(normalized);
+    }
+  }
+
+  return deduped.slice(0, 6);
+}
+
+function normalizeOptionalImageUrl(value: string | null | undefined): string | null {
+  const normalized = String(value || "").trim();
+  return normalized || null;
 }
