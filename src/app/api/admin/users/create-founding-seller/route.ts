@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin-access";
+import { buildFallbackUsername } from "@/lib/test-mode";
 
 function generateStrongPassword(length = 16): string {
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -100,22 +101,42 @@ export async function POST(request: NextRequest) {
 
     const userId = createdUser.user.id;
 
-    // Upsert profile row with founding-seller privileges
-    const { error: profileError } = await adminClient
-      .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          email,
-          full_name: displayName,
-          display_name: displayName,
-          role: "seller",
-          is_verified_seller: true,
-          seller_application_status: "approved",
-          onboarding_stripe_only: true,
-        },
-        { onConflict: "id" }
-      );
+    // Upsert profile row with founding-seller privileges. Retry with a fresh
+    // username suffix if the generated one collides with an existing profile.
+    let profileError: { message?: string } | null = null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const username = buildFallbackUsername(email);
+      const { error } = await adminClient
+        .from("profiles")
+        .upsert(
+          {
+            id: userId,
+            email,
+            full_name: displayName,
+            display_name: displayName,
+            username,
+            role: "seller",
+            is_verified_seller: true,
+            seller_application_status: "approved",
+            onboarding_stripe_only: true,
+          },
+          { onConflict: "id" }
+        );
+
+      if (!error) {
+        profileError = null;
+        break;
+      }
+
+      profileError = error;
+      const message = String(error.message || "").toLowerCase();
+      const isUsernameCollision =
+        message.includes("username") &&
+        (message.includes("duplicate") || message.includes("unique"));
+      if (!isUsernameCollision) {
+        break;
+      }
+    }
 
     if (profileError) {
       // Best-effort cleanup so we don't leave an orphaned auth user
