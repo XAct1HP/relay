@@ -708,15 +708,18 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
   const description =
     product.description?.trim() ||
     `Catalog placeholder for SKU ${displaySku}. Update this listing when richer product data is available.`;
+  const hasDsVariants =
+    variants.some((v) => v.condition === "new") || false;
+  const hasUsedVariants = variants.some((v) => v.condition === "used") || false;
   const inferredCondition = inferListingConditionFromInventory({
-    hasDsVariants: variants.length > 0,
-    hasUsedItems: usedItems.length > 0,
+    hasDsVariants,
+    hasUsedItems: usedItems.length > 0 || hasUsedVariants,
   });
   const normalizedListingCondition = normalizeListingCondition(product.condition) || inferredCondition;
 
   validateListingConditionMatchesInventory(normalizedListingCondition, {
-    hasDsVariants: variants.length > 0,
-    hasUsedItems: usedItems.length > 0,
+    hasDsVariants,
+    hasUsedItems: usedItems.length > 0 || hasUsedVariants,
   });
 
   return {

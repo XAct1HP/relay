@@ -117,6 +117,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If the parent listing was flipped to sold_out because every variant was
+    // pending a photo, bring it back to active now that this variant is live.
+    const listingId = (
+      variantRow as unknown as { listing_id?: string }
+    ).listing_id;
+    if (listingId) {
+      const { data: parentListing } = await adminClient
+        .from("listings")
+        .select("id, status")
+        .eq("id", listingId)
+        .maybeSingle();
+      if (parentListing?.status === "sold_out") {
+        await adminClient
+          .from("listings")
+          .update({ status: "active" })
+          .eq("id", listingId);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       variant_id: variantId,
