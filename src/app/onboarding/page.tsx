@@ -120,6 +120,21 @@ export default function OnboardingPage() {
             stripe_connected: Boolean(payload.onboardingComplete),
           }));
 
+          // Founding seller fast-track: clear the flag and land on the dashboard.
+          if (payload.onboardingComplete && currentUser?.onboarding_stripe_only) {
+            try {
+              await updateProfile({ onboarding_stripe_only: false });
+            } catch (updateErr) {
+              console.error('Failed to clear onboarding_stripe_only flag', updateErr);
+            }
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('relay_onboarding_form_data');
+              localStorage.removeItem('relay_onboarding_step');
+            }
+            router.push('/dashboard');
+            return;
+          }
+
           if (payload.onboardingComplete) {
             setCurrentStep(4); // Go to Review & Submit after successful Stripe connection
           } else {
@@ -136,7 +151,7 @@ export default function OnboardingPage() {
       setError('Stripe onboarding session expired. Please try again.');
       setCurrentStep(3);
     }
-  }, [searchParams]);
+  }, [searchParams, currentUser?.onboarding_stripe_only, updateProfile, router]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -386,6 +401,68 @@ export default function OnboardingPage() {
 
   if (!currentUser) {
     return null;
+  }
+
+  // Founding sellers only need to connect Stripe. Skip application/questionnaire.
+  const isFoundingSellerFastTrack =
+    Boolean(currentUser?.onboarding_stripe_only) &&
+    !Boolean(currentUser?.stripe_connect_onboarding_complete);
+
+  if (isFoundingSellerFastTrack) {
+    return (
+      <div className="relay-page min-h-screen flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-xl">
+          <div className="relay-card p-6 sm:p-8 space-y-6">
+            <div className="space-y-2">
+              <p className="relay-eyebrow text-[#5f8fff]">FOUNDING SELLER</p>
+              <h1 className="text-2xl font-semibold text-white">
+                Welcome to Relay
+              </h1>
+              <p className="text-sm text-white/60">
+                Your seller account is already approved. Connect your Stripe
+                account to start listing and getting paid.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#5f8fff]/20 border border-[#5f8fff]/40 text-[#7ca6ff] flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-white font-medium">
+                    Connect your Stripe account
+                  </p>
+                  <p className="text-sm text-white/50 mt-1">
+                    Payouts, tax info, and identity are handled directly by
+                    Stripe. You will return here when finished.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleConnectStripe}
+              disabled={isLoading}
+              className="w-full relay-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Redirecting to Stripe..." : "Connect Stripe"}
+            </button>
+
+            <p className="text-xs text-white/40 text-center">
+              You can update your password any time from Settings.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

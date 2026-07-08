@@ -5,6 +5,8 @@ interface DisplayVariant {
   quantity: number;
   condition: "new" | "used";
   isActive: boolean;
+  needsConditionPhoto?: boolean;
+  conditionPhotoUrl?: string | null;
 }
 
 function toVariantCondition(value: string | null | undefined): "new" | "used" {
@@ -28,6 +30,8 @@ type ListingDisplayInput = {
     quantity?: number;
     condition?: string;
     is_active?: boolean;
+    needs_condition_photo?: boolean;
+    condition_photo_url?: string | null;
   }>;
   listing_used_items?: Array<{
     id?: string;
@@ -157,6 +161,11 @@ function getNormalizedVariants(
         quantity: Number(variant.quantity) || 0,
         condition: toVariantCondition(variant.condition),
         isActive: variant.is_active !== false,
+        needsConditionPhoto: variant.needs_condition_photo === true,
+        conditionPhotoUrl:
+          typeof variant.condition_photo_url === "string" && variant.condition_photo_url.length > 0
+            ? variant.condition_photo_url
+            : null,
       }))
       .filter((variant) => variant.size),
       ...listingUsedItems.map((item) => ({

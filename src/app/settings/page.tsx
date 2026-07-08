@@ -25,6 +25,9 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
   const [emailNotifications, setEmailNotifications] = useState({
     orders: true,
     messages: true,
@@ -224,23 +227,64 @@ export default function SettingsPage() {
   }
 
   const handlePasswordChange = async () => {
-    if (!newPassword || newPassword !== confirmPassword) {
-      alert('Passwords do not match')
+    setPasswordError('')
+    setPasswordSuccess('')
+
+    if (!currentPassword) {
+      setPasswordError('Enter your current password to confirm the change.')
+      return
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match.')
+      return
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('New password must be different from your current one.')
+      return
+    }
+    if (!currentUser?.email) {
+      setPasswordError('We could not verify your account. Please sign in again.')
       return
     }
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
+    setPasswordSaving(true)
+    try {
+      const supabase = createClient()
 
-    if (error) {
-      alert('Error updating password: ' + error.message)
-    } else {
-      alert('Password updated successfully')
+      // Verify current password by attempting to sign in with it.
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      })
+
+      if (reauthError) {
+        setPasswordError('Current password is incorrect.')
+        return
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
+
+      if (updateError) {
+        setPasswordError(updateError.message || 'Failed to update password.')
+        return
+      }
+
+      setPasswordSuccess('Password updated successfully.')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
+    } catch (err) {
+      setPasswordError(
+        err instanceof Error ? err.message : 'Failed to update password.'
+      )
+    } finally {
+      setPasswordSaving(false)
     }
   }
 
@@ -607,11 +651,23 @@ export default function SettingsPage() {
               />
             </div>
 
+            {passwordError && (
+              <div className="text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                {passwordError}
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                {passwordSuccess}
+              </div>
+            )}
+
             <button
               onClick={handlePasswordChange}
-              className="px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] text-white font-medium rounded-lg transition-colors"
+              disabled={passwordSaving}
+              className="px-6 py-2 bg-[#5f8fff] hover:bg-[#7ca6ff] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
             >
-              Update Password
+              {passwordSaving ? 'Updating...' : 'Update Password'}
             </button>
           </div>
         </div>

@@ -28,12 +28,15 @@ export default function LoginPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const { data: profile } = session ? await supabase
         .from('profiles')
-        .select('role, seller_application_status')
+        .select('role, seller_application_status, onboarding_stripe_only, stripe_connect_onboarding_complete')
         .eq('id', session.user.id)
         .maybeSingle() : { data: null };
 
       const role = profile?.role;
       const sellerStatus = profile?.seller_application_status;
+      const isFoundingSellerPendingStripe =
+        Boolean(profile?.onboarding_stripe_only) &&
+        !Boolean(profile?.stripe_connect_onboarding_complete);
       const isTestSellerEmail = session?.user.email?.toLowerCase() === 'test-seller@relay.local';
       let isStagingTestSeller = false;
 
@@ -52,7 +55,10 @@ export default function LoginPage() {
       const hasIncompleteApplication = typeof window !== 'undefined' && localStorage.getItem('relay_onboarding_form_data');
 
       // Redirect based on role and onboarding status
-      if (isStagingTestSeller && (!sellerStatus || sellerStatus === 'none')) {
+      if (isFoundingSellerPendingStripe) {
+        // Founding seller: skip application, go straight to Stripe-only onboarding screen
+        router.push('/onboarding');
+      } else if (isStagingTestSeller && (!sellerStatus || sellerStatus === 'none')) {
         router.push('/onboarding');
       } else if (intendedRole === 'seller' && (!sellerStatus || sellerStatus === 'none')) {
         // New seller signup - needs onboarding

@@ -13,6 +13,7 @@ export interface User {
   offers_enabled: boolean;
   stripe_account_id: string | null;
   stripe_connect_onboarding_complete?: boolean;
+  onboarding_stripe_only?: boolean;
   stripe_identity_verification_status?: import("./trust").SellerIdentityProfile["verification_status"];
   stripe_payouts_enabled?: boolean | null;
   stripe_charges_enabled?: boolean | null;

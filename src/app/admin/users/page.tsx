@@ -13,6 +13,10 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
+  Copy,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 
 interface UserProfile {
@@ -219,6 +223,215 @@ function ActionModal({ isOpen, user, action, onConfirm, onCancel }: any) {
   );
 }
 
+function CreateFoundingSellerModal({
+  isOpen,
+  onClose,
+  onCreated,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    email: string;
+    password: string;
+    displayName: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<"email" | "password" | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEmail("");
+      setDisplayName("");
+      setSubmitting(false);
+      setError(null);
+      setResult(null);
+      setCopiedField(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/users/create-founding-seller", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          displayName: displayName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to create founding seller.");
+      }
+      setResult({
+        email: data.user.email,
+        password: data.password,
+        displayName: data.user.displayName,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function copy(field: "email" | "password", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 1500);
+    } catch {
+      // silently ignore clipboard errors
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="relay-card p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-[#f5f7fb]">
+              Create founding seller
+            </h2>
+            <p className="text-white/50 text-sm mt-1">
+              Pre-approved seller account that only needs Stripe on first login.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/40 hover:text-white/80 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {result ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              <CheckCircle2 className="w-4 h-4" />
+              Account created. Send these credentials securely.
+            </div>
+
+            <div>
+              <label className="block text-white/60 text-xs uppercase tracking-wide mb-1">
+                Email
+              </label>
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                <span className="flex-1 text-[#f5f7fb] text-sm break-all">
+                  {result.email}
+                </span>
+                <button
+                  onClick={() => copy("email", result.email)}
+                  className="text-white/60 hover:text-white transition-colors"
+                >
+                  {copiedField === "email" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-white/60 text-xs uppercase tracking-wide mb-1">
+                Temporary password (shown once)
+              </label>
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                <span className="flex-1 font-mono text-[#f5f7fb] text-sm break-all">
+                  {result.password}
+                </span>
+                <button
+                  onClick={() => copy("password", result.password)}
+                  className="text-white/60 hover:text-white transition-colors"
+                >
+                  {copiedField === "password" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-white/40 text-xs mt-2">
+                They can change it any time from Settings after logging in.
+              </p>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="w-full relay-button-secondary"
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-white/70 text-sm mb-2">Email</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seller@example.com"
+                className="relay-input"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-white/70 text-sm mb-2">
+                Display name (optional)
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Defaults to the email prefix"
+                className="relay-input"
+              />
+            </div>
+            {error && (
+              <div className="text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 relay-button-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || !email.trim()}
+                className="flex-1 relay-button-secondary bg-[#5f8fff]/20 text-[#7ca6ff] hover:bg-[#5f8fff]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Creating..." : "Create account"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function UsersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -235,6 +448,7 @@ export default function UsersPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [startingConversation, setStartingConversation] = useState<string | null>(null);
+  const [createSellerOpen, setCreateSellerOpen] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -375,10 +589,19 @@ export default function UsersPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="space-y-2">
-        <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
-        <h1 className="relay-title">All Users</h1>
-        <p className="text-white/50 text-sm">{totalCount} total users on the platform</p>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="space-y-2">
+          <p className="relay-eyebrow text-[#5f8fff]">ADMIN</p>
+          <h1 className="relay-title">All Users</h1>
+          <p className="text-white/50 text-sm">{totalCount} total users on the platform</p>
+        </div>
+        <button
+          onClick={() => setCreateSellerOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-[#7ca6ff] bg-[#5f8fff]/15 hover:bg-[#5f8fff]/25 border border-[#5f8fff]/30 transition-colors self-start sm:self-auto"
+        >
+          <UserPlus className="w-4 h-4" />
+          Create founding seller
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -500,6 +723,15 @@ export default function UsersPage() {
         action={selectedAction}
         onConfirm={handleConfirmAction}
         onCancel={() => setModalState("none")}
+      />
+
+      <CreateFoundingSellerModal
+        isOpen={createSellerOpen}
+        onClose={() => setCreateSellerOpen(false)}
+        onCreated={() => {
+          setCurrentPage(1);
+          loadUsers();
+        }}
       />
     </div>
   );

@@ -1,8 +1,8 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, ChevronUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Search, Trash2, Camera, Upload, CheckCircle2 } from "lucide-react";
 import {
   applyBulkInventoryAction,
   deleteInventoryListingAction,
@@ -32,6 +32,8 @@ interface InventoryVariant {
   price: number;
   condition: "new" | "used";
   isActive: boolean;
+  needsConditionPhoto?: boolean;
+  conditionPhotoUrl?: string | null;
 }
 
 interface VariantDraft {
@@ -99,6 +101,9 @@ export default function SellerInventoryDashboard() {
     Record<string, { type: "error" | "success"; message: string }>
   >({});
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
+  const [uploadingPhotoVariantId, setUploadingPhotoVariantId] = useState<string | null>(null);
+  const [photoErrorByVariant, setPhotoErrorByVariant] = useState<Record<string, string>>({});
+  const photoInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   async function loadListings(sellerId: string, options?: { showLoading?: boolean }) {
@@ -112,7 +117,9 @@ export default function SellerInventoryDashboard() {
     try {
         const { data, error } = await supabase
         .from("listings")
-        .select("*, listing_variants(id, size, price, quantity, condition, is_active)")
+        .select(
+          "*, listing_variants(id, size, price, quantity, condition, is_active, needs_condition_photo, condition_photo_url)"
+        )
         .eq("seller_id", sellerId)
         .neq("status", "removed")
         .order("updated_at", { ascending: false });
@@ -208,6 +215,66 @@ export default function SellerInventoryDashboard() {
       else next.add(brand);
       return next;
     });
+  };
+
+  const attentionVariants = useMemo(() => {
+    const rows: Array<{
+      listingId: string;
+      listingName: string;
+      listingImage: string;
+      listingSku: string | null;
+      variant: InventoryVariant;
+    }> = [];
+    for (const listing of listings) {
+      for (const variant of listing.variants) {
+        if (variant.needsConditionPhoto && variant.id) {
+          rows.push({
+            listingId: listing.id,
+            listingName: listing.displayName,
+            listingImage: listing.displayImage,
+            listingSku: listing.displaySku,
+            variant,
+          });
+        }
+      }
+    }
+    return rows;
+  }, [listings]);
+
+  const handleUploadConditionPhoto = async (
+    variantId: string,
+    file: File | null
+  ) => {
+    if (!file || !currentUser?.id) return;
+    setPhotoErrorByVariant((prev) => {
+      const next = { ...prev };
+      delete next[variantId];
+      return next;
+    });
+    setUploadingPhotoVariantId(variantId);
+    try {
+      const formData = new FormData();
+      formData.set("variant_id", variantId);
+      formData.set("file", file);
+      const res = await fetch("/api/seller/variants/condition-photo", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Photo upload failed.");
+      }
+      await loadListings(currentUser.id, { showLoading: false });
+    } catch (err) {
+      setPhotoErrorByVariant((prev) => ({
+        ...prev,
+        [variantId]: err instanceof Error ? err.message : "Photo upload failed.",
+      }));
+    } finally {
+      setUploadingPhotoVariantId(null);
+      const inputEl = photoInputRefs.current[variantId];
+      if (inputEl) inputEl.value = "";
+    }
   };
 
   const activeListingsCount = listings.filter((listing) => listing.status === "active").length;
@@ -347,6 +414,19 @@ export default function SellerInventoryDashboard() {
       setVariantMessages((prev) => ({
         ...prev,
         [variant.id!]: { type: "error", message: "Quantity must be an integer greater than or equal to 0." },
+      }));
+      return;
+    }
+
+    // Block activation if this used variant still needs a condition photo
+    if (draft.isActive && variant.needsConditionPhoto) {
+      setVariantMessages((prev) => ({
+        ...prev,
+        [variant.id!]: {
+          type: "error",
+          message:
+            "Upload a condition photo from Needs Attention before activating this used variant.",
+        },
       }));
       return;
     }
@@ -505,6 +585,95 @@ export default function SellerInventoryDashboard() {
         <StatCard label={`Low Stock (<=${LOW_STOCK_THRESHOLD})`} value={lowStockCount} />
         <StatCard label="Inventory Value" value={`$${totalInventoryValue.toFixed(0)}`} />
       </div>
+
+      {attentionVariants.length > 0 && (
+        <div className="relay-card border-amber-500/30 bg-amber-500/[0.04] p-4 lg:p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5 text-amber-300" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base lg:text-lg font-semibold text-amber-100">
+                Needs Attention
+              </h2>
+              <p className="text-sm text-amber-100/70 mt-0.5">
+                {attentionVariants.length} used variant
+                {attentionVariants.length === 1 ? "" : "s"} need
+                {attentionVariants.length === 1 ? "s" : ""} a condition photo
+                before going live in the marketplace.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            {attentionVariants.map((row) => {
+              const variantId = row.variant.id!;
+              const uploading = uploadingPhotoVariantId === variantId;
+              const errorMessage = photoErrorByVariant[variantId];
+              return (
+                <div
+                  key={variantId}
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-2xl border border-amber-500/20 bg-black/20 p-3"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <img
+                      src={row.listingImage}
+                      alt={row.listingName}
+                      className="w-12 h-12 rounded-lg object-cover bg-white/5 flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-relay-text truncate">
+                        {row.listingName}
+                      </p>
+                      <p className="text-xs text-white/50 mt-0.5 truncate">
+                        Size {row.variant.size} · Used
+                        {row.listingSku ? ` · ${row.listingSku}` : ""}
+                      </p>
+                      {errorMessage && (
+                        <p className="text-xs text-red-300 mt-1">{errorMessage}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={(el) => {
+                        photoInputRefs.current[variantId] = el;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        handleUploadConditionPhoto(
+                          variantId,
+                          e.target.files?.[0] || null
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => photoInputRefs.current[variantId]?.click()}
+                      disabled={uploading}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-amber-100 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {uploading ? (
+                        <>
+                          <Upload className="w-4 h-4 animate-pulse" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4" />
+                          Upload photo
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
@@ -982,16 +1151,33 @@ export default function SellerInventoryDashboard() {
                                     />
                                   </label>
 
-                                  <label className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-relay-text">
+                                  <label
+                                    className={`inline-flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm ${
+                                      variant.needsConditionPhoto
+                                        ? "border-amber-500/30 bg-amber-500/[0.06] text-amber-100/80 cursor-not-allowed"
+                                        : "border-white/10 bg-black/20 text-relay-text"
+                                    }`}
+                                    title={
+                                      variant.needsConditionPhoto
+                                        ? "Upload a condition photo from Needs Attention above to activate this used variant."
+                                        : undefined
+                                    }
+                                  >
                                     <input
                                       type="checkbox"
                                       checked={variantDrafts[variant.id]?.isActive ?? variant.isActive}
                                       onChange={(event) =>
                                         updateVariantDraft(variant.id!, { isActive: event.target.checked })
                                       }
-                                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff]"
+                                      disabled={variant.needsConditionPhoto}
+                                      className="h-4 w-4 rounded border-white/20 bg-transparent text-[#5f8fff] focus:ring-[#5f8fff] disabled:opacity-40"
                                     />
                                     Active
+                                    {variant.needsConditionPhoto && (
+                                      <span className="text-[10px] uppercase tracking-wide text-amber-300/80">
+                                        Photo required
+                                      </span>
+                                    )}
                                   </label>
                                 </div>
 
@@ -1130,6 +1316,8 @@ function formatInventoryListings(listings: Listing[]): InventoryListingRow[] {
         price: variant.price,
         condition: variant.condition,
         isActive: variant.isActive,
+        needsConditionPhoto: variant.needsConditionPhoto === true,
+        conditionPhotoUrl: variant.conditionPhotoUrl ?? null,
       })),
     } satisfies InventoryListingRow;
   });

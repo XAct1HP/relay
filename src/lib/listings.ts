@@ -7,6 +7,8 @@ export interface VariantInput {
   quantity: number;
   condition?: VariantCondition;
   is_active?: boolean;
+  needs_condition_photo?: boolean;
+  condition_photo_url?: string | null;
 }
 
 export type VariantCondition = "new" | "used";
@@ -58,6 +60,11 @@ export function buildVariantPayload(rows: VariantInput[]): VariantInput[] {
       quantity,
       condition,
       is_active: row.is_active ?? true,
+      needs_condition_photo: row.needs_condition_photo === true,
+      condition_photo_url:
+        typeof row.condition_photo_url === "string" && row.condition_photo_url.trim().length > 0
+          ? row.condition_photo_url
+          : null,
     });
   }
 
@@ -195,16 +202,28 @@ export async function mergeListingVariants(
   for (const row of incoming) {
     const condition = normalizeVariantCondition(row.condition);
     const existing = existingByVariant.get(getVariantKey(row.size, condition));
+    const needsPhoto = row.needs_condition_photo === true;
+    const incomingPhotoUrl =
+      typeof row.condition_photo_url === "string" && row.condition_photo_url.trim().length > 0
+        ? row.condition_photo_url.trim()
+        : null;
+    // Active if caller didn't force inactive AND we don't need a photo
+    const shouldBeActive = !needsPhoto && row.is_active !== false;
 
     if (existing) {
+      const updatePayload: Record<string, any> = {
+        price: row.price,
+        quantity: existing.quantity + row.quantity,
+        condition,
+        is_active: shouldBeActive,
+        needs_condition_photo: needsPhoto,
+      };
+      if (incomingPhotoUrl) {
+        updatePayload.condition_photo_url = incomingPhotoUrl;
+      }
       const { error } = await supabase
         .from("listing_variants")
-        .update({
-          price: row.price,
-          quantity: existing.quantity + row.quantity,
-          condition,
-          is_active: true,
-        })
+        .update(updatePayload)
         .eq("id", existing.id);
 
       if (error) {
@@ -217,7 +236,9 @@ export async function mergeListingVariants(
         price: row.price,
         quantity: row.quantity,
         condition,
-        is_active: true,
+        is_active: shouldBeActive,
+        needs_condition_photo: needsPhoto,
+        condition_photo_url: incomingPhotoUrl,
       });
 
       if (error) {

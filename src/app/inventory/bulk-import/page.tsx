@@ -7,10 +7,9 @@ import { commitBulkInventoryImportAction, previewBulkInventoryImportAction } fro
 import { useAuth } from "@/hooks/useAuth";
 import type { InventoryImportReport } from "@/lib/inventory-import";
 
-const EXAMPLE_CSV = `SKU,Size,Quantity,Price
-DZ5485-612,10,1,350`;
-
 const EMPTY_REPORT: InventoryImportReport | null = null;
+
+type QuantityMode = "auto" | "with_quantity" | "single_row_per_shoe";
 
 export default function BulkImportPage() {
   const { currentUser, isLoading } = useAuth();
@@ -19,6 +18,7 @@ export default function BulkImportPage() {
   const [report, setReport] = useState<InventoryImportReport | null>(EMPTY_REPORT);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<"preview" | "import" | null>(null);
+  const [quantityMode, setQuantityMode] = useState<QuantityMode>("auto");
   const [isPending, startTransition] = useTransition();
 
   const canImport =
@@ -57,6 +57,7 @@ export default function BulkImportPage() {
     startTransition(async () => {
       const formData = new FormData();
       formData.set("file", selectedFile);
+      formData.set("quantity_mode", quantityMode);
       const nextReport = await previewBulkInventoryImportAction(formData);
       setReport(nextReport);
     });
@@ -74,6 +75,7 @@ export default function BulkImportPage() {
     startTransition(async () => {
       const formData = new FormData();
       formData.set("file", selectedFile);
+      formData.set("quantity_mode", quantityMode);
       const nextReport = await commitBulkInventoryImportAction(formData);
       setReport(nextReport);
     });
@@ -271,6 +273,101 @@ export default function BulkImportPage() {
             onChange={handleFileChange}
           />
 
+          {/* CSV mode selector */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-relay-text">CSV type</p>
+                <p className="text-xs text-relay-subtle mt-0.5">
+                  Auto works for most spreadsheets. Override if you know which shape you exported.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(
+                [
+                  {
+                    id: "auto",
+                    title: "Auto-detect",
+                    subtitle: "We infer from headers",
+                  },
+                  {
+                    id: "with_quantity",
+                    title: "With quantity",
+                    subtitle: "One row per unique SKU + size",
+                  },
+                  {
+                    id: "single_row_per_shoe",
+                    title: "One row per shoe",
+                    subtitle: "No quantity column, duplicates OK",
+                  },
+                ] as Array<{ id: QuantityMode; title: string; subtitle: string }>
+              ).map((opt) => {
+                const isActive = quantityMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setQuantityMode(opt.id)}
+                    className={`text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                      isActive
+                        ? "border-[#5f8fff]/60 bg-[#5f8fff]/15"
+                        : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                    }`}
+                  >
+                    <p
+                      className={`text-sm font-semibold ${
+                        isActive ? "text-[#7ca6ff]" : "text-relay-text"
+                      }`}
+                    >
+                      {opt.title}
+                    </p>
+                    <p className="text-[11px] text-relay-subtle mt-0.5">
+                      {opt.subtitle}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {report?.csv_quantity_mode && (
+            <div className="rounded-xl border border-[#5f8fff]/25 bg-[#5f8fff]/[0.06] px-4 py-3 text-sm text-[#c5d5ff] flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-[#7ca6ff]" />
+              <span>
+                Detected mode:{" "}
+                <strong className="text-white">
+                  {report.csv_quantity_mode === "with_quantity"
+                    ? "with quantity"
+                    : "one row per shoe"}
+                </strong>
+                {report.csv_quantity_mode_source === "auto" ? " (auto)" : " (manual)"}
+                {report.csv_quantity_mode === "single_row_per_shoe"
+                  ? ". Duplicates were aggregated per SKU + size."
+                  : ""}
+              </span>
+            </div>
+          )}
+
+          {typeof report?.used_variants_needing_photo === "number" &&
+            report.used_variants_needing_photo > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
+                <span>
+                  {report.used_variants_needing_photo} used variant
+                  {report.used_variants_needing_photo === 1 ? "" : "s"} will need a
+                  condition photo before going live. After import, visit{" "}
+                  <Link
+                    href="/dashboard/inventory"
+                    className="underline text-amber-200 hover:text-white"
+                  >
+                    Needs Attention in My Listings
+                  </Link>{" "}
+                  to upload them.
+                </span>
+              </div>
+            )}
+
           {errorMessage && (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
@@ -337,8 +434,8 @@ export default function BulkImportPage() {
               {[
                 { name: "SKU", icon: Hash },
                 { name: "Size", icon: Ruler },
-                { name: "Quantity", icon: Package },
                 { name: "Price", icon: DollarSign },
+                { name: "Condition", icon: FileText },
               ].map((col) => (
                 <div
                   key={col.name}
@@ -353,6 +450,17 @@ export default function BulkImportPage() {
                   {col.name}
                 </div>
               ))}
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px dashed rgba(255,255,255,0.15)",
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                <Package className="w-3.5 h-3.5" />
+                Quantity (optional)
+              </div>
             </div>
           </div>
 
@@ -374,6 +482,8 @@ export default function BulkImportPage() {
               <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Quantity</span>
               <span className="text-white/30">,</span>
               <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Price</span>
+              <span className="text-white/30">,</span>
+              <span style={{ color: "#7ca6ff", fontWeight: 600 }}>Condition</span>
               {"\n"}
               <span className="text-relay-text">DZ5485-612</span>
               <span className="text-white/30">,</span>
@@ -382,15 +492,29 @@ export default function BulkImportPage() {
               <span className="text-relay-text">1</span>
               <span className="text-white/30">,</span>
               <span className="text-emerald-400">350</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">new</span>
+              {"\n"}
+              <span className="text-relay-text">CT8532-004</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">10.5</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">1</span>
+              <span className="text-white/30">,</span>
+              <span className="text-emerald-400">280</span>
+              <span className="text-white/30">,</span>
+              <span className="text-relay-text">used</span>
             </pre>
           </div>
 
           {/* Format rules as mini table */}
           <div className="space-y-2.5 hidden lg:block">
             {[
-              { rule: "SKU, Size, Quantity, and Price are required columns." },
-              { rule: "Aliases supported: style_id, styleId, shoe_size, qty, list_price." },
-              { rule: "Quantity must be an integer 0 or greater. Price must be greater than 0." },
+              { rule: "SKU, Size, Price, and Condition are always required. Quantity is required only in 'With quantity' mode." },
+              { rule: 'Condition must be "new" or "used" (case-insensitive).' },
+              { rule: 'Used variants without a photo import as inactive and land in Needs Attention until you upload one.' },
+              { rule: "One-row-per-shoe mode aggregates duplicate SKU + size rows into quantities automatically." },
+              { rule: "Aliases supported: style_id, styleId, shoe_size, qty, list_price, shoe_condition." },
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2.5 text-sm text-relay-subtle">
                 <ArrowRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#5f8fff]" />

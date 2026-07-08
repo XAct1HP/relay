@@ -1,6 +1,11 @@
 "use server";
 
-import { commitBulkInventoryImport, previewBulkInventoryImport, type InventoryImportReport } from "@/lib/inventory-import";
+import {
+  commitBulkInventoryImport,
+  previewBulkInventoryImport,
+  type CsvQuantityPreference,
+  type InventoryImportReport,
+} from "@/lib/inventory-import";
 import { createServerClientInstance } from "@/lib/supabase-server";
 
 export async function previewBulkInventoryImportAction(formData: FormData): Promise<InventoryImportReport> {
@@ -73,11 +78,21 @@ async function runBulkInventoryImportAction(
     };
   }
 
+  const quantityPreference = extractQuantityPreference(formData);
+
   if (mode === "commit") {
-    return commitBulkInventoryImport(supabase, user.id, csvText);
+    return commitBulkInventoryImport(supabase, user.id, csvText, quantityPreference);
   }
 
-  return previewBulkInventoryImport(supabase, user.id, csvText);
+  return previewBulkInventoryImport(supabase, user.id, csvText, quantityPreference);
+}
+
+function extractQuantityPreference(formData: FormData): CsvQuantityPreference {
+  const raw = formData.get("quantity_mode");
+  if (raw === "with_quantity" || raw === "single_row_per_shoe") {
+    return raw;
+  }
+  return "auto";
 }
 
 async function extractCsvText(formData: FormData): Promise<string> {

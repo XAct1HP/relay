@@ -21,6 +21,9 @@ export interface InventoryUpsertVariantInput {
   quantity: number;
   price: number;
   condition?: VariantCondition;
+  is_active?: boolean;
+  needs_condition_photo?: boolean;
+  condition_photo_url?: string | null;
 }
 
 export interface InventoryUsedItemInput {
@@ -396,7 +399,7 @@ export async function updateSellerListingVariant(
 
   const { data: existingVariant, error: existingVariantError } = await supabase
     .from("listing_variants")
-    .select("id, listing_id, size")
+    .select("id, listing_id, size, needs_condition_photo")
     .eq("id", normalized.variantId)
     .eq("listing_id", normalized.listingId)
     .maybeSingle();
@@ -407,6 +410,17 @@ export async function updateSellerListingVariant(
 
   if (!existingVariant) {
     throw new InventoryUpsertError("variant_not_found", "This inventory variant could not be found.");
+  }
+
+  // Block activation of used variants that still need a condition photo.
+  if (
+    normalized.isActive &&
+    (existingVariant as { needs_condition_photo?: boolean }).needs_condition_photo === true
+  ) {
+    throw new InventoryUpsertError(
+      "variant_needs_condition_photo",
+      "Upload a condition photo before activating this used variant."
+    );
   }
 
   const shouldBeActive = normalized.quantity > 0 && normalized.isActive;
@@ -594,13 +608,31 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
   }
 
   const variants = input.variants
-    .map((variant) => ({
-      size: String(variant.size || "").trim(),
-      price: Number(variant.price),
-      quantity: Number(variant.quantity),
-      condition: (variant.condition === "used" ? "used" : "new") as VariantCondition,
-      is_active: true,
-    }))
+    .map((variant) => {
+      const condition: VariantCondition =
+        variant.condition === "used" ? "used" : "new";
+      const needsPhoto =
+        variant.needs_condition_photo === true ||
+        (condition === "used" &&
+          !(typeof variant.condition_photo_url === "string" &&
+            variant.condition_photo_url.trim().length > 0));
+      // If used and needs a photo, force inactive; otherwise honor caller preference.
+      const isActive =
+        variant.is_active === false ? false : !needsPhoto;
+      return {
+        size: String(variant.size || "").trim(),
+        price: Number(variant.price),
+        quantity: Number(variant.quantity),
+        condition,
+        is_active: isActive,
+        needs_condition_photo: needsPhoto,
+        condition_photo_url:
+          typeof variant.condition_photo_url === "string" &&
+          variant.condition_photo_url.trim().length > 0
+            ? variant.condition_photo_url.trim()
+            : null,
+      };
+    })
     .filter((variant) => variant.size);
 
   for (const variant of variants) {
@@ -614,12 +646,6 @@ function normalizeInventoryUpsertInput(input: InventoryUpsertInput): NormalizedI
       throw new InventoryUpsertError(
         "invalid_variant_quantity",
         `Variant size ${variant.size} must have an integer quantity greater than or equal to 0.`
-      );
-    }
-    if (variant.condition === "used") {
-      throw new InventoryUpsertError(
-        "used_variants_not_supported",
-        "Used inventory must be submitted as itemized used_items with exactly one condition photo per pair."
       );
     }
   }

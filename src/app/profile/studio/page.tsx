@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase';
-import { Camera, Palette, User, MapPin, Edit3, Check, X, Eye, Upload, Send, Link as LinkIcon, Sparkles, Loader2, Trash2, ArrowLeft } from 'lucide-react';
+import { Camera, Palette, User, MapPin, Edit3, Check, X, Eye, Upload, Send, Link as LinkIcon, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
 
 interface Theme {
   id: string;
@@ -85,7 +85,7 @@ export default function ProfileStudioPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const postImageInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+  const postImageInputRef = useRef<HTMLInputElement>(null);
 
   const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -97,38 +97,59 @@ export default function ProfileStudioPage() {
     if (file) { const reader = new FileReader(); reader.onload = (event) => { setAvatarPreview(event.target?.result as string); setHasChanges(true); }; reader.readAsDataURL(file); }
   };
 
-  const handlePostImageUpload = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const handleAddPostImages = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const available = 4 - postImages.length;
+    if (available <= 0) return;
+    const incoming = Array.from(files).slice(0, available);
+    incoming.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (event) => {
-        const newImages = [...postImages]; newImages[index] = event.target?.result as string; setPostImages(newImages);
-        const newFiles = [...postImageFiles]; newFiles[index] = file; setPostImageFiles(newFiles);
+        setPostImages((prev) =>
+          prev.length >= 4 ? prev : [...prev, event.target?.result as string]
+        );
+        setPostImageFiles((prev) => (prev.length >= 4 ? prev : [...prev, file]));
       };
       reader.readAsDataURL(file);
-    }
+    });
   };
 
   const removePostImage = (index: number) => {
-    setPostImages(postImages.filter((_, i) => i !== index));
-    setPostImageFiles(postImageFiles.filter((_, i) => i !== index));
+    setPostImages((prev) => prev.filter((_, i) => i !== index));
+    setPostImageFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePublishPost = async () => {
-    if (!currentUser?.id || !postContent.trim()) return;
+    if (!currentUser?.id) return;
+    if (!postContent.trim() && postImageFiles.length === 0) return;
     setPublishingPost(true); setPostSuccess(false);
     try {
       const supabase = createClient();
       const uploadedImageUrls: string[] = [];
+      const uploadFailures: string[] = [];
       for (let i = 0; i < postImageFiles.length; i++) {
         const file = postImageFiles[i];
         if (!file) continue;
-        const imagePath = currentUser!.id + '/post-' + Date.now() + '-' + i + '.jpg';
-        const { error: uploadError } = await supabase.storage.from('profile-images').upload(imagePath, file, { upsert: true });
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('profile-images').getPublicUrl(imagePath);
-          uploadedImageUrls.push(urlData.publicUrl);
+        const extension = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const imagePath = currentUser!.id + '/post-' + Date.now() + '-' + i + '.' + extension;
+        const { error: uploadError } = await supabase.storage
+          .from('profile-images')
+          .upload(imagePath, file, { upsert: true, contentType: file.type || undefined });
+        if (uploadError) {
+          uploadFailures.push(file.name);
+          continue;
         }
+        const { data: urlData } = supabase.storage
+          .from('profile-images')
+          .getPublicUrl(imagePath);
+        uploadedImageUrls.push(urlData.publicUrl);
+      }
+      if (uploadFailures.length > 0) {
+        throw new Error(
+          uploadFailures.length === postImageFiles.length
+            ? 'None of the images could be uploaded. Try again with different files.'
+            : 'Some images failed to upload: ' + uploadFailures.join(', ')
+        );
       }
       const { error } = await supabase.from('posts').insert({
         seller_id: currentUser!.id,
@@ -141,7 +162,8 @@ export default function ProfileStudioPage() {
       setPostContent(''); setPostImages([]); setPostImageFiles([]); setSelectedListingId('');
       setPostSuccess(true); setTimeout(() => setPostSuccess(false), 3000);
     } catch (err) {
-      console.error('Post publish error:', err); alert('Failed to publish post. Please try again.');
+      console.error('Post publish error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to publish post. Please try again.');
     } finally { setPublishingPost(false); }
   };
 
@@ -302,7 +324,7 @@ export default function ProfileStudioPage() {
                 <h2 className="text-lg font-bold flex items-center gap-2 text-white"><Camera size={20} className="text-relay-accent" /> Branding</h2>
                 <div>
                   <label className="block text-xs font-semibold mb-2 text-white/70">Banner Image</label>
-                  <div className="relative w-full aspect-video rounded-xl border-2 border-dashed border-white/15 cursor-pointer flex items-center justify-center overflow-hidden" onClick={() => bannerInputRef.current?.click()}>
+                  <div className="relative w-full aspect-[16/5] rounded-xl border-2 border-dashed border-white/15 cursor-pointer flex items-center justify-center overflow-hidden" onClick={() => bannerInputRef.current?.click()}>
                     {bannerPreview ? (
                       <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
                     ) : (
@@ -409,58 +431,25 @@ export default function ProfileStudioPage() {
 
               <div className="border-t border-white/[0.06]" />
 
-              {/* Create Post */}
-              <div className="space-y-4">
-                <h2 className="text-lg font-bold flex items-center gap-2 text-white"><Edit3 size={20} className="text-relay-accent" /> Create Post</h2>
-                {postSuccess && (
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center flex items-center justify-center gap-2">
-                    <Check size={16} className="text-emerald-400" />
-                    <p className="text-sm text-emerald-400 font-medium">Post published!</p>
-                  </div>
-                )}
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                  <div className="flex items-start gap-3 p-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 mt-0.5">
-                      {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-sm font-bold text-relay-bg">PK</span>)}
-                    </div>
-                    <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="Share what's new..." rows={3} className="flex-1 bg-transparent border-none text-relay-text placeholder-white/30 focus:outline-none resize-none text-sm leading-relaxed pt-1.5" />
-                  </div>
-                  {postImages.length > 0 && (
-                    <div className="px-4 pb-3">
-                      <div className="flex gap-2">
-                        {postImages.map((img, index) => (
-                          <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10">
-                            <img src={img} alt={"Post image " + (index + 1)} className="w-full h-full object-cover" />
-                            <button onClick={(e) => { e.stopPropagation(); removePostImage(index); }} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/70">
-                              <X size={10} className="text-white" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      {[0, 1, 2, 3].map((index) => (
-                        <button key={index} onClick={() => !postImages[index] && postImageInputRefs.current[index]?.click()} className={"p-2 rounded-lg " + (postImages[index] ? 'text-relay-accent bg-relay-accent/10' : 'text-white/40')} title={"Image " + (index + 1)}>
-                          <Upload size={16} />
-                          <input ref={(el) => { postImageInputRefs.current[index] = el; }} type="file" accept="image/*" onChange={(e) => handlePostImageUpload(e, index)} className="hidden" />
-                        </button>
-                      ))}
-                    </div>
-                    <span className="text-xs text-white/25">{postContent.length > 0 ? postContent.length + ' chars' : ''}</span>
-                  </div>
-                </div>
-                {isCustomBrand && (
-                  <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.08) 0%, rgba(52, 211, 153, 0.06) 100%)', border: '1px solid rgba(95, 143, 255, 0.2)' }}>
-                    <Sparkles size={16} className="text-relay-accent flex-shrink-0" />
-                    <p className="text-xs text-relay-accent font-semibold">Indie Brand Boost Active</p>
-                  </div>
-                )}
-                <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent disabled:opacity-40 text-relay-bg font-semibold py-3 rounded-xl transition-all">
-                  {publishingPost ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Publish Post</>)}
-                </button>
-              </div>
+              {/* Create Post (mobile) */}
+              <PostComposer
+                displayName={displayName}
+                username={username}
+                avatarPreview={avatarPreview}
+                postContent={postContent}
+                setPostContent={setPostContent}
+                postImages={postImages}
+                removePostImage={removePostImage}
+                onSelectFiles={handleAddPostImages}
+                postImageInputRef={postImageInputRef}
+                sellerListings={sellerListings}
+                selectedListingId={selectedListingId}
+                setSelectedListingId={setSelectedListingId}
+                isCustomBrand={isCustomBrand}
+                onPublish={handlePublishPost}
+                publishingPost={publishingPost}
+                postSuccess={postSuccess}
+              />
 
               {/* Save button at bottom of overlay */}
               <div className="pt-4 space-y-3">
@@ -485,9 +474,39 @@ export default function ProfileStudioPage() {
         )}
       </div>
 
-      {/* ====== DESKTOP LAYOUT (unchanged) ====== */}
+      {/* ====== DESKTOP LAYOUT ====== */}
       <div className="hidden lg:grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {/* Section - Create Post (moved to top) */}
+          <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
+            <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, ' + activeTheme.accent + ' 0%, ' + activeTheme.accentLight + ' 50%, transparent 100%)' }} />
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-3"><Edit3 size={22} className="text-relay-accent" /> Create Post</h2>
+                <p className="text-xs text-white/40">Appears on your profile and in buyer feeds.</p>
+              </div>
+              <PostComposer
+                displayName={displayName}
+                username={username}
+                avatarPreview={avatarPreview}
+                postContent={postContent}
+                setPostContent={setPostContent}
+                postImages={postImages}
+                removePostImage={removePostImage}
+                onSelectFiles={handleAddPostImages}
+                postImageInputRef={postImageInputRef}
+                sellerListings={sellerListings}
+                selectedListingId={selectedListingId}
+                setSelectedListingId={setSelectedListingId}
+                isCustomBrand={isCustomBrand}
+                onPublish={handlePublishPost}
+                publishingPost={publishingPost}
+                postSuccess={postSuccess}
+                variant="desktop"
+              />
+            </div>
+          </div>
+
           {/* Section 1 - Branding */}
           <div className="relative bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden">
             {/* Gradient top accent bar */}
@@ -496,7 +515,7 @@ export default function ProfileStudioPage() {
               <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Camera size={22} className="text-relay-accent" /> Branding</h2>
               <div className="mb-8">
                 <label className="block text-sm font-semibold mb-3 text-white/70">Banner Image</label>
-                <div className="relative w-full aspect-video rounded-xl border-2 border-dashed border-white/15 cursor-pointer transition-all hover:border-relay-accent/40 hover:shadow-lg hover:shadow-relay-accent/5 flex items-center justify-center overflow-hidden group" onClick={() => bannerInputRef.current?.click()}>
+                <div className="relative w-full aspect-[16/5] rounded-xl border-2 border-dashed border-white/15 cursor-pointer transition-all hover:border-relay-accent/40 hover:shadow-lg hover:shadow-relay-accent/5 flex items-center justify-center overflow-hidden group" onClick={() => bannerInputRef.current?.click()}>
                   {bannerPreview ? (
                     <>
                       <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
@@ -619,91 +638,6 @@ export default function ProfileStudioPage() {
             </div>
           </div>
 
-          {/* Section 5 - Create Post (social media composer style) */}
-          <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] overflow-hidden hover:border-white/15 transition-colors">
-            <div className="p-8 pb-0">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Edit3 size={22} className="text-relay-accent" /> Create Post</h2>
-
-              {postSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center mb-6 flex items-center justify-center gap-2">
-                  <Check size={16} className="text-emerald-400" />
-                  <p className="text-sm text-emerald-400 font-medium">Post published!</p>
-                </div>
-              )}
-
-              {/* Composer area */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden mb-6">
-                <div className="flex items-start gap-3 p-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {avatarPreview ? (<img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover rounded-full" />) : (<span className="text-sm font-bold text-relay-bg">PK</span>)}
-                  </div>
-                  <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="Share what's new with your customers..." rows={3} className="flex-1 bg-transparent border-none text-relay-text placeholder-white/30 focus:outline-none resize-none text-sm leading-relaxed pt-1.5" />
-                </div>
-                {/* Post images inline preview */}
-                {postImages.length > 0 && (
-                  <div className="px-4 pb-3">
-                    <div className="flex gap-2">
-                      {postImages.map((img, index) => (
-                        <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/10">
-                          <img src={img} alt={"Post image " + (index + 1)} className="w-full h-full object-cover" />
-                          <button onClick={(e) => { e.stopPropagation(); removePostImage(index); }} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/70 hover:bg-black/90 transition-colors">
-                            <X size={10} className="text-white" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {/* Bottom toolbar */}
-                <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {[0, 1, 2, 3].map((index) => (
-                      <button
-                        key={index}
-                        onClick={() => !postImages[index] && postImageInputRefs.current[index]?.click()}
-                        className={"p-2 rounded-lg transition-colors " + (postImages[index] ? 'text-relay-accent bg-relay-accent/10' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]')}
-                        title={"Image " + (index + 1)}
-                      >
-                        <Upload size={16} />
-                        <input ref={(el) => { postImageInputRefs.current[index] = el; }} type="file" accept="image/*" onChange={(e) => handlePostImageUpload(e, index)} className="hidden" />
-                      </button>
-                    ))}
-                    <div className="w-px h-5 bg-white/10 mx-1" />
-                    <div className="relative">
-                      <select value={selectedListingId} onChange={(e) => setSelectedListingId(e.target.value)} className="appearance-none bg-transparent text-white/40 hover:text-white/70 p-2 rounded-lg hover:bg-white/[0.06] transition-colors cursor-pointer text-xs pr-6 focus:outline-none">
-                        <option value="" className="bg-[#1a1a2e]">Link listing</option>
-                        {sellerListings.map((listing) => (
-                          <option key={listing.id} value={listing.id} className="bg-[#1a1a2e]">{listing.brand} {listing.model}{listing.nickname ? ' "' + listing.nickname + '"' : ''}</option>
-                        ))}
-                      </select>
-                      <LinkIcon size={14} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none text-white/40" />
-                    </div>
-                  </div>
-                  <span className="text-xs text-white/25">{postContent.length > 0 ? postContent.length + ' chars' : ''}</span>
-                </div>
-              </div>
-
-              {isCustomBrand && (
-                <div className="mb-6 p-4 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.08) 0%, rgba(52, 211, 153, 0.06) 100%)', border: '1px solid rgba(95, 143, 255, 0.2)' }}>
-                  <Sparkles size={18} className="text-relay-accent flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-relay-accent">Independent Brand Boost Active</p>
-                    <p className="text-xs text-white/50 mt-0.5">This post will get boosted visibility because it&apos;s linked to an approved independent brand listing.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="px-8 pb-8">
-              <div className="p-3 bg-white/[0.02] rounded-xl mb-5">
-                <p className="text-xs text-white/50">Posts appear on your profile and in buyer feeds. Link an approved independent brand listing to get extra visibility.</p>
-              </div>
-
-              <button onClick={handlePublishPost} disabled={!postContent.trim() || publishingPost} className="w-full flex items-center justify-center gap-2 bg-relay-accent hover:bg-relay-accent-light disabled:opacity-40 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-xl transition-all hover:shadow-lg hover:shadow-relay-accent/20">
-                {publishingPost ? (<><Loader2 size={18} className="animate-spin" /> Publishing...</>) : (<><Send size={18} /> Publish Post</>)}
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Right Section - Profile Preview Card (Desktop) */}
@@ -811,6 +745,241 @@ export default function ProfileStudioPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface PostComposerProps {
+  displayName: string;
+  username: string;
+  avatarPreview: string | null;
+  postContent: string;
+  setPostContent: (value: string) => void;
+  postImages: string[];
+  removePostImage: (index: number) => void;
+  onSelectFiles: (files: FileList | null) => void;
+  postImageInputRef: React.RefObject<HTMLInputElement>;
+  sellerListings: any[];
+  selectedListingId: string;
+  setSelectedListingId: (value: string) => void;
+  isCustomBrand: boolean;
+  onPublish: () => void;
+  publishingPost: boolean;
+  postSuccess: boolean;
+  variant?: 'mobile' | 'desktop';
+}
+
+function PostComposer({
+  displayName,
+  username,
+  avatarPreview,
+  postContent,
+  setPostContent,
+  postImages,
+  removePostImage,
+  onSelectFiles,
+  postImageInputRef,
+  sellerListings,
+  selectedListingId,
+  setSelectedListingId,
+  isCustomBrand,
+  onPublish,
+  publishingPost,
+  postSuccess,
+  variant = 'mobile',
+}: PostComposerProps) {
+  const displayInitials = (displayName || username || 'PK').slice(0, 2).toUpperCase();
+  const displayHandle = username ? '@' + username : '@you';
+  const displayShown = displayName || 'Your Shop';
+  const linkedListing = sellerListings.find((l) => l.id === selectedListingId);
+  const canPublish = (postContent.trim().length > 0 || postImages.length > 0) && !publishingPost;
+  const remaining = 4 - postImages.length;
+
+  const previewImageLayout = (() => {
+    if (postImages.length === 0) return null;
+    if (postImages.length === 1) {
+      return (
+        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 bg-black/20">
+          <img
+            src={postImages[0]}
+            alt="Post preview"
+            className="w-full max-h-[420px] object-cover"
+          />
+        </div>
+      );
+    }
+    if (postImages.length === 2) {
+      return (
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl overflow-hidden border border-white/10">
+          {postImages.map((img, i) => (
+            <div key={i} className="relative aspect-square bg-black/20">
+              <img src={img} alt={'Post preview ' + (i + 1)} className="w-full h-full object-cover" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    // 3 or 4 images
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl overflow-hidden border border-white/10">
+        {postImages.slice(0, 4).map((img, i) => (
+          <div key={i} className="relative aspect-square bg-black/20">
+            <img src={img} alt={'Post preview ' + (i + 1)} className="w-full h-full object-cover" />
+          </div>
+        ))}
+      </div>
+    );
+  })();
+
+  return (
+    <div className="space-y-4">
+      {postSuccess && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center flex items-center justify-center gap-2">
+          <Check size={16} className="text-emerald-400" />
+          <p className="text-sm text-emerald-400 font-medium">Post published!</p>
+        </div>
+      )}
+
+      {/* Composer + inline feed-style preview */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-relay-accent-light to-relay-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-sm font-bold text-relay-bg">{displayInitials}</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <p className="text-sm font-semibold text-relay-text truncate">{displayShown}</p>
+                <p className="text-xs text-white/40 truncate">{displayHandle}</p>
+              </div>
+              <textarea
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+                placeholder="Share what's new with your customers..."
+                rows={variant === 'desktop' ? 3 : 2}
+                className="mt-1 w-full bg-transparent border-none text-relay-text placeholder-white/30 focus:outline-none resize-none text-sm leading-relaxed"
+              />
+              {previewImageLayout}
+              {postImages.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {postImages.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => removePostImage(i)}
+                      className="text-[11px] text-white/50 hover:text-red-300 border border-white/10 rounded-full px-2 py-0.5"
+                    >
+                      Remove image {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {linkedListing && (
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2">
+                  {linkedListing.images?.[0] && (
+                    <img
+                      src={linkedListing.images[0]}
+                      alt=""
+                      className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-white/40">Linked listing</p>
+                    <p className="text-sm text-relay-text truncate">
+                      {linkedListing.brand} {linkedListing.model}
+                      {linkedListing.nickname ? ' "' + linkedListing.nickname + '"' : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedListingId('')}
+                    className="text-white/40 hover:text-white/80"
+                    aria-label="Remove linked listing"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Toolbar */}
+        <div className="border-t border-white/[0.06] px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => postImageInputRef.current?.click()}
+              disabled={remaining <= 0}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-relay-accent bg-relay-accent/10 hover:bg-relay-accent/20 border border-relay-accent/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={remaining <= 0 ? 'Maximum 4 images' : 'Add photo'}
+            >
+              <Upload size={14} />
+              Photo{postImages.length > 0 ? ' (' + postImages.length + '/4)' : ''}
+            </button>
+            <input
+              ref={postImageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                onSelectFiles(e.target.files);
+                if (e.target) e.target.value = '';
+              }}
+            />
+            <div className="relative min-w-0">
+              <LinkIcon size={12} className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none text-white/40" />
+              <select
+                value={selectedListingId}
+                onChange={(e) => setSelectedListingId(e.target.value)}
+                className="appearance-none bg-white/[0.03] border border-white/10 text-white/70 pl-7 pr-3 py-1.5 rounded-lg text-xs focus:outline-none max-w-[160px] sm:max-w-[220px] truncate"
+              >
+                <option value="" className="bg-[#1a1a2e]">Link a listing</option>
+                {sellerListings.map((listing) => (
+                  <option key={listing.id} value={listing.id} className="bg-[#1a1a2e]">
+                    {listing.brand} {listing.model}
+                    {listing.nickname ? ' "' + listing.nickname + '"' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <span className="text-[11px] text-white/30 whitespace-nowrap">
+            {postContent.length > 0 ? postContent.length + ' chars' : ''}
+          </span>
+        </div>
+      </div>
+
+      {isCustomBrand && (
+        <div className="p-3 rounded-xl flex items-center gap-3" style={{ background: 'linear-gradient(135deg, rgba(95, 143, 255, 0.08) 0%, rgba(52, 211, 153, 0.06) 100%)', border: '1px solid rgba(95, 143, 255, 0.2)' }}>
+          <Sparkles size={16} className="text-relay-accent flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-relay-accent">Independent Brand Boost active</p>
+            <p className="text-xs text-white/50 mt-0.5">This post will get boosted visibility because it links to an approved independent brand listing.</p>
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={onPublish}
+        disabled={!canPublish}
+        className="w-full flex items-center justify-center gap-2 bg-relay-accent hover:bg-relay-accent-light disabled:opacity-40 disabled:cursor-not-allowed text-relay-bg font-semibold py-3 rounded-xl transition-all"
+      >
+        {publishingPost ? (
+          <>
+            <Loader2 size={18} className="animate-spin" /> Publishing...
+          </>
+        ) : (
+          <>
+            <Send size={18} /> Publish Post
+          </>
+        )}
+      </button>
     </div>
   );
 }
