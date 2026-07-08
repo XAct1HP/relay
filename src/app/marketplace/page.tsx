@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Pagination } from "@/components/layout/Pagination";
 import { Search, BadgeCheck, ChevronDown, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase";
-import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
+import { dedupeSkuListings, formatListingTitle, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
 import { usePublicTestMode } from "@/hooks/usePublicTestMode";
 import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import { BRANDS as ALL_BRANDS } from "@/lib/constants";
@@ -375,7 +375,7 @@ export default function MarketplacePage() {
                       {listing.image && listing.image !== "default" ? (
                         <img
                           src={listing.image}
-                          alt={`${listing.brand} ${listing.model}`}
+                          alt={formatListingTitle(listing.brand, listing.model)}
                           className="absolute inset-0 w-full h-full object-cover"
                         />
                       ) : (

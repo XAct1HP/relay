@@ -205,6 +205,51 @@ export function getListingNormalizedVariants(
   return getNormalizedVariants(listing, options);
 }
 
+/**
+ * Build a clean shoe title without duplicating the brand.
+ *
+ * Sneaker catalog data often stores model as the full product name
+ * (e.g. brand "Nike", model "Nike Dunk Low Retro White Black Panda").
+ * Naive `${brand} ${model}` concatenation then produces
+ * "Nike Nike Dunk Low ...".
+ *
+ * This helper strips a leading brand prefix from the model before
+ * joining, so display everywhere renders as
+ * "Nike Dunk Low Retro White Black Panda" (with an optional nickname).
+ *
+ * Pass a fallback like "Untitled Listing" if you want a guaranteed
+ * non-empty result. Otherwise an empty string is returned.
+ */
+export function formatListingTitle(
+  brand: string | null | undefined,
+  model: string | null | undefined,
+  nickname?: string | null | undefined,
+  fallback?: string
+): string {
+  const b = String(brand || "").trim();
+  const rawModel = String(model || "").trim();
+  const n = String(nickname || "").trim();
+
+  let cleanedModel = rawModel;
+  if (b && rawModel) {
+    // Case-insensitive prefix match on word boundary
+    const lowerModel = rawModel.toLowerCase();
+    const lowerBrand = b.toLowerCase();
+    if (
+      lowerModel === lowerBrand ||
+      lowerModel.startsWith(lowerBrand + " ") ||
+      lowerModel.startsWith(lowerBrand + "-")
+    ) {
+      cleanedModel = rawModel.slice(b.length).replace(/^[\s-]+/, "").trim();
+    }
+  }
+
+  const parts = [b, cleanedModel, n].filter((p) => p.length > 0);
+  const result = parts.join(" ").trim();
+  return result || fallback || "";
+}
+
+
 function compareVariantSize(a: DisplayVariant, b: DisplayVariant): number {
   const aSize = Number(a.size);
   const bSize = Number(b.size);

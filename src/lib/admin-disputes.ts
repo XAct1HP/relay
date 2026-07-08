@@ -17,6 +17,7 @@ import { banSellerIdentity } from "@/lib/seller-identity";
 import { evaluateSellerTrustById, recordSellerViolation } from "@/lib/seller-trust-admin";
 import { resolveSignedMediaList, resolveSignedMediaValue } from "@/lib/secure-storage";
 import { toShippoAddress } from "@/lib/shipping-addresses";
+import { formatListingTitle } from "@/lib/listing-display";
 import type { DisputeCategory, RelayAuditEvent, SellerTier } from "@/types";
 
 type SupabaseAdminClient = ReturnType<typeof import("@/lib/supabase-admin").createAdminClient>;
@@ -683,7 +684,7 @@ export async function listAdminDisputes(adminClient: SupabaseAdminClient) {
       sellerTier: order.seller?.seller_tier || "tier_1",
       trustScore: order.seller?.trust_score || 0,
       orderValueCents: toCents(order.price),
-      listingLabel: [order.listing?.brand, order.listing?.model].filter(Boolean).join(" ") || "Unknown listing",
+      listingLabel: formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Unknown listing"),
       sku: order.listing?.sku || order.listing?.sku_normalized || null,
       size: order.size || null,
       deliveredAt: order.delivered_at || null,

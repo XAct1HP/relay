@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 import type { RelayBalanceLedgerEntry, SellerTier, WithdrawalRequest } from "@/types";
 import FoundingSellerBadge from "@/components/founding/FoundingSellerBadge";
 
@@ -170,7 +171,7 @@ function getLedgerActivitySummary(
   const absoluteAmountCents = clampNonNegativeCents(entry.amount_cents);
   const listingLabel =
     entry.order?.listing?.brand && entry.order?.listing?.model
-      ? `${entry.order.listing.brand} ${entry.order.listing.model}`
+      ? formatListingTitle(entry.order.listing.brand, entry.order.listing.model)
       : entry.order?.id
         ? `Order ${entry.order.id.slice(0, 8)}`
         : "Relay Balance";

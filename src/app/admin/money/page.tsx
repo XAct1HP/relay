@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 
 interface MoneyOverviewResponse {
   metrics: {
@@ -251,7 +252,7 @@ export default function AdminMoneyPage() {
       items.push({
         id: `f-${o.id}`,
         type: "frozen",
-        title: `${o.listing?.brand || "Unknown"} ${o.listing?.model || "Order"}`,
+        title: formatListingTitle(o.listing?.brand, o.listing?.model, undefined, "Order"),
         subtitle:
           o.seller?.display_name ||
           o.seller?.full_name ||

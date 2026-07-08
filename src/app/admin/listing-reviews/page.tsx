@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import useAuth from "@/hooks/useAuth";
 import { Check, X, Eye, ChevronDown, ChevronUp, Package, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
@@ -230,7 +231,7 @@ export default function ListingReviewsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-[#f5f7fb] font-semibold truncate">
-                        {listing.brand} {listing.model}
+                        {formatListingTitle(listing.brand, listing.model, undefined, "Listing")}
                       </h3>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         listing.brand === "Individual Brand"

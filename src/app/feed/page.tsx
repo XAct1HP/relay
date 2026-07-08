@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Heart, Sparkles, TrendingUp, Star, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import useAuth from "@/hooks/useAuth";
 import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import Link from "next/link";
@@ -117,7 +118,7 @@ export default function FeedPage() {
         isLiked: likedPostIds.has(post.id),
         timeAgo: post.created_at,
         _isFollowed: followedIds.includes(post.seller_id),
-        relatedListing: listing ? { id: listing.id, name: listing.brand + " " + listing.model, brand: listing.brand, price: lowestPrice, image: listing.images?.[0] || undefined } : undefined,
+        relatedListing: listing ? { id: listing.id, name: formatListingTitle(listing.brand, listing.model, undefined, "Listing"), brand: listing.brand, price: lowestPrice, image: listing.images?.[0] || undefined } : undefined,
       };
     });
   }

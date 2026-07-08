@@ -9,6 +9,7 @@ import {
   type VariantCondition,
   type VariantInput,
 } from "@/lib/listings";
+import { formatListingTitle } from "@/lib/listing-display";
 
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
 type ListingCondition = "new" | "like_new" | "used_excellent" | "used_good" | "used_fair" | "mixed";
@@ -1354,7 +1355,7 @@ function buildVariantLabel(target: {
   brand: string | null;
   model: string | null;
 }) {
-  const product = [target.brand, target.model].filter(Boolean).join(" ").trim();
+  const product = formatListingTitle(target.brand, target.model);
   const prefix = target.sku || product || "Variant";
   return `${prefix} size ${target.size}`;
 }

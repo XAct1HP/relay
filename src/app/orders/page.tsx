@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ChevronRight, Package, Clock, CheckCircle2, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase"
+import { formatListingTitle } from "@/lib/listing-display"
 import useAuth from "@/hooks/useAuth"
 import { Order } from "@/types"
 import { useNotificationStore } from "@/store/notificationStore"
@@ -326,7 +327,7 @@ export default function OrdersPage() {
                   <div className="flex-shrink-0">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
                       {order.shoeImage ? (
-                        <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="h-full w-full object-cover" />
+                        <img src={order.shoeImage} alt={formatListingTitle(order.brand, order.model)} className="h-full w-full object-cover" />
                       ) : (
                         <Package className="h-5 w-5 text-[#7ca6ff]" />
                       )}
@@ -335,7 +336,7 @@ export default function OrdersPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${getStatusDotColor(order.status)}`} />
-                      <p className="truncate text-sm font-medium text-[#f5f7fb]">{order.brand} {order.model}</p>
+                      <p className="truncate text-sm font-medium text-[#f5f7fb]">{formatListingTitle(order.brand, order.model, undefined, "Order")}</p>
                     </div>
                     <p className="text-xs text-white/30">Size {order.size}</p>
                   </div>
@@ -352,7 +353,7 @@ export default function OrdersPage() {
                     <div className="flex-shrink-0">
                       <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/5 overflow-hidden">
                         {order.shoeImage ? (
-                          <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="h-full w-full object-cover" />
+                          <img src={order.shoeImage} alt={formatListingTitle(order.brand, order.model)} className="h-full w-full object-cover" />
                         ) : (
                           <Package className="h-8 w-8 text-[#7ca6ff]" />
                         )}
@@ -363,7 +364,7 @@ export default function OrdersPage() {
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex items-center gap-2">
                         <h3 className="truncate font-semibold text-[#f5f7fb] text-base">
-                          {order.brand} {order.model}
+                          {formatListingTitle(order.brand, order.model, undefined, "Order")}
                         </h3>
                       </div>
                       <div className="mb-2 text-sm text-[#7ca6ff]">

@@ -11,7 +11,7 @@ import {
 } from "@/app/dashboard/inventory/actions";
 import { createClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
-import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
+import { dedupeSkuListings, formatListingTitle, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
 import type { Listing } from "@/types";
 
 type ListingStatus = "active" | "sold_out" | "inactive" | "removed" | "pending_review" | "rejected";
@@ -1253,7 +1253,7 @@ function VariantMetric({ label, value }: { label: string; value: string | number
 }
 
 function getDisplayName(listing: Listing) {
-  return [listing.brand, listing.model, listing.nickname].filter(Boolean).join(" ").trim() || "Untitled Listing";
+  return formatListingTitle(listing.brand, listing.model, listing.nickname, "Untitled Listing");
 }
 
 function getListingTitleClassName(displayName: string) {

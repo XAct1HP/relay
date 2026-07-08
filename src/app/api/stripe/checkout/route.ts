@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { resolveListingVariant } from '@/lib/listings'
+import { formatListingTitle } from '@/lib/listing-display'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: `${listing.brand} ${listing.model}`,
+            name: formatListingTitle(listing.brand, listing.model, undefined, "Listing"),
             description: `Size: ${resolvedSize}`,
             images: usedItemRow?.condition_photo_url
               ? [usedItemRow.condition_photo_url]

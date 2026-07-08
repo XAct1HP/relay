@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 import type { HighRiskSku, SellerTier } from "@/types";
 
 interface ReviewQueueOrder {
@@ -360,7 +361,7 @@ export default function AdminAuthRiskPage() {
                         <div className="flex-1 min-w-0 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-[#f5f7fb] text-sm font-medium truncate">
-                              {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Item")}
+                              {formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Item")}
                             </p>
                             <span className="text-[#7ca6ff] text-sm font-semibold">{formatMoney(order.price)}</span>
                             <span className="px-2 py-0.5 rounded-full bg-[#5f8fff]/15 text-[#7ca6ff] text-xs font-semibold">

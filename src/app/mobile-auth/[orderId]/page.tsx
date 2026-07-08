@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { fetchWithCurrentProtectionBypass } from "@/lib/public-preview-access"
+import { formatListingTitle } from "@/lib/listing-display"
 import {
   buildPublicFlowDebugInfo,
   PublicFlowDiagnostics,
@@ -591,7 +592,7 @@ export default function MobileAuthPage() {
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: "rgba(95,143,255,0.1)", border: "1px solid rgba(95,143,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 20, color: ACCENT }}>{"*"}</div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT, margin: "0 0 8px" }}>Relay Authentication</h1>
-            {listing && <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{listing.brand} {listing.model}</p>}
+            {listing && <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{formatListingTitle(listing.brand, listing.model, undefined, "Order")}</p>}
           </div>
           <div style={{ marginBottom: 24 }}>
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)", marginBottom: 10, textAlign: "center" }}>Enter Challenge Code</label>
@@ -650,7 +651,7 @@ export default function MobileAuthPage() {
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: "rgba(95,143,255,0.1)", border: "1px solid rgba(95,143,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 24, color: ACCENT }}>{"⛨"}</div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: TEXT, margin: "0 0 6px" }}>Authenticate Item</h1>
-            <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{listing ? listing.brand + " " + listing.model : "Order #" + orderId.slice(0, 8).toUpperCase()}</p>
+            <p style={{ fontSize: 14, color: DIM, margin: 0 }}>{listing ? formatListingTitle(listing.brand, listing.model, undefined, "Order #" + orderId.slice(0, 8).toUpperCase()) : "Order #" + orderId.slice(0, 8).toUpperCase()}</p>
           </div>
           <div style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <h2 style={{ fontSize: 14, fontWeight: 600, color: TEXT, margin: "0 0 10px" }}>Seller evidence has been simplified</h2>

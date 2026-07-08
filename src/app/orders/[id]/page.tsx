@@ -30,6 +30,7 @@ import {
   Camera,
 } from "lucide-react"
 import { normalizeShippingAddress, toShippoAddress } from "@/lib/shipping-addresses"
+import { formatListingTitle } from "@/lib/listing-display"
 
 type OrderStatus = "paid" | "auth_submitted" | "label_created" | "shipped" | "delivered" | "review_window" | "completed" | "disputed" | "cancelled" | "refund_pending" | "refunded" | "payout_failed" | "return_pending" | "return_shipped" | "return_delivered"
 type UserRole = "buyer" | "seller"
@@ -1583,13 +1584,13 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           <div className="lg:col-span-1">
             <div className="bg-white/5 aspect-square rounded-xl mb-4 flex items-center justify-center overflow-hidden">
               {order.shoeImage && order.shoeImage !== "/placeholder-shoe.png" ? (
-                <img src={order.shoeImage} alt={`${order.brand} ${order.model}`} className="w-full h-full object-cover" />
+                <img src={order.shoeImage} alt={formatListingTitle(order.brand, order.model)} className="w-full h-full object-cover" />
               ) : (
                 <Package className="w-16 h-16 text-[#7ca6ff]" />
               )}
             </div>
             <h2 className="text-lg font-bold text-[#f5f7fb] mb-1">
-              {order.brand} {order.model}
+              {formatListingTitle(order.brand, order.model, undefined, "Order")}
             </h2>
             <p className="text-[#7ca6ff] mb-3">Size {order.size}</p>
           </div>

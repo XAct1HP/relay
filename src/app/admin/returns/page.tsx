@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Package,
@@ -187,8 +188,7 @@ export default function AdminReturnsPage() {
         <div className="space-y-3">
           {filteredReturns.map((ret) => {
             const listing = ret.listing;
-            const brand = listing?.brand || "Unknown";
-            const model = listing?.model || "Unknown";
+            const listingTitle = formatListingTitle(listing?.brand, listing?.model, undefined, "Unknown");
             const buyerName =
               ret.buyer?.display_name || ret.buyer?.full_name || "Unknown";
             const sellerName =
@@ -231,7 +231,7 @@ export default function AdminReturnsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm">
                   <div className="space-y-1">
                     <p className="text-[#f5f7fb] font-medium">
-                      {brand} {model}{" "}
+                      {listingTitle}{" "}
                       <span className="text-white/40">· Size {ret.size}</span>
                     </p>
                     <p className="text-white/40">

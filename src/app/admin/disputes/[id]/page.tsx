@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 
 interface AdminDisputeDetailResponse {
   order: any;
@@ -337,7 +338,7 @@ export default function AdminDisputeDetailPage() {
             <p className="relay-eyebrow text-[#5f8fff]">ADMIN DISPUTE REVIEW</p>
             {data.computed.legacyDisputeFlow && <Badge tone="amber">legacy dispute record</Badge>}
           </div>
-          <h1 className="relay-title">{data.order?.listing?.brand || "Relay"} {data.order?.listing?.model || "Order Dispute"}</h1>
+          <h1 className="relay-title">{formatListingTitle(data.order?.listing?.brand, data.order?.listing?.model, undefined, "Relay Order Dispute")}</h1>
           <div className="flex flex-wrap gap-2">
             <Badge tone="red">{formatLabel(dispute.category)}</Badge>
             <Badge tone={dispute.status === "resolved" || dispute.status === "closed" ? "green" : "amber"}>

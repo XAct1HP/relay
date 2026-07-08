@@ -1,3 +1,5 @@
+import { formatListingTitle } from "@/lib/listing-display";
+
 export interface OfferListingSummary {
   brand?: string | null;
   model?: string | null;
@@ -10,10 +12,10 @@ export function formatOfferListingName(listing?: OfferListingSummary | null): st
     return "Custom Offer";
   }
 
-  const productName = [listing.brand, listing.model].filter(Boolean).join(" ").trim();
+  const productName = formatListingTitle(listing.brand, listing.model, undefined, "Listing");
   const nickname = listing.nickname ? ` "${listing.nickname}"` : "";
   const sku = listing.sku ? ` [SKU ${listing.sku}]` : "";
-  return `${productName || "Listing"}${nickname}${sku}`;
+  return `${productName}${nickname}${sku}`;
 }
 
 export const SOLD_OUT_OFFER_ERROR =

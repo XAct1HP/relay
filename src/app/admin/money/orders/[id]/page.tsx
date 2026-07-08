@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 
 interface OrderMoneyDetailResponse {
   order: any;
@@ -143,7 +144,7 @@ export default function AdminOrderMoneyDetailPage() {
       <div className="space-y-2">
         <p className="relay-eyebrow text-[#5f8fff]">ORDER MONEY DETAIL</p>
         <h1 className="relay-title">
-          {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Order")}
+          {formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Order")}
         </h1>
         <p className="text-white/45">
           Order {order.id} · Seller {order.seller?.display_name || order.seller?.full_name || order.seller?.username || order.seller?.email || "Unknown"} · Buyer {order.buyer?.display_name || order.buyer?.full_name || order.buyer?.username || order.buyer?.email || "Unknown"}

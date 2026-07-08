@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { formatListingTitle } from '@/lib/listing-display'
 
 /**
  * GET /api/orders/[id]/packing-slip
@@ -84,8 +85,7 @@ export async function GET(
     }
 
     const listing = order.listing as any
-    const brand = listing?.brand || 'Unknown'
-    const model = listing?.model || 'Unknown'
+    const itemLabel = formatListingTitle(listing?.brand, listing?.model, undefined, 'Unknown')
     const slipId = order.return_packing_slip_id
     const orderDate = new Date(order.created_at).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -143,7 +143,7 @@ export async function GET(
     <div class="details">
       <div class="details-row">
         <span class="details-label">Item</span>
-        <span class="details-value">${brand} ${model}</span>
+        <span class="details-value">${itemLabel}</span>
       </div>
       <div class="details-row">
         <span class="details-label">Size</span>

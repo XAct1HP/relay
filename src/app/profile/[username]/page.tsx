@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { dedupeSkuListings, formatSizeDisplay, getListingDisplayMetrics } from '@/lib/listing-display';
+import { dedupeSkuListings, formatListingTitle, formatSizeDisplay, getListingDisplayMetrics } from '@/lib/listing-display';
 import {
   canBuyerMessageSeller,
   getBuyerMessagingUnavailableReason,
@@ -399,7 +399,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                     <>
                       <div className="h-48 w-full relative overflow-hidden">
                         {listing.images?.[0] ? (
-                          <img src={listing.images[0]} alt={listing.brand + ' ' + listing.model} className="w-full h-full object-cover" />
+                          <img src={listing.images[0]} alt={formatListingTitle(listing.brand, listing.model)} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full" style={{ background: 'linear-gradient(135deg, #2d2d3d 0%, #3d3d4d 100%)' }} />
                         )}
@@ -410,7 +410,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                         )}
                       </div>
                       <div className="p-4">
-                        <h3 className="font-semibold text-relay-text mb-2 line-clamp-2">{listing.brand} {listing.model}</h3>
+                        <h3 className="font-semibold text-relay-text mb-2 line-clamp-2">{formatListingTitle(listing.brand, listing.model, undefined, "Listing")}</h3>
                         <div className="flex items-baseline justify-between">
                           <p className="text-2xl font-bold" style={{ color: theme.accent }}>{`From $${listing.lowestPrice || 0}`}</p>
                           <p className="text-xs text-white/50 text-right">{formatSizeDisplay(listing.availableSizes, listing.availableSizeLabels)}</p>
@@ -489,7 +489,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs text-white/40 uppercase tracking-wide">Linked Listing</p>
-                                <h4 className="text-sm font-semibold truncate">{post.related_listing.brand} {post.related_listing.model}</h4>
+                                <h4 className="text-sm font-semibold truncate">{formatListingTitle(post.related_listing.brand, post.related_listing.model, undefined, "Listing")}</h4>
                                 <p className="text-sm font-bold" style={{ color: theme.accent }}>{"$" + (post.related_listing.sizes?.[0]?.price || 0)}</p>
                               </div>
                               <span className="px-3 py-1 rounded-lg text-xs font-semibold text-relay-bg" style={{ backgroundColor: theme.accent }}>View</span>
@@ -535,7 +535,7 @@ export default function SellerProfilePage({ params }: { params: { username: stri
 
                   <div className="space-y-4">
                     {reviewsWithComments.map((review) => {
-                      const shoeModel = review.orders?.listings ? review.orders.listings.brand + ' ' + review.orders.listings.model : 'Unknown Model';
+                      const shoeModel = review.orders?.listings ? formatListingTitle(review.orders.listings.brand, review.orders.listings.model, undefined, 'Unknown Model') : 'Unknown Model';
                       return (
                         <div key={review.id} className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-[1.5rem] p-6 hover:bg-white/[0.08] transition-colors">
                           <div className="flex items-start gap-4">

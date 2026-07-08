@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { calculateSellerProceeds, calculateStripeFeeEstimateCents } from "@/lib/money-policy";
 import { requireSellerSession } from "@/lib/seller-access";
+import { formatListingTitle } from "@/lib/listing-display";
 
 function toDollars(value: number) {
   return Math.round((value / 100) * 100) / 100;
@@ -258,7 +259,7 @@ export async function GET() {
         id: order.id,
         shoe:
           listing?.brand && listing?.model
-            ? `${listing.brand} ${listing.model}`
+            ? formatListingTitle(listing.brand, listing.model, undefined, "Unknown Shoe")
             : "Unknown Shoe",
         price: Number(order.price || 0),
         buyer:

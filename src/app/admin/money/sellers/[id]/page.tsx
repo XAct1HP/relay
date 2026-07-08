@@ -13,6 +13,7 @@ import {
   Wallet,
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 
 interface SellerMoneyDetailResponse {
   seller: {
@@ -114,7 +115,7 @@ function labelFromOrder(order?: { id: string; listing?: { brand?: string | null;
   }
 
   if (order.listing?.brand || order.listing?.model) {
-    return `${order.listing?.brand || "Unknown"} ${order.listing?.model || "Order"}`;
+    return formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Order");
   }
 
   return `Order ${order.id.slice(0, 8)}`;
@@ -431,7 +432,7 @@ export default function AdminSellerMoneyDetailPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[#f5f7fb] font-medium">
-                          {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Order")}
+                          {formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Order")}
                         </p>
                         <p className="text-white/45 text-sm">
                           {order.status} · payout {order.payout_status || "pending"} · balance {order.balance_credit_status || "n/a"}

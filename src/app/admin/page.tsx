@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -598,7 +599,7 @@ export default function AdminPage() {
                 <div key={listing.id} className="flex items-center justify-between py-3 px-0 border-b border-white/5 last:border-b-0">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-[#f5f7fb] text-sm font-medium truncate">{listing.brand} {listing.model}</p>
+                      <p className="text-[#f5f7fb] text-sm font-medium truncate">{formatListingTitle(listing.brand, listing.model, undefined, "Listing")}</p>
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                         listing.brand === "Individual Brand"
                           ? "bg-purple-500/20 text-purple-300"

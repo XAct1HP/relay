@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import useAuth from "@/hooks/useAuth";
+import { formatListingTitle } from "@/lib/listing-display";
 import type {
   OrderPayoutRecord,
   SellerTier,
@@ -749,7 +750,7 @@ export default function AdminSellerTrustDetailPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-[#f5f7fb] font-medium">
-                        {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Order")}
+                        {formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Order")}
                       </p>
                       <p className="text-white/40 text-sm">
                         {order.id.slice(0, 8)}... · {order.status} · {formatMoney(Math.round((order.price || 0) * 100))}
@@ -831,7 +832,7 @@ export default function AdminSellerTrustDetailPage() {
               {reviewOrders.map((order) => (
                 <div key={order.id} className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                   <p className="text-[#f5f7fb] font-medium">
-                    {(order.listing?.brand || "Unknown")} {(order.listing?.model || "Order")}
+                    {formatListingTitle(order.listing?.brand, order.listing?.model, undefined, "Order")}
                   </p>
                   <p className="text-white/40 text-sm">
                     {order.id.slice(0, 8)}... · {order.status} · {formatMoney(Math.round((order.price || 0) * 100))}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import { Search, Eye, Trash2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
@@ -129,7 +130,7 @@ export default function ListingsPage() {
   }, []);
 
   const filteredListings = listings.filter((listing) =>
-    `${listing.brand} ${listing.model}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    formatListingTitle(listing.brand, listing.model).toLowerCase().includes(searchQuery.toLowerCase()) ||
     listing.profiles?.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -205,7 +206,7 @@ export default function ListingsPage() {
                     listing={{
                       id: listing.id,
                       image: Array.isArray(images) ? images[0] : listing.image_url || '/placeholder-shoe.png',
-                      title: `${listing.brand} ${listing.model}`,
+                      title: formatListingTitle(listing.brand, listing.model, undefined, "Listing"),
                       seller: listing.profiles?.full_name || listing.profiles?.display_name || 'Unknown',
                       date: new Date(listing.created_at).toLocaleDateString(),
                       price: `$${minPrice.toFixed(2)}`,

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { createClient } from '@/lib/supabase';
+import { formatListingTitle } from '@/lib/listing-display';
 import { Camera, Palette, User, MapPin, Edit3, Check, X, Eye, Upload, Send, Link as LinkIcon, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
 
 interface Theme {
@@ -890,7 +891,7 @@ function PostComposer({
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-white/40">Linked listing</p>
                     <p className="text-sm text-relay-text truncate">
-                      {linkedListing.brand} {linkedListing.model}
+                      {formatListingTitle(linkedListing.brand, linkedListing.model, undefined, "Listing")}
                       {linkedListing.nickname ? ' "' + linkedListing.nickname + '"' : ''}
                     </p>
                   </div>
@@ -942,7 +943,7 @@ function PostComposer({
                 <option value="" className="bg-[#1a1a2e]">Link a listing</option>
                 {sellerListings.map((listing) => (
                   <option key={listing.id} value={listing.id} className="bg-[#1a1a2e]">
-                    {listing.brand} {listing.model}
+                    {formatListingTitle(listing.brand, listing.model, undefined, "Listing")}
                     {listing.nickname ? ' "' + listing.nickname + '"' : ''}
                   </option>
                 ))}

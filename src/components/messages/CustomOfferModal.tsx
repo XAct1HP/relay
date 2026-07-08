@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, DollarSign, Tag } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import useAuth from "@/hooks/useAuth";
 
 interface ListingOption {
@@ -51,7 +52,7 @@ export function CustomOfferModal({
       if (data) {
         const formatted: ListingOption[] = data.map((listing: any) => ({
           id: listing.id,
-          name: `${listing.brand} ${listing.model}${listing.nickname ? ` "${listing.nickname}"` : ""}${listing.sku ? ` [SKU ${listing.sku}]` : ""}`,
+          name: `${formatListingTitle(listing.brand, listing.model, undefined, "Listing")}${listing.nickname ? ` "${listing.nickname}"` : ""}${listing.sku ? ` [SKU ${listing.sku}]` : ""}`,
           sku: listing.sku || null,
           sizes: ((listing.listing_variants as any[])?.length
             ? (listing.listing_variants as any[])

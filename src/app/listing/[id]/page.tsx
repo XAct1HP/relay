@@ -16,6 +16,7 @@ import {
   Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { formatListingTitle } from "@/lib/listing-display";
 import { usePublicTestMode } from "@/hooks/usePublicTestMode";
 import { getRelayTestMarketplaceListing } from "@/lib/test-marketplace";
 import {
@@ -649,7 +650,7 @@ export default function ListingDetailPage({
               <div className="relative aspect-square bg-white/[0.02]">
                 <img
                   src={usedItem.conditionPhotoUrl}
-                  alt={`${listing.brand} ${listing.model} - Size ${usedItem.size}`}
+                  alt={`${formatListingTitle(listing.brand, listing.model)} - Size ${usedItem.size}`}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute top-3 left-3 rounded-lg bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[11px] font-medium text-white inline-flex items-center gap-1.5">
@@ -754,7 +755,7 @@ export default function ListingDetailPage({
               {listing.images[currentImageIndex] ? (
                 <img
                   src={listing.images[currentImageIndex]}
-                  alt={`${listing.brand} ${listing.model} - Image ${currentImageIndex + 1}`}
+                  alt={`${formatListingTitle(listing.brand, listing.model)} - Image ${currentImageIndex + 1}`}
                   className="block w-full h-auto max-h-[70vh] object-contain"
                 />
               ) : (
