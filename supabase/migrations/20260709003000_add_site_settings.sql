@@ -14,9 +14,15 @@ INSERT INTO site_settings (onboarding_active) VALUES (true);
 -- Allow authenticated users to read settings
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Anyone can read site settings"
+ON public.site_settings;
+
 CREATE POLICY "Anyone can read site settings"
   ON site_settings FOR SELECT
   USING (true);
+
+DROP POLICY IF EXISTS "Only admins can update site settings"
+ON public.site_settings;
 
 CREATE POLICY "Only admins can update site settings"
   ON site_settings FOR UPDATE
