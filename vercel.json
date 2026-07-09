@@ -5,8 +5,16 @@
       "schedule": "0 0 * * *"
     },
     {
+      "path": "/api/cron/trust-evaluate",
+      "schedule": "30 0 * * *"
+    },
+    {
       "path": "/api/cron/release-reserves",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/tag-replenishment",
+      "schedule": "0 1 1 * *"
     }
   ]
 }
