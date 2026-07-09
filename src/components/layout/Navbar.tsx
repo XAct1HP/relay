@@ -24,7 +24,7 @@ export function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-[72px] bg-relay-bg/80 backdrop-blur-xl border-b border-white/10">
-      <div className="h-full px-4 md:px-6 flex items-center justify-between">
+      <div className="relative h-full px-4 md:px-6 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex-shrink-0">
           <Image
@@ -37,8 +37,8 @@ export function Navbar() {
           />
         </Link>
 
-        {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center gap-8">
+        {/* Desktop Navigation — absolutely centered so it doesn't drift with the widths of the logo or right section */}
+        <div className="hidden md:flex items-center gap-8 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           {navigationLinks.map((link) => (
             <Link
               key={link.href}
