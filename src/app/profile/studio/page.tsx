@@ -131,13 +131,26 @@ export default function ProfileStudioPage() {
       for (let i = 0; i < postImageFiles.length; i++) {
         const file = postImageFiles[i];
         if (!file) continue;
-        const extension = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        const imagePath = currentUser!.id + '/post-' + Date.now() + '-' + i + '.' + extension;
+        // Fall back to jpg for files without a recognizable extension (e.g. some
+        // camera exports). The avatar/banner upload uses the same simple shape.
+        const rawExtension = (file.name.split('.').pop() || '').toLowerCase();
+        const safeExtension = /^[a-z0-9]{1,5}$/.test(rawExtension) ? rawExtension : 'jpg';
+        const imagePath =
+          currentUser!.id + '/post-' + Date.now() + '-' + i + '.' + safeExtension;
         const { error: uploadError } = await supabase.storage
           .from('profile-images')
-          .upload(imagePath, file, { upsert: true, contentType: file.type || undefined });
+          .upload(imagePath, file, { upsert: true });
         if (uploadError) {
-          uploadFailures.push(file.name);
+          console.error('post image upload failed', {
+            path: imagePath,
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            error: uploadError,
+          });
+          uploadFailures.push(
+            file.name + ': ' + (uploadError.message || 'upload failed')
+          );
           continue;
         }
         const { data: urlData } = supabase.storage
@@ -148,8 +161,8 @@ export default function ProfileStudioPage() {
       if (uploadFailures.length > 0) {
         throw new Error(
           uploadFailures.length === postImageFiles.length
-            ? 'None of the images could be uploaded. Try again with different files.'
-            : 'Some images failed to upload: ' + uploadFailures.join(', ')
+            ? 'None of the images uploaded. ' + uploadFailures[0]
+            : 'Some images failed to upload: ' + uploadFailures.join('; ')
         );
       }
       const { error } = await supabase.from('posts').insert({
