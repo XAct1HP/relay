@@ -131,32 +131,28 @@ export default function ProfileStudioPage() {
       for (let i = 0; i < postImageFiles.length; i++) {
         const file = postImageFiles[i];
         if (!file) continue;
-        // Fall back to jpg for files without a recognizable extension (e.g. some
-        // camera exports). The avatar/banner upload uses the same simple shape.
-        const rawExtension = (file.name.split('.').pop() || '').toLowerCase();
-        const safeExtension = /^[a-z0-9]{1,5}$/.test(rawExtension) ? rawExtension : 'jpg';
-        const imagePath =
-          currentUser!.id + '/post-' + Date.now() + '-' + i + '.' + safeExtension;
-        const { error: uploadError } = await supabase.storage
-          .from('profile-images')
-          .upload(imagePath, file, { upsert: true });
-        if (uploadError) {
-          console.error('post image upload failed', {
-            path: imagePath,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            error: uploadError,
+        const formData = new FormData();
+        formData.set('file', file);
+        try {
+          const res = await fetch('/api/seller/posts/upload-image', {
+            method: 'POST',
+            body: formData,
           });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.url) {
+            const message =
+              (data && typeof data.error === 'string' && data.error) ||
+              'upload failed';
+            uploadFailures.push(file.name + ': ' + message);
+            continue;
+          }
+          uploadedImageUrls.push(data.url);
+        } catch (fetchErr) {
+          console.error('post image upload failed', fetchErr);
           uploadFailures.push(
-            file.name + ': ' + (uploadError.message || 'upload failed')
+            file.name + ': ' + (fetchErr instanceof Error ? fetchErr.message : 'network error')
           );
-          continue;
         }
-        const { data: urlData } = supabase.storage
-          .from('profile-images')
-          .getPublicUrl(imagePath);
-        uploadedImageUrls.push(urlData.publicUrl);
       }
       if (uploadFailures.length > 0) {
         throw new Error(
