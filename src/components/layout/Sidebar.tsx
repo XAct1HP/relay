@@ -74,6 +74,7 @@ export function Sidebar() {
 
   const adminLinks = [
     { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/inventory-ingest", label: "Inventory Ingest", icon: FileSpreadsheet },
     { href: "/admin/money", label: "Relay Balance", icon: CircleDollarSign },
     { href: "/admin/trust", label: "Seller Trust", icon: Shield },
     { href: "/admin/auth-risk", label: "Auth & Risk", icon: ShieldCheck },
