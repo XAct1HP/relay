@@ -13,7 +13,6 @@ import {
 import {
   commitAdminInventoryIngestAction,
   listAdminInventorySellersAction,
-  previewAdminInventoryIngestAction,
 } from "@/app/admin/inventory-ingest/actions";
 import type {
   AdminInventoryCommitReport,
@@ -85,6 +84,56 @@ export default function AdminInventoryIngestPage() {
     });
   }, [preview]);
 
+  useEffect(() => {
+    if (!preview?.job_id) {
+      return;
+    }
+
+    if (
+      preview.processing_status === "complete" ||
+      preview.processing_status === "failed"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await fetch(
+          `/api/admin/inventory-ingest/preview/${preview.job_id}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const payload = await response.json();
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          setPageError(payload.error || "Failed to refresh preview progress.");
+          window.clearInterval(interval);
+          return;
+        }
+
+        setPreview(payload);
+      } catch {
+        if (!cancelled) {
+          setPageError("Failed to refresh preview progress.");
+        }
+        window.clearInterval(interval);
+      }
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [preview?.job_id, preview?.processing_status]);
+
   const pendingManualRows = useMemo(
     () => (preview?.preview_rows || []).filter((row) => row.final_price === null),
     [preview]
@@ -92,6 +141,10 @@ export default function AdminInventoryIngestPage() {
 
   const canCommit = useMemo(() => {
     if (!selectedFile || !preview || isPending) {
+      return false;
+    }
+
+    if (preview.processing_status !== "complete") {
       return false;
     }
 
@@ -134,8 +187,16 @@ export default function AdminInventoryIngestPage() {
       formData.set("pricing_mode", pricingMode);
       formData.set("reconcile_missing", reconcileMissing ? "true" : "false");
       formData.set("file", selectedFile);
-      const nextPreview = await previewAdminInventoryIngestAction(formData);
-      setPreview(nextPreview);
+      const response = await fetch("/api/admin/inventory-ingest/preview", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setPageError(payload.error || "Failed to start preview.");
+        return;
+      }
+      setPreview(payload);
     });
   };
 
@@ -328,7 +389,7 @@ export default function AdminInventoryIngestPage() {
         <div className="space-y-6">
           <div className="relay-card p-6 space-y-4">
             <h2 className="text-lg font-semibold text-[#f5f7fb]">Summary</h2>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
               <SummaryTile label="Rows Read" value={preview?.rows_read || 0} />
               <SummaryTile label="Rows Considered" value={preview?.source_rows_considered || 0} />
               <SummaryTile label="Ready" value={preview?.ready_rows || 0} tone="success" />
@@ -336,6 +397,17 @@ export default function AdminInventoryIngestPage() {
               <SummaryTile label="Blocked" value={preview?.blocked_rows || 0} tone="danger" />
               <SummaryTile label="Missing Active Variants" value={preview?.missing_variants.length || 0} />
             </div>
+            {preview && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
+                <p>
+                  Live KicksDB progress: {preview.live_lookup_completed} / {preview.live_lookup_total}
+                </p>
+                <p className="mt-1">
+                  Status: {preview.processing_status || "complete"}
+                  {preview.waiting_until ? ` until ${new Date(preview.waiting_until).toLocaleTimeString()}` : ""}
+                </p>
+              </div>
+            )}
           </div>
 
           {(preview?.preview_rows || []).some((row) => row.final_price === null) && (
@@ -470,6 +542,7 @@ export default function AdminInventoryIngestPage() {
                   <th className="px-3 py-3 font-medium">Price</th>
                   <th className="px-3 py-3 font-medium">Current</th>
                   <th className="px-3 py-3 font-medium">Match</th>
+                  <th className="px-3 py-3 font-medium">Live</th>
                   <th className="px-3 py-3 font-medium">Warnings</th>
                 </tr>
               </thead>
@@ -504,9 +577,15 @@ export default function AdminInventoryIngestPage() {
                       <MatchBadge confidence={row.match_confidence} />
                     </td>
                     <td className="px-3 py-3">
+                      <LiveLookupBadge status={row.live_lookup_status} />
+                    </td>
+                    <td className="px-3 py-3">
                       <div className="max-w-[280px] space-y-1">
                         {row.action_reason && (
                           <p className="text-xs text-amber-200">{row.action_reason}</p>
+                        )}
+                        {row.live_lookup_message && (
+                          <p className="text-xs text-white/45">{row.live_lookup_message}</p>
                         )}
                         {row.warnings.length > 0 ? (
                           row.warnings.slice(0, 3).map((warning) => (
@@ -592,6 +671,25 @@ function MatchBadge({
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${style}`}>
       {confidence}
+    </span>
+  );
+}
+
+function LiveLookupBadge({
+  status,
+}: {
+  status: AdminInventoryPreviewReport["preview_rows"][number]["live_lookup_status"];
+}) {
+  const style =
+    status === "complete"
+      ? "bg-emerald-500/15 text-emerald-300"
+      : status === "pending"
+      ? "bg-blue-500/15 text-blue-300"
+      : "bg-red-500/15 text-red-300";
+
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${style}`}>
+      {status}
     </span>
   );
 }

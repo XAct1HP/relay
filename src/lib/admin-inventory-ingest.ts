@@ -50,6 +50,8 @@ export interface AdminInventoryPreviewRow {
   pricing_source: "spreadsheet" | "stockx_aggressive" | "stockx_balanced" | "manual_required";
   action: AdminInventoryPreviewAction;
   action_reason: string | null;
+  live_lookup_status: "pending" | "complete" | "failed";
+  live_lookup_message: string | null;
   warnings: string[];
 }
 
@@ -68,14 +70,19 @@ export interface AdminInventoryMissingVariant {
 }
 
 export interface AdminInventoryPreviewReport {
+  job_id?: string | null;
   seller_id: string;
   pricing_mode: AdminInventoryPricingMode;
+  processing_status?: "queued" | "running" | "rate_limited" | "complete" | "failed";
   rows_read: number;
   source_rows_considered: number;
   grouped_rows: number;
   ready_rows: number;
   review_rows: number;
   blocked_rows: number;
+  live_lookup_total: number;
+  live_lookup_completed: number;
+  waiting_until?: string | null;
   preview_rows: AdminInventoryPreviewRow[];
   missing_variants: AdminInventoryMissingVariant[];
   message: string;
@@ -189,6 +196,36 @@ interface StockxPricingProduct {
   variants: StockxPricingVariant[];
 }
 
+interface KicksDbLiveLookup {
+  sku: string;
+  normalized_sku: string;
+  brand: string | null;
+  name: string | null;
+  model: string | null;
+  nickname: string | null;
+  colorway: string | null;
+  gender: string | null;
+  release_date: string | null;
+  retail_price: number | null;
+  description: string | null;
+  gallery_images: string[];
+  image_url: string | null;
+  variants: StockxPricingVariant[];
+}
+
+export interface AdminInventoryPreviewContext {
+  seller_id: string;
+  pricing_mode: AdminInventoryPricingMode;
+  grouped_rows: GroupedSpreadsheetRow[];
+  existing_listings: ExistingSellerListing[];
+  existing_variant_map: Map<string, ExistingSellerVariant>;
+  catalog_by_sku: Map<string, ResolvedCatalogLike>;
+  sneaker_by_sku: Map<string, ResolvedSneakerLike>;
+  unique_lookup_skus: string[];
+  live_lookup_by_sku: Map<string, KicksDbLiveLookup | null>;
+  initial_report: AdminInventoryPreviewReport;
+}
+
 type ResolvedCatalogLike =
   | Awaited<ReturnType<typeof resolveCatalogProductBySku>>
   | null;
@@ -221,6 +258,9 @@ const BRAND_PREFIXES = [
   "vans",
 ];
 
+const PREVIEW_PRICING_LOOKUP_CONCURRENCY = 6;
+const PREVIEW_PRICING_LOOKUP_TIMEOUT_MS = 7000;
+
 export async function listAdminInventorySellers(
   supabase: SupabaseClient
 ): Promise<AdminInventorySellerOption[]> {
@@ -246,10 +286,24 @@ export async function previewAdminInventoryIngest(
   csvText: string,
   options: PreviewOptions
 ): Promise<AdminInventoryPreviewReport> {
+  const context = await initializeAdminInventoryPreview(supabase, sellerId, csvText, options);
+  if (!context) {
+    return buildEmptyPreviewReport("", options.pricing_mode, "Select a seller before previewing an upload.");
+  }
+
+  return continueAdminInventoryPreview(supabase, context);
+}
+
+export async function initializeAdminInventoryPreview(
+  supabase: SupabaseClient,
+  sellerId: string,
+  csvText: string,
+  options: PreviewOptions
+): Promise<AdminInventoryPreviewContext | null> {
   const normalizedSellerId = String(sellerId || "").trim();
 
   if (!normalizedSellerId) {
-    return buildEmptyPreviewReport("", options.pricing_mode, "Select a seller before previewing an upload.");
+    return null;
   }
 
   const parsedRows = parseAdminInventoryRows(csvText);
@@ -257,10 +311,13 @@ export async function previewAdminInventoryIngest(
   const existingListings = await loadExistingSellerListings(supabase, normalizedSellerId);
   const existingVariantMap = buildExistingVariantMap(existingListings);
   const productResolution = await resolveGroupedProducts(supabase, groupedRows);
-  const pricingResults =
-    options.pricing_mode === "manual"
-      ? new Map<string, PricingLookupResult>()
-      : await priceGroupedRowsWithKicksDb(groupedRows, options.pricing_mode);
+  const uniqueLookupSkus = Array.from(
+    new Set(
+      groupedRows
+        .map((row) => row.normalized_sku)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
 
   const previewRows: AdminInventoryPreviewRow[] = groupedRows.map((row) =>
     buildPreviewRow({
@@ -268,37 +325,139 @@ export async function previewAdminInventoryIngest(
       existingVariant: existingVariantMap.get(row.key) || null,
       catalogProduct: productResolution.catalogBySku.get(row.normalized_sku || "") || null,
       sneakerLookup: productResolution.sneakerBySku.get(row.normalized_sku || "") || null,
-      pricingResult: pricingResults.get(row.key) || null,
+      pricingResult: null,
       pricingMode: options.pricing_mode,
+      liveLookup: null,
+      liveLookupStatus: row.normalized_sku ? "pending" : "complete",
+      forcePendingLiveLookup: Boolean(row.normalized_sku),
     })
   );
 
-  const missingVariants = buildMissingVariantPreview(existingListings, previewRows);
-
-  const readyRows = previewRows.filter(
-    (row) => row.action === "create" || row.action === "update" || row.action === "no_change"
-  ).length;
-  const reviewRows = previewRows.filter((row) => row.action === "manual_review").length;
-  const blockedRows = previewRows.filter((row) => row.action === "blocked").length;
-
-  return {
+  const baseReport = finalizePreviewReport({
     seller_id: normalizedSellerId,
     pricing_mode: options.pricing_mode,
     rows_read: parsedRows.rows_read,
     source_rows_considered: parsedRows.rows_considered,
-    grouped_rows: previewRows.length,
-    ready_rows: readyRows,
-    review_rows: reviewRows,
-    blocked_rows: blockedRows,
     preview_rows: previewRows,
-    missing_variants: missingVariants,
+    missing_variants: buildMissingVariantPreview(existingListings, previewRows),
+    grouped_rows: previewRows.length,
+    processing_status: previewRows.length === 0 ? "complete" : "queued",
+    live_lookup_total: uniqueLookupSkus.length,
+    live_lookup_completed: 0,
+    waiting_until: null,
     message:
       previewRows.length === 0
         ? "No importable rows were found in this spreadsheet."
-        : options.reconcile_missing
-        ? "Preview ready. Missing seller inventory will be reconciled if you commit this upload."
-        : "Preview ready. Missing seller inventory will remain unchanged unless you enable reconciliation.",
+        : "Preview started. Rows will continue updating as KicksDB results arrive.",
+  });
+
+  return {
+    seller_id: normalizedSellerId,
+    pricing_mode: options.pricing_mode,
+    grouped_rows: groupedRows,
+    existing_listings: existingListings,
+    existing_variant_map: existingVariantMap,
+    catalog_by_sku: productResolution.catalogBySku,
+    sneaker_by_sku: productResolution.sneakerBySku,
+    unique_lookup_skus: uniqueLookupSkus,
+    live_lookup_by_sku: new Map<string, KicksDbLiveLookup | null>(),
+    initial_report: baseReport,
   };
+}
+
+export async function continueAdminInventoryPreview(
+  supabase: SupabaseClient,
+  context: AdminInventoryPreviewContext,
+  options?: {
+    onProgress?: (report: AdminInventoryPreviewReport) => Promise<void> | void;
+  }
+): Promise<AdminInventoryPreviewReport> {
+  let report: AdminInventoryPreviewReport = {
+    ...context.initial_report,
+    processing_status:
+      context.initial_report.live_lookup_total > 0 ? "running" : "complete",
+    message:
+      context.initial_report.live_lookup_total > 0
+        ? "Preview running. KicksDB matches and pricing are still loading."
+        : context.initial_report.message,
+  } satisfies AdminInventoryPreviewReport;
+
+  if (options?.onProgress) {
+    await options.onProgress(report);
+  }
+
+  let nextAllowedAt = Date.now();
+
+  for (const normalizedSku of context.unique_lookup_skus) {
+    const delayMs = Math.max(0, nextAllowedAt - Date.now());
+    if (delayMs > 0) {
+      report = finalizePreviewReport({
+        ...report,
+        processing_status: "rate_limited",
+        waiting_until: new Date(Date.now() + delayMs).toISOString(),
+        message: "Waiting for the KicksDB request window before continuing the preview.",
+      });
+      if (options?.onProgress) {
+        await options.onProgress(report);
+      }
+      await sleep(delayMs);
+    }
+
+    const lookupResult = await fetchKicksDbLiveLookupBySku(normalizedSku);
+    nextAllowedAt = Date.now() + 1000;
+
+    if (lookupResult.status === "rate_limited") {
+      const retryAfterMs = lookupResult.retry_after_ms;
+      report = finalizePreviewReport({
+        ...report,
+        processing_status: "rate_limited",
+        waiting_until: new Date(Date.now() + retryAfterMs).toISOString(),
+        message: "KicksDB rate limited the preview. The remaining rows are queued and will resume automatically.",
+      });
+      if (options?.onProgress) {
+        await options.onProgress(report);
+      }
+      await sleep(retryAfterMs);
+    }
+
+    const liveLookup =
+      lookupResult.status === "ok" ? lookupResult.lookup : null;
+    context.live_lookup_by_sku.set(normalizedSku, liveLookup);
+
+    report = rebuildPreviewReportFromContext(context, {
+      live_lookup_completed: context.live_lookup_by_sku.size,
+      processing_status:
+        context.live_lookup_by_sku.size >= context.unique_lookup_skus.length
+          ? "complete"
+          : "running",
+      waiting_until: null,
+      message:
+        context.live_lookup_by_sku.size >= context.unique_lookup_skus.length
+          ? "Preview ready. Review the populated rows before committing."
+          : "Preview running. Additional KicksDB rows are still loading.",
+      lookup_error_by_sku:
+        lookupResult.status === "not_found"
+          ? new Map([[normalizedSku, "KicksDB did not return a product for this SKU."]])
+          : lookupResult.status === "error"
+          ? new Map([[normalizedSku, lookupResult.message]])
+          : undefined,
+    });
+
+    if (options?.onProgress) {
+      await options.onProgress(report);
+    }
+  }
+
+  return finalizePreviewReport({
+    ...report,
+    processing_status: "complete",
+    waiting_until: null,
+    live_lookup_completed: context.unique_lookup_skus.length,
+    message:
+      report.preview_rows.length === 0
+        ? "No importable rows were found in this spreadsheet."
+        : "Preview ready. Review the populated rows before committing.",
+  });
 }
 
 export async function commitAdminInventoryIngest(
@@ -570,14 +729,19 @@ function buildEmptyPreviewReport(
   message: string
 ): AdminInventoryPreviewReport {
   return {
+    job_id: null,
     seller_id: sellerId,
     pricing_mode: pricingMode,
+    processing_status: "complete",
     rows_read: 0,
     source_rows_considered: 0,
     grouped_rows: 0,
     ready_rows: 0,
     review_rows: 0,
     blocked_rows: 0,
+    live_lookup_total: 0,
+    live_lookup_completed: 0,
+    waiting_until: null,
     preview_rows: [],
     missing_variants: [],
     message,
@@ -751,19 +915,76 @@ async function resolveGroupedProducts(
         .map((row) => [row.normalized_sku as string, row])
     ).values()
   );
+  const normalizedSkuKeys = uniqueRows
+    .map((row) => row.normalized_sku)
+    .filter((value): value is string => Boolean(value));
 
   const catalogBySku = new Map<string, ResolvedCatalogLike>();
   const sneakerBySku = new Map<string, ResolvedSneakerLike>();
 
-  for (const row of uniqueRows) {
-    const lookupSku = row.source_sku || row.display_sku || row.normalized_sku || "";
-    const [catalogProduct, sneakerLookup] = await Promise.all([
-      resolveCatalogProductBySku(supabase, lookupSku),
-      resolveSneakerBySku(supabase, lookupSku, { upsertClient: supabase }),
-    ]);
+  if (normalizedSkuKeys.length === 0) {
+    return {
+      catalogBySku,
+      sneakerBySku,
+    };
+  }
 
-    catalogBySku.set(row.normalized_sku || "", catalogProduct);
-    sneakerBySku.set(row.normalized_sku || "", sneakerLookup);
+  const [catalogResult, sneakerResult] = await Promise.all([
+    supabase
+      .from("catalog_products")
+      .select("id, sku, sku_normalized, brand, model, nickname, description, images")
+      .in("sku_normalized", normalizedSkuKeys),
+    supabase
+      .from("sneakers")
+      .select(
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, description, gallery_images, image_url, source"
+      )
+      .in("normalized_sku", normalizedSkuKeys),
+  ]);
+
+  if (catalogResult.error) {
+    throw catalogResult.error;
+  }
+
+  if (sneakerResult.error) {
+    throw sneakerResult.error;
+  }
+
+  for (const row of catalogResult.data || []) {
+    catalogBySku.set(row.sku_normalized, {
+      id: row.id,
+      sku: row.sku,
+      normalizedSku: row.sku_normalized,
+      brand: row.brand,
+      model: row.model,
+      nickname: row.nickname || null,
+      description: row.description || `Catalog placeholder for SKU ${row.sku}.`,
+      images: Array.isArray(row.images) ? row.images.filter(Boolean) : [],
+      source: "catalog",
+    });
+  }
+
+  for (const row of sneakerResult.data || []) {
+    sneakerBySku.set(row.normalized_sku, {
+      source: "local",
+      sneaker: {
+        id: row.id,
+        sku: row.sku,
+        normalized_sku: row.normalized_sku,
+        brand: row.brand || null,
+        name: row.name || null,
+        model: row.model || null,
+        nickname: row.nickname || null,
+        colorway: row.colorway || null,
+        gender: row.gender || null,
+        release_date: row.release_date || null,
+        retail_price: row.retail_price === null ? null : Number(row.retail_price),
+        description: typeof row.description === "string" ? row.description : null,
+        gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images.filter(Boolean) : [],
+        image_url: row.image_url || null,
+        source: typeof row.source === "string" ? row.source : "kicksdb",
+      },
+    });
   }
 
   return {
@@ -864,16 +1085,32 @@ function buildPreviewRow(input: {
   sneakerLookup: ResolvedSneakerLike;
   pricingResult: PricingLookupResult | null;
   pricingMode: AdminInventoryPricingMode;
+  liveLookup: KicksDbLiveLookup | null;
+  liveLookupStatus: "pending" | "complete" | "failed";
+  forcePendingLiveLookup?: boolean;
 }): AdminInventoryPreviewRow {
-  const { row, existingVariant, catalogProduct, sneakerLookup, pricingResult, pricingMode } = input;
+  const {
+    row,
+    existingVariant,
+    catalogProduct,
+    sneakerLookup,
+    pricingResult,
+    pricingMode,
+    liveLookup,
+    liveLookupStatus,
+    forcePendingLiveLookup,
+  } = input;
   const warnings = [...row.warnings];
-  const matchedProduct = buildMatchedProductName(sneakerLookup, catalogProduct);
+  const effectiveSneakerLookup = liveLookup
+    ? buildResolvedSneakerFromLiveLookup(liveLookup)
+    : sneakerLookup;
+  const matchedProduct = buildMatchedProductName(effectiveSneakerLookup, catalogProduct, liveLookup);
   const matchConfidence = determineMatchConfidence({
     sourceName: row.source_name,
     sourceSku: row.source_sku || row.display_sku,
     normalizedSku: row.normalized_sku,
     matchedProduct,
-    sneakerLookup,
+    sneakerLookup: effectiveSneakerLookup,
     catalogProduct,
     warnings,
   });
@@ -904,6 +1141,9 @@ function buildPreviewRow(input: {
   if (row.parse_error) {
     action = "blocked";
     actionReason = row.parse_error;
+  } else if (forcePendingLiveLookup && liveLookupStatus === "pending") {
+    action = "manual_review";
+    actionReason = "Waiting for live KicksDB data before this row can be reviewed.";
   } else if (matchConfidence === "low" || matchConfidence === "unmatched") {
     action = "manual_review";
     actionReason = "The product match is not confident enough to auto-commit.";
@@ -945,6 +1185,13 @@ function buildPreviewRow(input: {
     pricing_source: pricingSource,
     action,
     action_reason: actionReason,
+    live_lookup_status: liveLookupStatus,
+    live_lookup_message:
+      liveLookupStatus === "pending"
+        ? "Waiting for live KicksDB lookup."
+        : liveLookupStatus === "failed"
+        ? "Live KicksDB lookup failed for this SKU."
+        : null,
     warnings: uniqueStrings(warnings),
   };
 }
@@ -996,6 +1243,310 @@ function buildMissingVariantPreview(
   return missingVariants.sort((a, b) => a.normalized_sku.localeCompare(b.normalized_sku));
 }
 
+function rebuildPreviewReportFromContext(
+  context: AdminInventoryPreviewContext,
+  options?: {
+    live_lookup_completed?: number;
+    processing_status?: AdminInventoryPreviewReport["processing_status"];
+    waiting_until?: string | null;
+    message?: string;
+    lookup_error_by_sku?: Map<string, string>;
+  }
+): AdminInventoryPreviewReport {
+  const previewRows = context.grouped_rows.map((row) => {
+    const normalizedSku = row.normalized_sku || "";
+    const liveLookup = normalizedSku
+      ? context.live_lookup_by_sku.get(normalizedSku) || null
+      : null;
+    const errorMessage = options?.lookup_error_by_sku?.get(normalizedSku) || null;
+
+    const builtRow = buildPreviewRow({
+      row,
+      existingVariant: context.existing_variant_map.get(row.key) || null,
+      catalogProduct: context.catalog_by_sku.get(normalizedSku) || null,
+      sneakerLookup: context.sneaker_by_sku.get(normalizedSku) || null,
+      pricingResult:
+        row.uploaded_price !== null
+          ? null
+          : derivePricingResultFromLiveLookup(liveLookup, row.size, context.pricing_mode),
+      pricingMode: context.pricing_mode,
+      liveLookup,
+      liveLookupStatus:
+        !normalizedSku
+          ? "failed"
+          : liveLookup
+          ? "complete"
+          : context.live_lookup_by_sku.has(normalizedSku)
+          ? "failed"
+          : "pending",
+      forcePendingLiveLookup: Boolean(normalizedSku),
+    });
+
+    if (errorMessage) {
+      return {
+        ...builtRow,
+        live_lookup_status: "failed" as const,
+        live_lookup_message: errorMessage,
+        warnings: uniqueStrings([...builtRow.warnings, errorMessage]),
+      };
+    }
+
+    return builtRow;
+  });
+
+  return finalizePreviewReport({
+    job_id: context.initial_report.job_id || null,
+    seller_id: context.seller_id,
+    pricing_mode: context.pricing_mode,
+    processing_status: options?.processing_status || "running",
+    rows_read: context.initial_report.rows_read,
+    source_rows_considered: context.initial_report.source_rows_considered,
+    grouped_rows: previewRows.length,
+    preview_rows: previewRows,
+    missing_variants: buildMissingVariantPreview(context.existing_listings, previewRows),
+    live_lookup_total: context.unique_lookup_skus.length,
+    live_lookup_completed: options?.live_lookup_completed ?? context.live_lookup_by_sku.size,
+    waiting_until: options?.waiting_until ?? null,
+    message: options?.message || context.initial_report.message,
+  });
+}
+
+function finalizePreviewReport(
+  report: Omit<AdminInventoryPreviewReport, "ready_rows" | "review_rows" | "blocked_rows">
+): AdminInventoryPreviewReport {
+  const readyRows = report.preview_rows.filter(
+    (row) => row.action === "create" || row.action === "update" || row.action === "no_change"
+  ).length;
+  const reviewRows = report.preview_rows.filter((row) => row.action === "manual_review").length;
+  const blockedRows = report.preview_rows.filter((row) => row.action === "blocked").length;
+
+  return {
+    ...report,
+    ready_rows: readyRows,
+    review_rows: reviewRows,
+    blocked_rows: blockedRows,
+  };
+}
+
+function derivePricingResultFromLiveLookup(
+  liveLookup: KicksDbLiveLookup | null,
+  size: string,
+  pricingMode: AdminInventoryPricingMode
+): PricingLookupResult | null {
+  if (!liveLookup || pricingMode === "manual") {
+    return null;
+  }
+
+  const matchedVariant = matchVariantBySize(liveLookup.variants, size);
+  if (!matchedVariant) {
+    return {
+      status: "manual_review",
+      message: `No StockX size match was found for size ${size}.`,
+    };
+  }
+
+  const lowestAsk = Number(matchedVariant.lowest_ask);
+  if (!Number.isFinite(lowestAsk) || lowestAsk <= 0) {
+    return {
+      status: "manual_review",
+      message: "StockX market pricing for this size is unavailable.",
+    };
+  }
+
+  const finalPrice = pricingMode === "aggressive" ? Math.max(lowestAsk - 1, 1) : lowestAsk;
+  return {
+    status: "priced",
+    final_price: Number(finalPrice.toFixed(2)),
+    warning:
+      pricingMode === "aggressive"
+        ? "Price was set to lowest ask minus $1.00."
+        : "Price was set to the current lowest ask.",
+  };
+}
+
+async function fetchKicksDbLiveLookupBySku(
+  normalizedSku: string
+): Promise<
+  | { status: "ok"; lookup: KicksDbLiveLookup }
+  | { status: "not_found" }
+  | { status: "rate_limited"; retry_after_ms: number; message: string }
+  | { status: "error"; message: string }
+> {
+  const apiKey = process.env.KICKSDB_API_KEY;
+  const apiBaseUrl = process.env.KICKSDB_API_BASE_URL;
+
+  if (!apiKey || !apiBaseUrl || !normalizedSku) {
+    return {
+      status: "error",
+      message: "KicksDB is not configured for this environment.",
+    };
+  }
+
+  const baseUrl = apiBaseUrl.replace(/\/+$/, "");
+  const searchTerms = Array.from(
+    new Set([normalizedSku, collapseSku(normalizedSku)].filter(Boolean))
+  );
+
+  for (const searchTerm of searchTerms) {
+    const result = await lookupKicksDbLiveRecord(baseUrl, apiKey, searchTerm, normalizedSku);
+    if (result.status === "ok") {
+      return {
+        status: "ok",
+        lookup: mapRecordToKicksDbLiveLookup(result.record, normalizedSku),
+      };
+    }
+    if (result.status === "rate_limited") {
+      return result;
+    }
+    if (result.status === "error") {
+      return result;
+    }
+  }
+
+  return { status: "not_found" };
+}
+
+async function lookupKicksDbLiveRecord(
+  baseUrl: string,
+  apiKey: string,
+  query: string,
+  normalizedSku: string
+): Promise<
+  | { status: "ok"; record: Record<string, unknown> }
+  | { status: "not_found" }
+  | { status: "rate_limited"; retry_after_ms: number; message: string }
+  | { status: "error"; message: string }
+> {
+  const url = new URL(`${baseUrl}/v3/stockx/products`);
+  url.search = new URLSearchParams({
+    "display[traits]": "true",
+    "display[variants]": "true",
+    "display[identifiers]": "true",
+    "display[prices]": "true",
+    "display[statistics]": "true",
+    query,
+    sort: "rank",
+    page: "1",
+    limit: "20",
+    market: "US",
+  }).toString();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: apiKey,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    return {
+      status: "error",
+      message:
+        error instanceof Error && error.name === "AbortError"
+          ? "The KicksDB lookup timed out."
+          : "The KicksDB lookup failed.",
+    };
+  }
+  clearTimeout(timeout);
+
+  if (response.status === 429) {
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfterSeconds = Number.parseInt(retryAfterHeader || "", 10);
+    const retryAfterMs =
+      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : 60 * 1000;
+
+    return {
+      status: "rate_limited",
+      retry_after_ms: retryAfterMs,
+      message: "KicksDB rate limited the preview queue.",
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      status: "error",
+      message: `KicksDB returned ${response.status} for this SKU.`,
+    };
+  }
+
+  const payload: unknown = await response.json();
+  const records = extractStockxPricingRecords(payload);
+  const bestRecord = pickBestPricingRecord(records, normalizedSku);
+
+  if (!bestRecord) {
+    return { status: "not_found" };
+  }
+
+  return {
+    status: "ok",
+    record: bestRecord,
+  };
+}
+
+function mapRecordToKicksDbLiveLookup(
+  record: Record<string, unknown>,
+  normalizedSku: string
+): KicksDbLiveLookup {
+  const rawSku =
+    readStringFromRecord(record, ["sku", "styleCode", "style_code"]) || normalizedSku;
+  const normalizedRecordSku = normalizeSku(rawSku) || normalizedSku;
+  const brand = readStringFromRecord(record, ["brand", "brand_name"]) || null;
+  const model =
+    readStringFromRecord(record, ["model", "primary_title", "silhouette"]) || null;
+  const nickname =
+    readStringFromRecord(record, ["nickname", "secondary_title"]) || null;
+  const colorway = readStringFromRecord(record, ["colorway", "color"]) || null;
+  const gender = readStringFromRecord(record, ["gender"]) || null;
+  const releaseDate =
+    readStringFromRecord(record, ["release_date", "releaseDate"]) || null;
+  const retailPrice =
+    readNumberFromRecord(record, ["retail_price", "retailPrice"]) || null;
+  const description = readStringFromRecord(record, ["description"]) || null;
+  const galleryImages = readStringArrayFromUnknown(record.gallery).slice(0, 6);
+  const imageUrl =
+    galleryImages[0] ||
+    readStringFromRecord(record, ["image_url", "image", "imageUrl", "thumbnail"]) ||
+    readFirstStringFromArray(record.images) ||
+    null;
+  const name =
+    readStringFromRecord(record, ["name", "title", "product_name"]) ||
+    [brand, model, nickname].filter(Boolean).join(" ").trim() ||
+    null;
+
+  const variants = Array.isArray(record.variants)
+    ? record.variants
+        .map((variant) => normalizePricingVariant(variant))
+        .filter((variant): variant is StockxPricingVariant => Boolean(variant))
+    : [];
+
+  return {
+    sku: rawSku,
+    normalized_sku: normalizedRecordSku,
+    brand,
+    name,
+    model,
+    nickname,
+    colorway,
+    gender,
+    release_date: releaseDate,
+    retail_price: retailPrice,
+    description,
+    gallery_images: galleryImages.length > 0 ? galleryImages : imageUrl ? [imageUrl] : [],
+    image_url: imageUrl,
+    variants,
+  };
+}
+
 async function priceGroupedRowsWithKicksDb(
   groupedRows: GroupedSpreadsheetRow[],
   pricingMode: Exclude<AdminInventoryPricingMode, "manual">
@@ -1011,10 +1562,18 @@ async function priceGroupedRowsWithKicksDb(
   );
 
   const productBySku = new Map<string, StockxPricingProduct | null>();
-  for (const normalizedSku of uniqueSkus) {
-    const product = await fetchStockxPricingProductBySku(normalizedSku);
-    productBySku.set(normalizedSku, product);
-  }
+  await runWithConcurrency(
+    uniqueSkus,
+    PREVIEW_PRICING_LOOKUP_CONCURRENCY,
+    async (normalizedSku) => {
+      const product = await withTimeout(
+        fetchStockxPricingProductBySku(normalizedSku),
+        PREVIEW_PRICING_LOOKUP_TIMEOUT_MS,
+        null
+      );
+      productBySku.set(normalizedSku, product);
+    }
+  );
 
   for (const row of groupedRows) {
     if (row.parse_error || row.uploaded_price !== null || !row.normalized_sku) {
@@ -1113,10 +1672,48 @@ function readStringFromRecord(
   return "";
 }
 
+function readNumberFromRecord(
+  record: Record<string, unknown>,
+  keys: string[]
+): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function readStringArrayFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+}
+
+function readFirstStringFromArray(value: unknown): string | null {
+  return readStringArrayFromUnknown(value)[0] || null;
+}
+
 function collapseSku(value: string | null | undefined): string {
   return String(value || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchStockxPricingProductBySku(
@@ -1135,7 +1732,11 @@ async function fetchStockxPricingProductBySku(
   );
 
   for (const searchTerm of searchTerms) {
-    const record = await lookupPricingStockxProduct(baseUrl, apiKey, searchTerm, normalizedSku);
+    const record = await withTimeout(
+      lookupPricingStockxProduct(baseUrl, apiKey, searchTerm, normalizedSku),
+      PREVIEW_PRICING_LOOKUP_TIMEOUT_MS,
+      null
+    );
     if (record) {
       return record;
     }
@@ -1163,14 +1764,25 @@ async function lookupPricingStockxProduct(
     market: "US",
   }).toString();
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      Authorization: apiKey,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const abortTimeout = setTimeout(() => controller.abort(), PREVIEW_PRICING_LOOKUP_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: apiKey,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch {
+    clearTimeout(abortTimeout);
+    return null;
+  }
+  clearTimeout(abortTimeout);
 
   if (!response.ok) {
     return null;
@@ -1704,8 +2316,20 @@ function tokenizeName(value: string): Set<string> {
 
 function buildMatchedProductName(
   sneakerLookup: ResolvedSneakerLike,
-  catalogProduct: ResolvedCatalogLike
+  catalogProduct: ResolvedCatalogLike,
+  liveLookup?: KicksDbLiveLookup | null
 ): string | null {
+  if (liveLookup) {
+    return (
+      liveLookup.name ||
+      [liveLookup.brand, liveLookup.model, liveLookup.nickname]
+        .filter(Boolean)
+        .join(" ")
+        .trim() ||
+      null
+    );
+  }
+
   if (sneakerLookup?.sneaker) {
     return (
       sneakerLookup.sneaker.name ||
@@ -1725,6 +2349,31 @@ function buildMatchedProductName(
   }
 
   return null;
+}
+
+function buildResolvedSneakerFromLiveLookup(
+  liveLookup: KicksDbLiveLookup
+): ResolvedSneakerLike {
+  return {
+    source: "kicksdb",
+    sneaker: {
+      id: `live-${liveLookup.normalized_sku}`,
+      sku: liveLookup.sku,
+      normalized_sku: liveLookup.normalized_sku,
+      brand: liveLookup.brand,
+      name: liveLookup.name,
+      model: liveLookup.model,
+      nickname: liveLookup.nickname,
+      colorway: liveLookup.colorway,
+      gender: liveLookup.gender,
+      release_date: liveLookup.release_date,
+      retail_price: liveLookup.retail_price,
+      description: liveLookup.description,
+      gallery_images: liveLookup.gallery_images,
+      image_url: liveLookup.image_url,
+      source: "kicksdb",
+    },
+  };
 }
 
 function splitBrandAndModelFromName(value: string): {
@@ -1807,4 +2456,51 @@ function uniqueStrings(values: string[]): string[] {
   return Array.from(
     new Set(values.map((value) => String(value || "").trim()).filter(Boolean))
   );
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+
+        if (currentIndex >= items.length) {
+          return;
+        }
+
+        await worker(items[currentIndex]);
+      }
+    })
+  );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallbackValue: T
+): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(fallbackValue), timeoutMs);
+  });
+
+  const result = await Promise.race([promise, timeoutPromise]);
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
+
+  return result;
 }
