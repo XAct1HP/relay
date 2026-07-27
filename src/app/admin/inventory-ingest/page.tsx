@@ -34,6 +34,7 @@ export default function AdminInventoryIngestPage() {
   const [preview, setPreview] = useState<AdminInventoryPreviewReport | null>(EMPTY_PREVIEW);
   const [commitReport, setCommitReport] = useState<AdminInventoryCommitReport | null>(null);
   const [manualPrices, setManualPrices] = useState<Record<string, string>>({});
+  const [reviewDecisions, setReviewDecisions] = useState<Record<string, "approve" | "reject">>({});
   const [pageError, setPageError] = useState<string | null>(null);
   const [loadingSellers, setLoadingSellers] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -78,6 +79,22 @@ export default function AdminInventoryIngestPage() {
       for (const row of preview.preview_rows) {
         if (row.final_price === null) {
           next[row.key] = current[row.key] || "";
+        }
+      }
+      return next;
+    });
+  }, [preview]);
+
+  useEffect(() => {
+    if (!preview) {
+      return;
+    }
+
+    setReviewDecisions((current) => {
+      const next = {} as Record<string, "approve" | "reject">;
+      for (const row of preview.preview_rows) {
+        if (row.requires_review_approval && current[row.key]) {
+          next[row.key] = current[row.key];
         }
       }
       return next;
@@ -139,8 +156,21 @@ export default function AdminInventoryIngestPage() {
     [preview]
   );
 
+  const reviewApprovalRows = useMemo(
+    () => (preview?.preview_rows || []).filter((row) => row.requires_review_approval),
+    [preview]
+  );
+
+  const committableRowCount = useMemo(
+    () =>
+      (preview?.preview_rows || []).filter((row) =>
+        isPreviewRowCommittable(row, manualPrices[row.key], reviewDecisions[row.key])
+      ).length,
+    [manualPrices, preview, reviewDecisions]
+  );
+
   const canCommit = useMemo(() => {
-    if (!selectedFile || !preview || isPending) {
+    if (!preview || isPending) {
       return false;
     }
 
@@ -152,11 +182,8 @@ export default function AdminInventoryIngestPage() {
       return false;
     }
 
-    return pendingManualRows.every((row) => {
-      const value = Number.parseFloat(manualPrices[row.key] || "");
-      return Number.isFinite(value) && value > 0;
-    });
-  }, [isPending, manualPrices, pendingManualRows, preview, selectedFile]);
+    return committableRowCount > 0;
+  }, [committableRowCount, isPending, preview]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
@@ -165,6 +192,7 @@ export default function AdminInventoryIngestPage() {
     setCommitReport(null);
     setPageError(null);
     setManualPrices({});
+    setReviewDecisions({});
   };
 
   const runPreview = () => {
@@ -180,6 +208,7 @@ export default function AdminInventoryIngestPage() {
 
     setPageError(null);
     setCommitReport(null);
+    setReviewDecisions({});
 
     startTransition(async () => {
       const formData = new FormData();
@@ -201,8 +230,8 @@ export default function AdminInventoryIngestPage() {
   };
 
   const runCommit = () => {
-    if (!canCommit || !selectedFile) {
-      setPageError("Resolve all manual price gaps before committing this upload.");
+    if (!preview || !canCommit) {
+      setPageError("Finish the preview and make sure at least one row is ready to commit.");
       return;
     }
 
@@ -214,7 +243,11 @@ export default function AdminInventoryIngestPage() {
       formData.set("pricing_mode", pricingMode);
       formData.set("reconcile_missing", reconcileMissing ? "true" : "false");
       formData.set("manual_price_by_key", JSON.stringify(manualPrices));
-      formData.set("file", selectedFile);
+      formData.set("review_decision_by_key", JSON.stringify(reviewDecisions));
+      formData.set("preview_report", JSON.stringify(preview));
+      if (selectedFile) {
+        formData.set("file", selectedFile);
+      }
       const report = await commitAdminInventoryIngestAction(formData);
       setCommitReport(report);
     });
@@ -268,10 +301,11 @@ export default function AdminInventoryIngestPage() {
               <span className="text-sm font-medium text-white/70">Seller</span>
               <select
                 value={selectedSellerId}
-                onChange={(event) => {
+              onChange={(event) => {
                   setSelectedSellerId(event.target.value);
                   setPreview(null);
                   setCommitReport(null);
+                  setReviewDecisions({});
                 }}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#f5f7fb] outline-none focus:border-[#5f8fff]"
               >
@@ -291,6 +325,7 @@ export default function AdminInventoryIngestPage() {
                   setPricingMode(event.target.value as AdminInventoryPricingMode);
                   setPreview(null);
                   setCommitReport(null);
+                  setReviewDecisions({});
                 }}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#f5f7fb] outline-none focus:border-[#5f8fff]"
               >
@@ -315,6 +350,7 @@ export default function AdminInventoryIngestPage() {
                 setReconcileMissing(event.target.checked);
                 setPreview(null);
                 setCommitReport(null);
+                setReviewDecisions({});
               }}
               className="mt-1 h-4 w-4 rounded border-white/20 bg-white/5 text-[#5f8fff] focus:ring-[#5f8fff]"
             />
@@ -365,7 +401,7 @@ export default function AdminInventoryIngestPage() {
               className="relay-button-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <CheckCircle2 className="h-4 w-4" />
-              Commit Inventory
+              Commit Ready Inventory
             </button>
           </div>
 
@@ -395,6 +431,7 @@ export default function AdminInventoryIngestPage() {
               <SummaryTile label="Ready" value={preview?.ready_rows || 0} tone="success" />
               <SummaryTile label="Needs Review" value={preview?.review_rows || 0} tone="warning" />
               <SummaryTile label="Blocked" value={preview?.blocked_rows || 0} tone="danger" />
+              <SummaryTile label="Ready to Commit" value={committableRowCount} tone="success" />
               <SummaryTile label="Missing Active Variants" value={preview?.missing_variants.length || 0} />
             </div>
             {preview && (
@@ -410,12 +447,111 @@ export default function AdminInventoryIngestPage() {
             )}
           </div>
 
+          {reviewApprovalRows.length > 0 && (
+            <div className="relay-card p-6 space-y-4">
+              <div className="flex items-center gap-2 text-[#f5f7fb]">
+                <AlertTriangle className="h-4 w-4 text-amber-300" />
+                <h2 className="text-lg font-semibold">Review Fallback Matches</h2>
+              </div>
+              <p className="text-sm text-white/55">
+                These rows matched by name after the SKU search failed. Review the product details and choose yes or no while the rest of the preview keeps loading.
+              </p>
+              <div className="space-y-3">
+                {reviewApprovalRows.map((row) => (
+                  <div
+                    key={row.key}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                      <div className="h-24 w-24 overflow-hidden rounded-xl border border-white/10 bg-[#0f1218]">
+                        {row.matched_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={row.matched_image_url}
+                            alt={row.matched_product || row.source_name || "Matched product"}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-white/35">
+                            No image
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <div>
+                          <p className="font-medium text-[#f5f7fb]">
+                            {row.matched_product || "Matched product"}
+                          </p>
+                          <p className="text-sm text-white/50">
+                            Source: {row.source_name || row.source_sku || "Unnamed row"}
+                          </p>
+                        </div>
+                        <div className="grid gap-2 text-sm text-white/60 md:grid-cols-2">
+                          <p>Matched SKU: {row.matched_sku || "Missing"}</p>
+                          <p>Source SKU: {row.source_sku || "Missing"}</p>
+                          <p>Brand: {row.matched_brand || "Unknown"}</p>
+                          <p>Model: {row.matched_model || "Unknown"}</p>
+                          <p>Nickname: {row.matched_nickname || "None"}</p>
+                          <p>Size {row.size} | Qty {row.quantity}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReviewDecisions((current) => ({
+                                ...current,
+                                [row.key]: "approve",
+                              }))
+                            }
+                            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                              reviewDecisions[row.key] === "approve"
+                                ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/40"
+                                : "bg-white/5 text-white/70 hover:bg-white/10"
+                            }`}
+                          >
+                            Yes, commit this
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReviewDecisions((current) => ({
+                                ...current,
+                                [row.key]: "reject",
+                              }))
+                            }
+                            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                              reviewDecisions[row.key] === "reject"
+                                ? "bg-red-500/20 text-red-100 ring-1 ring-red-400/40"
+                                : "bg-white/5 text-white/70 hover:bg-white/10"
+                            }`}
+                          >
+                            No, skip this
+                          </button>
+                          <span className="text-xs text-white/45">
+                            {reviewDecisions[row.key] === "approve"
+                              ? "Approved for commit"
+                              : reviewDecisions[row.key] === "reject"
+                              ? "Will be skipped"
+                              : "Waiting for review"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(preview?.preview_rows || []).some((row) => row.final_price === null) && (
             <div className="relay-card p-6 space-y-4">
               <div className="flex items-center gap-2 text-[#f5f7fb]">
                 <AlertTriangle className="h-4 w-4 text-amber-300" />
-                <h2 className="text-lg font-semibold">Manual Pricing Required</h2>
+                <h2 className="text-lg font-semibold">Optional Manual Pricing</h2>
               </div>
+              <p className="text-sm text-white/55">
+                Only add prices for the rows you want to commit now. Any row without a price will stay skipped.
+              </p>
               <div className="space-y-3">
                 {pendingManualRows.map((row) => (
                   <div
@@ -557,6 +693,10 @@ export default function AdminInventoryIngestPage() {
                         <p className="font-medium text-[#f5f7fb]">
                           {row.matched_product || row.source_name || "Unknown product"}
                         </p>
+                        <p className="text-xs text-white/45">
+                          {row.matched_brand || "Unknown brand"}
+                          {row.matched_model ? ` | ${row.matched_model}` : ""}
+                        </p>
                         <p className="text-xs text-white/40">
                           Rows {row.row_numbers.join(", ")}
                         </p>
@@ -574,7 +714,18 @@ export default function AdminInventoryIngestPage() {
                         : "None"}
                     </td>
                     <td className="px-3 py-3">
-                      <MatchBadge confidence={row.match_confidence} />
+                      <div className="space-y-1">
+                        <MatchBadge confidence={row.match_confidence} />
+                        <p className="text-xs text-white/45">
+                          {row.match_source === "name_fallback"
+                            ? "Name fallback"
+                            : row.match_source === "catalog"
+                            ? "Catalog"
+                            : row.match_source === "sku"
+                            ? "SKU"
+                            : "None"}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <LiveLookupBadge status={row.live_lookup_status} />
@@ -583,6 +734,15 @@ export default function AdminInventoryIngestPage() {
                       <div className="max-w-[280px] space-y-1">
                         {row.action_reason && (
                           <p className="text-xs text-amber-200">{row.action_reason}</p>
+                        )}
+                        {row.requires_review_approval && (
+                          <p className="text-xs text-white/55">
+                            Review: {reviewDecisions[row.key] === "approve"
+                              ? "approved"
+                              : reviewDecisions[row.key] === "reject"
+                              ? "rejected"
+                              : "pending"}
+                          </p>
                         )}
                         {row.live_lookup_message && (
                           <p className="text-xs text-white/45">{row.live_lookup_message}</p>
@@ -692,6 +852,43 @@ function LiveLookupBadge({
       {status}
     </span>
   );
+}
+
+function isPreviewRowCommittable(
+  row: AdminInventoryPreviewReport["preview_rows"][number],
+  manualPrice: string | undefined,
+  reviewDecision: "approve" | "reject" | undefined
+) {
+  if (!row.normalized_sku || row.quantity <= 0) {
+    return false;
+  }
+
+  if (row.live_lookup_status === "pending") {
+    return false;
+  }
+
+  if (row.live_lookup_status === "failed" && row.match_confidence === "unmatched") {
+    return false;
+  }
+
+  if (row.requires_review_approval && reviewDecision !== "approve") {
+    return false;
+  }
+
+  if (row.match_confidence === "low" || row.match_confidence === "unmatched") {
+    return false;
+  }
+
+  if (row.action === "blocked") {
+    return false;
+  }
+
+  if (row.final_price !== null) {
+    return true;
+  }
+
+  const parsedManualPrice = Number.parseFloat(manualPrice || "");
+  return Number.isFinite(parsedManualPrice) && parsedManualPrice > 0;
 }
 
 function formatSellerLabel(seller: AdminInventorySellerOption) {

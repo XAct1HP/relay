@@ -94,8 +94,9 @@ export async function commitAdminInventoryIngestAction(
   const sellerId = String(formData.get("seller_id") || "").trim();
   const pricingMode = extractPricingMode(formData);
   const csvText = await extractCsvText(formData);
+  const previewReport = extractPreviewReport(formData);
 
-  if (!sellerId || !csvText) {
+  if (!sellerId || (!csvText && !previewReport)) {
     return {
       seller_id: sellerId,
       pricing_mode: pricingMode,
@@ -109,7 +110,7 @@ export async function commitAdminInventoryIngestAction(
           key: "upload",
           message: !sellerId
             ? "Choose a seller before committing this upload."
-            : "Upload a CSV file before committing this upload.",
+            : "Generate a preview before committing this upload.",
         },
       ],
       message: "The upload could not be committed.",
@@ -121,6 +122,8 @@ export async function commitAdminInventoryIngestAction(
       pricing_mode: pricingMode,
       reconcile_missing: formData.get("reconcile_missing") === "true",
       manual_price_by_key: extractManualPriceMap(formData),
+      review_decision_by_key: extractReviewDecisionMap(formData),
+      preview_report: previewReport,
     });
   } catch (error) {
     console.error("Admin inventory ingest commit failed:", error);
@@ -196,22 +199,52 @@ async function extractCsvText(formData: FormData): Promise<string> {
 }
 
 function extractManualPriceMap(formData: FormData): Record<string, string> {
-  const raw = formData.get("manual_price_by_key");
-  if (typeof raw !== "string" || !raw.trim()) {
+  return extractStringRecord(formData.get("manual_price_by_key"));
+}
+
+function extractReviewDecisionMap(formData: FormData): Record<string, string> {
+  return extractStringRecord(formData.get("review_decision_by_key"));
+}
+
+function extractStringRecord(value: FormDataEntryValue | null): Record<string, string> {
+  if (typeof value !== "string" || !value.trim()) {
     return {};
   }
 
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(value);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {};
     }
 
     return Object.fromEntries(
-      Object.entries(parsed).map(([key, value]) => [key, String(value ?? "")])
+      Object.entries(parsed).map(([key, entry]) => [key, String(entry ?? "")])
     );
   } catch {
     return {};
+  }
+}
+
+function extractPreviewReport(formData: FormData): AdminInventoryPreviewReport | null {
+  const raw = formData.get("preview_report");
+  if (typeof raw !== "string" || !raw.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const preview = parsed as Partial<AdminInventoryPreviewReport>;
+    if (!preview.seller_id || !Array.isArray(preview.preview_rows)) {
+      return null;
+    }
+
+    return preview as AdminInventoryPreviewReport;
+  } catch {
+    return null;
   }
 }
 

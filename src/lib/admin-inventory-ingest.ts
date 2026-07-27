@@ -46,7 +46,14 @@ export interface AdminInventoryPreviewRow {
   existing_price: number | null;
   existing_quantity: number | null;
   matched_product: string | null;
+  matched_sku: string | null;
+  matched_brand: string | null;
+  matched_model: string | null;
+  matched_nickname: string | null;
+  matched_image_url: string | null;
+  match_source: "sku" | "name_fallback" | "catalog" | "none";
   match_confidence: AdminInventoryMatchConfidence;
+  requires_review_approval: boolean;
   pricing_source: "spreadsheet" | "stockx_aggressive" | "stockx_balanced" | "manual_required";
   action: AdminInventoryPreviewAction;
   action_reason: string | null;
@@ -107,10 +114,13 @@ interface PreviewOptions {
 
 interface CommitOptions extends PreviewOptions {
   manual_price_by_key?: Record<string, string>;
+  review_decision_by_key?: Record<string, string>;
+  preview_report?: AdminInventoryPreviewReport | null;
 }
 
 interface ParsedSpreadsheetRow {
   row_number: number;
+  source_brand: string;
   source_name: string;
   source_sku: string;
   normalized_sku: string | null;
@@ -127,6 +137,7 @@ interface GroupedSpreadsheetRow {
   key: string;
   normalized_sku: string | null;
   display_sku: string;
+  source_brand: string;
   source_name: string;
   source_sku: string;
   size: string;
@@ -211,12 +222,16 @@ interface KicksDbLiveLookup {
   gallery_images: string[];
   image_url: string | null;
   variants: StockxPricingVariant[];
+  match_source: "sku" | "name_fallback";
+  requires_review_approval: boolean;
+  review_reason: string | null;
 }
 
 export interface AdminInventoryPreviewContext {
   seller_id: string;
   pricing_mode: AdminInventoryPricingMode;
   grouped_rows: GroupedSpreadsheetRow[];
+  lookup_seed_by_sku: Map<string, GroupedSpreadsheetRow>;
   existing_listings: ExistingSellerListing[];
   existing_variant_map: Map<string, ExistingSellerVariant>;
   catalog_by_sku: Map<string, ResolvedCatalogLike>;
@@ -311,6 +326,12 @@ export async function initializeAdminInventoryPreview(
   const existingListings = await loadExistingSellerListings(supabase, normalizedSellerId);
   const existingVariantMap = buildExistingVariantMap(existingListings);
   const productResolution = await resolveGroupedProducts(supabase, groupedRows);
+  const lookupSeedBySku = new Map<string, GroupedSpreadsheetRow>();
+  for (const row of groupedRows) {
+    if (row.normalized_sku && !lookupSeedBySku.has(row.normalized_sku)) {
+      lookupSeedBySku.set(row.normalized_sku, row);
+    }
+  }
   const uniqueLookupSkus = Array.from(
     new Set(
       groupedRows
@@ -355,6 +376,7 @@ export async function initializeAdminInventoryPreview(
     seller_id: normalizedSellerId,
     pricing_mode: options.pricing_mode,
     grouped_rows: groupedRows,
+    lookup_seed_by_sku: lookupSeedBySku,
     existing_listings: existingListings,
     existing_variant_map: existingVariantMap,
     catalog_by_sku: productResolution.catalogBySku,
@@ -389,6 +411,10 @@ export async function continueAdminInventoryPreview(
   let nextAllowedAt = Date.now();
 
   for (const normalizedSku of context.unique_lookup_skus) {
+    const seedRow = context.lookup_seed_by_sku.get(normalizedSku);
+    if (!seedRow) {
+      continue;
+    }
     const delayMs = Math.max(0, nextAllowedAt - Date.now());
     if (delayMs > 0) {
       report = finalizePreviewReport({
@@ -403,7 +429,7 @@ export async function continueAdminInventoryPreview(
       await sleep(delayMs);
     }
 
-    const lookupResult = await fetchKicksDbLiveLookupBySku(normalizedSku);
+    const lookupResult = await fetchKicksDbLiveLookupForRow(seedRow);
     nextAllowedAt = Date.now() + 1000;
 
     if (lookupResult.status === "rate_limited") {
@@ -466,8 +492,12 @@ export async function commitAdminInventoryIngest(
   csvText: string,
   options: CommitOptions
 ): Promise<AdminInventoryCommitReport> {
-  const preview = await previewAdminInventoryIngest(supabase, sellerId, csvText, options);
+  const preview =
+    options.preview_report && options.preview_report.seller_id === sellerId
+      ? options.preview_report
+      : await previewAdminInventoryIngest(supabase, sellerId, csvText, options);
   const manualPriceByKey = options.manual_price_by_key || {};
+  const reviewDecisionByKey = options.review_decision_by_key || {};
 
   const rowsBySku = new Map<string, AdminInventoryPreviewRow[]>();
 
@@ -484,6 +514,7 @@ export async function commitAdminInventoryIngest(
   let skippedSkus = 0;
   let deactivatedVariants = 0;
   const rowErrors: Array<{ key: string; message: string }> = [];
+  const fullyCommittedSkuSet = new Set<string>();
 
   const existingListings = await loadExistingSellerListings(supabase, preview.seller_id);
   const existingListingBySku = new Map(existingListings.map((listing) => [listing.normalized_sku, listing]));
@@ -501,72 +532,64 @@ export async function commitAdminInventoryIngest(
     }
 
     const normalizedRows: Array<
-      AdminInventoryPreviewRow & { effective_price: number | null }
+      AdminInventoryPreviewRow & {
+        effective_price: number | null;
+        review_decision: "approve" | "reject" | null;
+        skip_reason: string | null;
+      }
     > = rows.map((row) => {
       const manualPrice = parsePositiveNumber(manualPriceByKey[row.key]);
       const effectivePrice = row.final_price ?? manualPrice;
+      const reviewDecision = normalizeReviewDecision(reviewDecisionByKey[row.key]);
       return {
         ...row,
         effective_price: effectivePrice,
+        review_decision: reviewDecision,
+        skip_reason: getPreviewRowSkipReason(row, effectivePrice, reviewDecision),
       };
     });
 
-    const blockingRow = normalizedRows.find(
-      (row) =>
-        row.match_confidence === "low" ||
-        row.match_confidence === "unmatched" ||
-        row.effective_price === null ||
-        row.quantity <= 0 ||
-        !row.normalized_sku
-    );
+    const committableRows = normalizedRows.filter((row) => !row.skip_reason);
+    const skippedRows = normalizedRows.filter((row) => row.skip_reason);
 
-    if (blockingRow) {
+    if (committableRows.length === 0) {
       skippedSkus += 1;
       for (const row of normalizedRows) {
         rowErrors.push({
           key: row.key,
-          message:
-            row.effective_price === null
-              ? "This SKU still needs a manual price before it can be committed."
-              : blockingRow.match_confidence === "low" || blockingRow.match_confidence === "unmatched"
-              ? "This SKU match is not confident enough to auto-commit."
-              : blockingRow.action_reason || "This SKU is not ready to import.",
+          message: row.skip_reason || "This SKU is not ready to import.",
         });
       }
       continue;
     }
 
-    const primaryRow = normalizedRows[0];
-    const sneakerLookup = await resolveSneakerBySku(supabase, primaryRow.source_sku || primaryRow.normalized_sku!, {
+    const primaryRow = committableRows[0];
+    const resolvedSku =
+      primaryRow.matched_sku || primaryRow.source_sku || primaryRow.normalized_sku!;
+    const sneakerLookup = await resolveSneakerBySku(supabase, resolvedSku, {
       upsertClient: supabase,
     });
-    const catalogProduct = await resolveCatalogProductBySku(
-      supabase,
-      primaryRow.source_sku || primaryRow.normalized_sku!
-    );
+    const catalogProduct = await resolveCatalogProductBySku(supabase, resolvedSku);
     const existingListing = existingListingBySku.get(primaryRow.normalized_sku!);
+    const shouldPreserveExistingVariants =
+      Boolean(existingListing) && committableRows.length < normalizedRows.length;
+    const variants = shouldPreserveExistingVariants
+      ? mergeExistingListingVariantsWithPreview(existingListing!, committableRows)
+      : buildInventoryVariantsFromPreviewRows(committableRows);
 
-    const variants = normalizedRows.map((row) => ({
-      size: row.size,
-      quantity: row.quantity,
-      price: row.effective_price!,
-      condition: row.condition,
-      is_active: row.condition === "used" ? false : row.quantity > 0,
-      needs_condition_photo: row.condition === "used",
-    }));
-
-    const listingCondition =
-      normalizedRows.some((row) => row.condition === "used") &&
-      normalizedRows.some((row) => row.condition === "new")
-        ? "mixed"
-        : normalizedRows.some((row) => row.condition === "used")
-        ? "used_good"
-        : "new";
-
-    const boxCondition = normalizedRows.reduce(
-      (current, row) => pickWorseBoxCondition(current, row.box_condition),
-      "perfect" as "perfect" | "good" | "damaged" | "no_box"
+    const listingCondition = inferListingConditionFromPreviewRows(
+      shouldPreserveExistingVariants ? variants : committableRows
     );
+
+    const boxCondition = shouldPreserveExistingVariants
+      ? committableRows.reduce(
+          (current, row) => pickWorseBoxCondition(current, row.box_condition),
+          existingListing?.box_condition || ("perfect" as "perfect" | "good" | "damaged" | "no_box")
+        )
+      : committableRows.reduce(
+          (current, row) => pickWorseBoxCondition(current, row.box_condition),
+          "perfect" as "perfect" | "good" | "damaged" | "no_box"
+        );
 
     const resolvedTitle = primaryRow.matched_product || primaryRow.source_name || `SKU ${primaryRow.normalized_sku}`;
     const parsedName = splitBrandAndModelFromName(resolvedTitle);
@@ -655,6 +678,15 @@ export async function commitAdminInventoryIngest(
       }
 
       committedSkus += 1;
+      if (!shouldPreserveExistingVariants && primaryRow.normalized_sku) {
+        fullyCommittedSkuSet.add(primaryRow.normalized_sku);
+      }
+      for (const row of skippedRows) {
+        rowErrors.push({
+          key: row.key,
+          message: row.skip_reason || "This row was not committed.",
+        });
+      }
     } catch (error) {
       skippedSkus += 1;
       const message =
@@ -700,7 +732,7 @@ export async function commitAdminInventoryIngest(
     for (const missingVariant of preview.missing_variants) {
       if (
         missingVariant.resolution === "replaced_by_uploaded_sku" &&
-        committedSkuSet.has(missingVariant.normalized_sku)
+        fullyCommittedSkuSet.has(missingVariant.normalized_sku)
       ) {
         deactivatedVariants += 1;
       }
@@ -721,6 +753,147 @@ export async function commitAdminInventoryIngest(
         ? "Inventory ingest completed with skips. Review the row errors before running the next sheet."
         : "Inventory ingest completed successfully.",
   };
+}
+
+function normalizeReviewDecision(
+  value: string | null | undefined
+): "approve" | "reject" | null {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "approve" || normalized === "reject") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function getPreviewRowSkipReason(
+  row: AdminInventoryPreviewRow,
+  effectivePrice: number | null,
+  reviewDecision: "approve" | "reject" | null
+): string | null {
+  if (!row.normalized_sku) {
+    return row.action_reason || "This row could not be matched to a valid SKU.";
+  }
+
+  if (row.quantity <= 0) {
+    return "Quantity must be greater than 0 before this row can be committed.";
+  }
+
+  if (row.live_lookup_status === "pending") {
+    return "This row is still waiting for live KicksDB data.";
+  }
+
+  if (row.live_lookup_status === "failed" && row.match_confidence === "unmatched") {
+    return row.live_lookup_message || row.action_reason || "KicksDB did not return a match for this row.";
+  }
+
+  if (row.requires_review_approval) {
+    if (reviewDecision === "reject") {
+      return "This fallback match was rejected during review.";
+    }
+    if (reviewDecision !== "approve") {
+      return "Approve or reject this fallback match before committing it.";
+    }
+  }
+
+  if (row.match_confidence === "low" || row.match_confidence === "unmatched") {
+    return row.action_reason || "This row is not matched confidently enough to auto-commit.";
+  }
+
+  if (effectivePrice === null) {
+    return "This row still needs a price before it can be committed.";
+  }
+
+  if (row.action === "blocked") {
+    return row.action_reason || "This row is blocked.";
+  }
+
+  return null;
+}
+
+function buildInventoryVariantsFromPreviewRows(
+  rows: Array<AdminInventoryPreviewRow & { effective_price: number | null }>
+) {
+  return rows.map((row) => ({
+    size: row.size,
+    quantity: row.quantity,
+    price: row.effective_price!,
+    condition: row.condition,
+    is_active: row.condition === "used" ? false : row.quantity > 0,
+    needs_condition_photo: row.condition === "used",
+  }));
+}
+
+function mergeExistingListingVariantsWithPreview(
+  existingListing: ExistingSellerListing,
+  rows: Array<AdminInventoryPreviewRow & { effective_price: number | null }>
+) {
+  const variantMap = new Map<
+    string,
+    {
+      size: string;
+      quantity: number;
+      price: number;
+      condition: "new" | "used";
+      is_active: boolean;
+      needs_condition_photo: boolean;
+    }
+  >();
+
+  for (const variant of existingListing.variants) {
+    const key = `${variant.size}::${variant.condition}`;
+    variantMap.set(key, {
+      size: variant.size,
+      quantity: variant.quantity,
+      price: variant.price,
+      condition: variant.condition,
+      is_active: variant.is_active,
+      needs_condition_photo: variant.condition === "used",
+    });
+  }
+
+  for (const row of rows) {
+    const key = `${row.size}::${row.condition}`;
+    variantMap.set(key, {
+      size: row.size,
+      quantity: row.quantity,
+      price: row.effective_price!,
+      condition: row.condition,
+      is_active: row.condition === "used" ? false : row.quantity > 0,
+      needs_condition_photo: row.condition === "used",
+    });
+  }
+
+  return Array.from(variantMap.values()).sort((left, right) => {
+    const sizeCompare = left.size.localeCompare(right.size, undefined, { numeric: true });
+    if (sizeCompare !== 0) {
+      return sizeCompare;
+    }
+
+    return left.condition.localeCompare(right.condition);
+  });
+}
+
+function inferListingConditionFromPreviewRows(
+  rows: Array<
+    | Pick<AdminInventoryPreviewRow, "condition">
+    | {
+        condition: "new" | "used";
+      }
+  >
+): "new" | "mixed" | "used_good" {
+  const hasUsed = rows.some((row) => row.condition === "used");
+  const hasNew = rows.some((row) => row.condition === "new");
+
+  if (hasUsed && hasNew) {
+    return "mixed";
+  }
+
+  if (hasUsed) {
+    return "used_good";
+  }
+
+  return "new";
 }
 
 function buildEmptyPreviewReport(
@@ -762,6 +935,7 @@ function parseAdminInventoryRows(csvText: string): {
   for (let index = 1; index < matrix.length; index += 1) {
     const rowNumber = index + 1;
     const cells = matrix[index] || [];
+    const sourceBrand = readColumn(cells, columnIndex.brand);
     const sourceName = readColumn(cells, columnIndex.name);
     const sourceSku = readColumn(cells, columnIndex.sku);
     const sourceCondition = readColumn(cells, columnIndex.condition);
@@ -793,6 +967,7 @@ function parseAdminInventoryRows(csvText: string): {
     if (!size) {
       rows.push({
         row_number: rowNumber,
+        source_brand: sourceBrand.trim(),
         source_name: sourceName.trim(),
         source_sku: sourceSku.trim(),
         normalized_sku: null,
@@ -818,6 +993,7 @@ function parseAdminInventoryRows(csvText: string): {
 
     rows.push({
       row_number: rowNumber,
+      source_brand: sourceBrand.trim(),
       source_name: sourceName.trim(),
       source_sku: sourceSku.trim() || skuCandidate.display_sku,
       normalized_sku: skuCandidate.normalized_sku,
@@ -857,6 +1033,7 @@ function groupParsedRows(parsed: {
         key: groupKey,
         normalized_sku: normalizedSku,
         display_sku: row.source_sku || normalizedSku || "",
+        source_brand: row.source_brand,
         source_name: row.source_name,
         source_sku: row.source_sku,
         size: row.size,
@@ -873,6 +1050,9 @@ function groupParsedRows(parsed: {
 
     existing.quantity += row.quantity;
     existing.row_numbers.push(row.row_number);
+    if (!existing.source_brand && row.source_brand) {
+      existing.source_brand = row.source_brand;
+    }
     existing.box_condition = pickWorseBoxCondition(existing.box_condition, row.box_condition);
     existing.warnings = uniqueStrings([...existing.warnings, ...row.warnings]);
     if (existing.uploaded_price === null && row.uploaded_price !== null) {
@@ -1105,6 +1285,16 @@ function buildPreviewRow(input: {
     ? buildResolvedSneakerFromLiveLookup(liveLookup)
     : sneakerLookup;
   const matchedProduct = buildMatchedProductName(effectiveSneakerLookup, catalogProduct, liveLookup);
+  const matchSource: AdminInventoryPreviewRow["match_source"] = liveLookup
+    ? liveLookup.match_source
+    : sneakerLookup?.sneaker
+    ? "sku"
+    : catalogProduct
+    ? "catalog"
+    : "none";
+  const requiresReviewApproval = Boolean(
+    liveLookup?.requires_review_approval || matchSource === "name_fallback"
+  );
   const matchConfidence = determineMatchConfidence({
     sourceName: row.source_name,
     sourceSku: row.source_sku || row.display_sku,
@@ -1144,6 +1334,9 @@ function buildPreviewRow(input: {
   } else if (forcePendingLiveLookup && liveLookupStatus === "pending") {
     action = "manual_review";
     actionReason = "Waiting for live KicksDB data before this row can be reviewed.";
+  } else if (requiresReviewApproval) {
+    action = "manual_review";
+    actionReason = liveLookup?.review_reason || "This match needs admin approval before it can be committed.";
   } else if (matchConfidence === "low" || matchConfidence === "unmatched") {
     action = "manual_review";
     actionReason = "The product match is not confident enough to auto-commit.";
@@ -1181,7 +1374,34 @@ function buildPreviewRow(input: {
     existing_price: existingVariant?.price ?? null,
     existing_quantity: existingVariant?.quantity ?? null,
     matched_product: matchedProduct,
+    matched_sku:
+      liveLookup?.sku ||
+      effectiveSneakerLookup?.sneaker.sku ||
+      catalogProduct?.sku ||
+      null,
+    matched_brand:
+      liveLookup?.brand ||
+      effectiveSneakerLookup?.sneaker.brand ||
+      catalogProduct?.brand ||
+      null,
+    matched_model:
+      liveLookup?.model ||
+      effectiveSneakerLookup?.sneaker.model ||
+      catalogProduct?.model ||
+      null,
+    matched_nickname:
+      liveLookup?.nickname ||
+      effectiveSneakerLookup?.sneaker.nickname ||
+      catalogProduct?.nickname ||
+      null,
+    matched_image_url:
+      liveLookup?.image_url ||
+      effectiveSneakerLookup?.sneaker.image_url ||
+      catalogProduct?.images?.[0] ||
+      null,
+    match_source: matchSource,
     match_confidence: matchConfidence,
+    requires_review_approval: requiresReviewApproval,
     pricing_source: pricingSource,
     action,
     action_reason: actionReason,
@@ -1364,8 +1584,8 @@ function derivePricingResultFromLiveLookup(
   };
 }
 
-async function fetchKicksDbLiveLookupBySku(
-  normalizedSku: string
+async function fetchKicksDbLiveLookupForRow(
+  row: GroupedSpreadsheetRow
 ): Promise<
   | { status: "ok"; lookup: KicksDbLiveLookup }
   | { status: "not_found" }
@@ -1374,6 +1594,7 @@ async function fetchKicksDbLiveLookupBySku(
 > {
   const apiKey = process.env.KICKSDB_API_KEY;
   const apiBaseUrl = process.env.KICKSDB_API_BASE_URL;
+  const normalizedSku = row.normalized_sku || "";
 
   if (!apiKey || !apiBaseUrl || !normalizedSku) {
     return {
@@ -1383,16 +1604,24 @@ async function fetchKicksDbLiveLookupBySku(
   }
 
   const baseUrl = apiBaseUrl.replace(/\/+$/, "");
-  const searchTerms = Array.from(
-    new Set([normalizedSku, collapseSku(normalizedSku)].filter(Boolean))
-  );
+  const expectedSkuCandidates = buildExpectedSkuCandidates(row);
+  const searchTerms = buildKicksDbSkuSearchTerms(row, expectedSkuCandidates);
 
   for (const searchTerm of searchTerms) {
-    const result = await lookupKicksDbLiveRecord(baseUrl, apiKey, searchTerm, normalizedSku);
+    const result = await lookupKicksDbLiveRecord(
+      baseUrl,
+      apiKey,
+      searchTerm,
+      expectedSkuCandidates
+    );
     if (result.status === "ok") {
       return {
         status: "ok",
-        lookup: mapRecordToKicksDbLiveLookup(result.record, normalizedSku),
+        lookup: mapRecordToKicksDbLiveLookup(result.record, normalizedSku, {
+          match_source: "sku",
+          requires_review_approval: false,
+          review_reason: null,
+        }),
       };
     }
     if (result.status === "rate_limited") {
@@ -1403,6 +1632,39 @@ async function fetchKicksDbLiveLookupBySku(
     }
   }
 
+  const fallbackQuery = buildNameFallbackQuery(row);
+  if (!fallbackQuery) {
+    return { status: "not_found" };
+  }
+
+  await sleep(1000);
+  const fallbackResult = await lookupKicksDbLiveRecordByName(
+    baseUrl,
+    apiKey,
+    fallbackQuery,
+    row
+  );
+
+  if (fallbackResult.status === "ok") {
+    return {
+      status: "ok",
+      lookup: mapRecordToKicksDbLiveLookup(fallbackResult.record, normalizedSku, {
+        match_source: "name_fallback",
+        requires_review_approval: true,
+        review_reason:
+          "Matched by name fallback after SKU lookup failed. Review the product details and approve or reject this row.",
+      }),
+    };
+  }
+
+  if (fallbackResult.status === "rate_limited") {
+    return fallbackResult;
+  }
+
+  if (fallbackResult.status === "error") {
+    return fallbackResult;
+  }
+
   return { status: "not_found" };
 }
 
@@ -1410,7 +1672,7 @@ async function lookupKicksDbLiveRecord(
   baseUrl: string,
   apiKey: string,
   query: string,
-  normalizedSku: string
+  expectedSkuCandidates: string[]
 ): Promise<
   | { status: "ok"; record: Record<string, unknown> }
   | { status: "not_found" }
@@ -1481,7 +1743,122 @@ async function lookupKicksDbLiveRecord(
 
   const payload: unknown = await response.json();
   const records = extractStockxPricingRecords(payload);
-  const bestRecord = pickBestPricingRecord(records, normalizedSku);
+  const bestRecord = pickBestPricingRecordForCandidates(records, expectedSkuCandidates);
+
+  if (!bestRecord) {
+    return { status: "not_found" };
+  }
+
+  return {
+    status: "ok",
+    record: bestRecord,
+  };
+}
+
+function buildExpectedSkuCandidates(row: GroupedSpreadsheetRow): string[] {
+  return uniqueStrings(
+    [
+      row.normalized_sku,
+      normalizeSku(row.source_sku),
+      normalizeSku(extractStyleCodeCandidate(row.source_sku)),
+      normalizeSku(normalizeNumericStyleCode(row.source_sku)),
+      normalizeSku(row.display_sku),
+    ].filter((value): value is string => Boolean(value))
+  );
+}
+
+function buildKicksDbSkuSearchTerms(
+  row: GroupedSpreadsheetRow,
+  expectedSkuCandidates: string[]
+): string[] {
+  return uniqueStrings(
+    [
+      row.source_sku,
+      row.display_sku,
+      ...expectedSkuCandidates,
+      ...expectedSkuCandidates.map((candidate) => collapseSku(candidate)),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter((value) => value.length >= 4)
+  );
+}
+
+async function lookupKicksDbLiveRecordByName(
+  baseUrl: string,
+  apiKey: string,
+  query: string,
+  row: GroupedSpreadsheetRow
+): Promise<
+  | { status: "ok"; record: Record<string, unknown> }
+  | { status: "not_found" }
+  | { status: "rate_limited"; retry_after_ms: number; message: string }
+  | { status: "error"; message: string }
+> {
+  const url = new URL(`${baseUrl}/v3/stockx/products`);
+  url.search = new URLSearchParams({
+    "display[traits]": "true",
+    "display[variants]": "true",
+    "display[identifiers]": "true",
+    "display[prices]": "true",
+    "display[statistics]": "true",
+    query,
+    sort: "rank",
+    page: "1",
+    limit: "20",
+    market: "US",
+  }).toString();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: apiKey,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    return {
+      status: "error",
+      message:
+        error instanceof Error && error.name === "AbortError"
+          ? "The fallback KicksDB lookup timed out."
+          : "The fallback KicksDB lookup failed.",
+    };
+  }
+  clearTimeout(timeout);
+
+  if (response.status === 429) {
+    const retryAfterHeader = response.headers.get("retry-after");
+    const retryAfterSeconds = Number.parseInt(retryAfterHeader || "", 10);
+    const retryAfterMs =
+      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : 60 * 1000;
+
+    return {
+      status: "rate_limited",
+      retry_after_ms: retryAfterMs,
+      message: "KicksDB rate limited the fallback preview queue.",
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      status: "error",
+      message: `KicksDB returned ${response.status} for the fallback name search.`,
+    };
+  }
+
+  const payload: unknown = await response.json();
+  const records = extractStockxPricingRecords(payload);
+  const bestRecord = pickBestNameFallbackRecord(records, row);
 
   if (!bestRecord) {
     return { status: "not_found" };
@@ -1495,7 +1872,12 @@ async function lookupKicksDbLiveRecord(
 
 function mapRecordToKicksDbLiveLookup(
   record: Record<string, unknown>,
-  normalizedSku: string
+  normalizedSku: string,
+  options: {
+    match_source: "sku" | "name_fallback";
+    requires_review_approval: boolean;
+    review_reason: string | null;
+  }
 ): KicksDbLiveLookup {
   const rawSku =
     readStringFromRecord(record, ["sku", "styleCode", "style_code"]) || normalizedSku;
@@ -1544,7 +1926,163 @@ function mapRecordToKicksDbLiveLookup(
     gallery_images: galleryImages.length > 0 ? galleryImages : imageUrl ? [imageUrl] : [],
     image_url: imageUrl,
     variants,
+    match_source: options.match_source,
+    requires_review_approval: options.requires_review_approval,
+    review_reason: options.review_reason,
   };
+}
+
+function buildNameFallbackQuery(row: GroupedSpreadsheetRow): string | null {
+  const cleanedName = sanitizeProductNameForLookup(row.source_name);
+  const parts = uniqueStrings([row.source_brand, cleanedName]);
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+function sanitizeProductNameForLookup(value: string): string {
+  return String(value || "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[A-Z]{1,5}\d{2,}[A-Z0-9]*(?:[- ]\d{2,}[A-Z0-9]*)?/g, " ")
+    .replace(/\b(?:DS|GS|PS|TD|WMNS|WOMENS|MENS|NEW|USED|NO BOX|DAMAGED BOX)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pickBestNameFallbackRecord(
+  records: Array<Record<string, unknown>>,
+  row: GroupedSpreadsheetRow
+): Record<string, unknown> | null {
+  const scored = records
+    .map((record) => ({
+      record,
+      score: scoreNameFallbackRecord(record, row),
+    }))
+    .filter((entry) => entry.score >= 45)
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.record || null;
+}
+
+function scoreNameFallbackRecord(
+  record: Record<string, unknown>,
+  row: GroupedSpreadsheetRow
+): number {
+  const recordSku = readStringFromRecord(record, ["sku", "styleCode", "style_code"]);
+  const recordBrand = readStringFromRecord(record, ["brand", "brand_name"]);
+  const recordModel =
+    readStringFromRecord(record, ["model", "primary_title", "silhouette"]);
+  const recordNickname =
+    readStringFromRecord(record, ["nickname", "secondary_title"]);
+  const recordName =
+    readStringFromRecord(record, ["name", "title", "product_name"]) ||
+    [recordBrand, recordModel, recordNickname].filter(Boolean).join(" ").trim();
+
+  const nameSimilarity = compareNameSimilarity(row.source_name, recordName);
+  const brandSimilarity = compareBrandSimilarity(row.source_brand, row.source_name, recordBrand);
+  const skuSimilarity = compareBestSkuSimilarity(buildExpectedSkuCandidates(row), recordSku);
+
+  let score = nameSimilarity * 70 + brandSimilarity * 15 + skuSimilarity * 15;
+  if (row.normalized_sku && normalizeSku(recordSku) === row.normalized_sku) {
+    score += 20;
+  }
+
+  return score;
+}
+
+function compareBrandSimilarity(
+  sourceBrand: string,
+  sourceName: string,
+  recordBrand: string
+): number {
+  const normalizedRecordBrand = normalizeBrandValue(recordBrand);
+  if (!normalizedRecordBrand) {
+    return 0;
+  }
+
+  const normalizedSourceBrand = normalizeBrandValue(sourceBrand);
+  if (normalizedSourceBrand && normalizedSourceBrand === normalizedRecordBrand) {
+    return 1;
+  }
+
+  const normalizedSourceName = normalizeBrandValue(sourceName);
+  if (normalizedSourceName.startsWith(normalizedRecordBrand)) {
+    return 0.7;
+  }
+
+  return 0;
+}
+
+function normalizeBrandValue(value: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function compareBestSkuSimilarity(candidates: string[], recordSku: string): number {
+  const normalizedRecordSku = collapseSku(recordSku);
+  if (!normalizedRecordSku) {
+    return 0;
+  }
+
+  let bestScore = 0;
+  for (const candidate of candidates) {
+    const collapsedCandidate = collapseSku(candidate);
+    if (!collapsedCandidate) {
+      continue;
+    }
+
+    if (collapsedCandidate === normalizedRecordSku) {
+      return 1;
+    }
+
+    bestScore = Math.max(
+      bestScore,
+      computeStringSimilarity(collapsedCandidate, normalizedRecordSku)
+    );
+  }
+
+  return bestScore;
+}
+
+function computeStringSimilarity(left: string, right: string): number {
+  if (!left || !right) {
+    return 0;
+  }
+
+  const maxLength = Math.max(left.length, right.length);
+  if (maxLength === 0) {
+    return 1;
+  }
+
+  const distance = computeLevenshteinDistance(left, right);
+  return Math.max(0, 1 - distance / maxLength);
+}
+
+function computeLevenshteinDistance(left: string, right: string): number {
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    matrix[rowIndex][0] = rowIndex;
+  }
+
+  for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+    matrix[0][colIndex] = colIndex;
+  }
+
+  for (let rowIndex = 1; rowIndex < rows; rowIndex += 1) {
+    for (let colIndex = 1; colIndex < cols; colIndex += 1) {
+      const substitutionCost = left[rowIndex - 1] === right[colIndex - 1] ? 0 : 1;
+      matrix[rowIndex][colIndex] = Math.min(
+        matrix[rowIndex - 1][colIndex] + 1,
+        matrix[rowIndex][colIndex - 1] + 1,
+        matrix[rowIndex - 1][colIndex - 1] + substitutionCost
+      );
+    }
+  }
+
+  return matrix[rows - 1][cols - 1];
 }
 
 async function priceGroupedRowsWithKicksDb(
@@ -1824,6 +2362,32 @@ function pickBestPricingRecord(
     .map((record) => ({
       record,
       score: scorePricingRecord(record, normalizedSku, collapsedTarget),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.record || null;
+}
+
+function pickBestPricingRecordForCandidates(
+  records: Array<Record<string, unknown>>,
+  skuCandidates: string[]
+): Record<string, unknown> | null {
+  const normalizedCandidates = uniqueStrings(
+    skuCandidates
+      .map((candidate) => normalizeSku(candidate))
+      .filter((value): value is string => Boolean(value))
+  );
+
+  const scored = records
+    .map((record) => ({
+      record,
+      score: normalizedCandidates.reduce((bestScore, candidate) => {
+        return Math.max(
+          bestScore,
+          scorePricingRecord(record, candidate, collapseSku(candidate))
+        );
+      }, 0),
     }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) => right.score - left.score);
