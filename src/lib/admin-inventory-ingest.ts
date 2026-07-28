@@ -8,6 +8,14 @@ import {
   upsertSellerSkuInventory,
 } from "@/lib/inventory";
 import { normalizeSku } from "@/lib/listings";
+import {
+  buildShoeSizeWarning,
+  compareShoeSizeLabels,
+  getShoeSizeIdentityKey,
+  getShoeSizeMatchScore,
+  parseShoeSize,
+  type ShoeSizeSystem,
+} from "@/lib/shoe-size";
 import { resolveSneakerBySku } from "@/lib/sneaker-server";
 
 export type AdminInventoryPricingMode = "aggressive" | "balanced" | "manual";
@@ -37,6 +45,7 @@ export interface AdminInventoryPreviewRow {
   source_name: string;
   source_sku: string;
   normalized_sku: string | null;
+  size_system: ShoeSizeSystem;
   size: string;
   quantity: number;
   condition: "new" | "used";
@@ -124,6 +133,8 @@ interface ParsedSpreadsheetRow {
   source_name: string;
   source_sku: string;
   normalized_sku: string | null;
+  size_system: ShoeSizeSystem;
+  size_identity: string;
   size: string;
   quantity: number;
   condition: "new" | "used";
@@ -140,6 +151,8 @@ interface GroupedSpreadsheetRow {
   source_brand: string;
   source_name: string;
   source_sku: string;
+  size_system: ShoeSizeSystem;
+  size_identity: string;
   size: string;
   quantity: number;
   condition: "new" | "used";
@@ -841,7 +854,7 @@ function mergeExistingListingVariantsWithPreview(
   >();
 
   for (const variant of existingListing.variants) {
-    const key = `${variant.size}::${variant.condition}`;
+    const key = `${getShoeSizeIdentityKey(variant.size)}::${variant.condition}`;
     variantMap.set(key, {
       size: variant.size,
       quantity: variant.quantity,
@@ -853,7 +866,7 @@ function mergeExistingListingVariantsWithPreview(
   }
 
   for (const row of rows) {
-    const key = `${row.size}::${row.condition}`;
+    const key = `${getShoeSizeIdentityKey(row.size)}::${row.condition}`;
     variantMap.set(key, {
       size: row.size,
       quantity: row.quantity,
@@ -865,7 +878,7 @@ function mergeExistingListingVariantsWithPreview(
   }
 
   return Array.from(variantMap.values()).sort((left, right) => {
-    const sizeCompare = left.size.localeCompare(right.size, undefined, { numeric: true });
+    const sizeCompare = compareShoeSizeLabels(left.size, right.size);
     if (sizeCompare !== 0) {
       return sizeCompare;
     }
@@ -894,6 +907,14 @@ function inferListingConditionFromPreviewRows(
   }
 
   return "new";
+}
+
+function buildInventoryPreviewKey(
+  normalizedSku: string,
+  size: string,
+  condition: "new" | "used"
+) {
+  return `${normalizedSku}::${getShoeSizeIdentityKey(size)}::${condition}`;
 }
 
 function buildEmptyPreviewReport(
@@ -963,7 +984,9 @@ function parseAdminInventoryRows(csvText: string): {
       sourceCondition,
     });
 
-    const size = normalizeSizeValue(sourceSize);
+    const normalizedSize = normalizeSpreadsheetSizeValue(sourceSize);
+    const size = normalizedSize.normalized_size;
+    warnings.push(...normalizedSize.warnings);
     if (!size) {
       rows.push({
         row_number: rowNumber,
@@ -971,6 +994,8 @@ function parseAdminInventoryRows(csvText: string): {
         source_name: sourceName.trim(),
         source_sku: sourceSku.trim(),
         normalized_sku: null,
+        size_system: "unknown",
+        size_identity: "UNKNOWN",
         size: "",
         quantity: 0,
         condition: "new",
@@ -997,6 +1022,8 @@ function parseAdminInventoryRows(csvText: string): {
       source_name: sourceName.trim(),
       source_sku: sourceSku.trim() || skuCandidate.display_sku,
       normalized_sku: skuCandidate.normalized_sku,
+      size_system: normalizedSize.size_system,
+      size_identity: normalizedSize.size_identity,
       size,
       quantity: quantity > 0 ? quantity : 1,
       condition: conditionInfo.condition,
@@ -1024,7 +1051,7 @@ function groupParsedRows(parsed: {
   for (const row of parsed.rows) {
     const normalizedSku = row.normalized_sku;
     const groupKey = normalizedSku
-      ? `${normalizedSku}::${row.size}::${row.condition}`
+      ? `${normalizedSku}::${row.size_identity}::${row.condition}`
       : `row-${row.row_number}`;
     const existing = groups.get(groupKey);
 
@@ -1036,6 +1063,8 @@ function groupParsedRows(parsed: {
         source_brand: row.source_brand,
         source_name: row.source_name,
         source_sku: row.source_sku,
+        size_system: row.size_system,
+        size_identity: row.size_identity,
         size: row.size,
         quantity: row.quantity,
         condition: row.condition,
@@ -1052,6 +1081,11 @@ function groupParsedRows(parsed: {
     existing.row_numbers.push(row.row_number);
     if (!existing.source_brand && row.source_brand) {
       existing.source_brand = row.source_brand;
+    }
+    if (existing.size_system === "unknown" && row.size_system !== "unknown") {
+      existing.size_system = row.size_system;
+      existing.size = row.size;
+      existing.size_identity = row.size_identity;
     }
     existing.box_condition = pickWorseBoxCondition(existing.box_condition, row.box_condition);
     existing.warnings = uniqueStrings([...existing.warnings, ...row.warnings]);
@@ -1249,7 +1283,7 @@ function buildExistingVariantMap(
   for (const listing of existingListings) {
     for (const variant of listing.variants) {
       map.set(
-        `${variant.normalized_sku}::${variant.size}::${variant.condition}`,
+        buildInventoryPreviewKey(variant.normalized_sku, variant.size, variant.condition),
         variant
       );
     }
@@ -1365,6 +1399,7 @@ function buildPreviewRow(input: {
     source_name: row.source_name,
     source_sku: row.source_sku || row.display_sku,
     normalized_sku: row.normalized_sku,
+    size_system: row.size_system,
     size: row.size,
     quantity: row.quantity,
     condition: row.condition,
@@ -1423,7 +1458,7 @@ function buildMissingVariantPreview(
   const previewKeySet = new Set(
     previewRows
       .filter((row) => row.normalized_sku)
-      .map((row) => `${row.normalized_sku}::${row.size}::${row.condition}`)
+      .map((row) => buildInventoryPreviewKey(row.normalized_sku!, row.size, row.condition))
   );
   const uploadedSkuSet = new Set(
     previewRows
@@ -1440,12 +1475,17 @@ function buildMissingVariantPreview(
       }
 
       const key = `${variant.normalized_sku}::${variant.size}::${variant.condition}`;
-      if (previewKeySet.has(key)) {
+      const previewKey = buildInventoryPreviewKey(
+        variant.normalized_sku,
+        variant.size,
+        variant.condition
+      );
+      if (previewKeySet.has(previewKey)) {
         continue;
       }
 
       missingVariants.push({
-        key,
+        key: previewKey,
         normalized_sku: variant.normalized_sku,
         listing_id: listing.listing_id,
         listing_title: variant.listing_title,
@@ -2163,26 +2203,25 @@ function matchVariantBySize(
   variants: StockxPricingVariant[],
   targetSize: string
 ): StockxPricingVariant | null {
-  const normalizedTarget = normalizeComparableSize(targetSize);
+  let bestVariant: StockxPricingVariant | null = null;
+  let bestScore = 0;
 
   for (const variant of variants) {
-    const directSize = normalizeComparableSize(variant.size || "");
-    if (directSize === normalizedTarget) {
-      return variant;
-    }
+    const variantSizes = [
+      variant.size || "",
+      ...variant.sizes.map((sizeRecord: StockxPricingVariantSize) => sizeRecord.size),
+    ].filter(Boolean);
 
-    if (
-      Array.isArray(variant.sizes) &&
-      variant.sizes.some(
-        (sizeRecord: StockxPricingVariantSize) =>
-          normalizeComparableSize(sizeRecord.size) === normalizedTarget
-      )
-    ) {
-      return variant;
+    for (const variantSize of variantSizes) {
+      const score = getShoeSizeMatchScore(targetSize, variantSize);
+      if (score > bestScore) {
+        bestScore = score;
+        bestVariant = variant;
+      }
     }
   }
 
-  return null;
+  return bestScore >= 70 ? bestVariant : null;
 }
 
 function normalizeComparableSize(value: string): string {
@@ -2600,11 +2639,21 @@ function normalizeHeaderName(value: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-function normalizeSizeValue(value: string): string {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
+function normalizeSpreadsheetSizeValue(value: string): {
+  normalized_size: string;
+  size_system: ShoeSizeSystem;
+  size_identity: string;
+  warnings: string[];
+} {
+  const parsed = parseShoeSize(value);
+  const warning = buildShoeSizeWarning(value);
+
+  return {
+    normalized_size: parsed.normalized_label,
+    size_system: parsed.system,
+    size_identity: parsed.identity_key,
+    warnings: warning ? [warning] : [],
+  };
 }
 
 function parseIntegerValue(value: string): number | null {

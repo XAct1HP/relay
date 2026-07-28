@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SizeOption } from '@/types';
+import { compareShoeSizeLabels, parseShoeSize } from '@/lib/shoe-size';
 
 /**
  * Merge classNames using clsx and tailwind-merge
@@ -144,10 +145,25 @@ export function generateChallengeCode(): string {
 export function formatSizeRange(sizes: SizeOption[]): string {
   if (!sizes || sizes.length === 0) return 'No sizes available';
 
-  const uniqueSizes = Array.from(new Set(sizes.map(s => s.size)));
-  const numericSizes = uniqueSizes
-    .map(s => parseFloat(s))
-    .filter(n => !isNaN(n))
+  const uniqueSizes = Array.from(new Set(sizes.map(s => s.size))).sort(compareShoeSizeLabels);
+  const parsedSizes = uniqueSizes.map((size) => parseShoeSize(size));
+  const hasNonStandardLabels = parsedSizes.some(
+    (parsed) => parsed.system === 'eu' || parsed.system === 'us_women' || parsed.system === 'unknown'
+  );
+
+  if (hasNonStandardLabels) {
+    if (uniqueSizes.length === 1) return `Size ${uniqueSizes[0]}`;
+    if (uniqueSizes.length <= 3) return `Sizes ${uniqueSizes.join(', ')}`;
+    return `${uniqueSizes.length} sizes available`;
+  }
+
+  const numericSizes = parsedSizes
+    .filter(
+      (parsed) =>
+        parsed.numeric_value !== null &&
+        (parsed.system === 'us' || parsed.system === 'us_men')
+    )
+    .map((parsed) => Number(parsed.numeric_value))
     .sort((a, b) => a - b);
 
   if (numericSizes.length === 0) {

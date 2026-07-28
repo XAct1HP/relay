@@ -6,6 +6,7 @@ import { Pagination } from "@/components/layout/Pagination";
 import { Search, BadgeCheck, ChevronDown, X, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { dedupeSkuListings, formatListingTitle, formatSizeDisplay, getListingDisplayMetrics } from "@/lib/listing-display";
+import { compareShoeSizeLabels } from "@/lib/shoe-size";
 import { usePublicTestMode } from "@/hooks/usePublicTestMode";
 import { useOnboardingPhase } from "@/hooks/useOnboardingPhase";
 import { BRANDS as ALL_BRANDS } from "@/lib/constants";
@@ -41,11 +42,6 @@ const SORT_OPTIONS = [
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
 ] as const;
-const SIZES = Array.from({ length: 31 }, (_, i) => {
-  const baseSize = 3.5 + i * 0.5;
-  return parseFloat(baseSize.toFixed(1));
-});
-
 export default function MarketplacePage() {
   const { onboardingActive, loading: onboardingLoading } = useOnboardingPhase();
   const { enabled: testModeEnabled, loading: testModeLoading } = usePublicTestMode();
@@ -127,7 +123,7 @@ export default function MarketplacePage() {
     fetchListings();
   }, []);
 
-  const filteredListings = useMemo(() => {
+  const sourceListings = useMemo(() => {
     const previewListings: ListingDisplay[] = testModeEnabled
       ? getRelayTestMarketplaceListings().map((listing) => ({
           id: listing.id,
@@ -135,7 +131,7 @@ export default function MarketplacePage() {
           model: listing.model,
           nickname: listing.nickname,
           sizes: listing.sizes.map((size) => size.size).sort((a, b) => a - b),
-          sizeLabels: listing.sizes.map((size) => String(size.size)),
+          sizeLabels: listing.sizes.map((size) => String(size.size)).sort(compareShoeSizeLabels),
           price: Math.min(...listing.sizes.filter((size) => size.quantity > 0).map((size) => size.price)),
           image: listing.images[0] || "default",
           condition: listing.condition === "New" ? "New" : listing.condition === "New + Used" ? "New + Used" : "Used",
@@ -151,7 +147,18 @@ export default function MarketplacePage() {
         }))
       : [];
 
-    const sourceListings = [...allListings, ...previewListings];
+    return [...allListings, ...previewListings];
+  }, [allListings, testModeEnabled]);
+
+  const allSizeLabels = useMemo(
+    () =>
+      Array.from(new Set(sourceListings.flatMap((listing) => listing.sizeLabels))).sort(
+        compareShoeSizeLabels
+      ),
+    [sourceListings]
+  );
+
+  const filteredListings = useMemo(() => {
     const filtered = sourceListings.filter((listing) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
@@ -161,7 +168,7 @@ export default function MarketplacePage() {
         listing.seller.name.toLowerCase().includes(searchLower);
 
       const matchesBrand = !selectedBrand || listing.brand === selectedBrand;
-      const matchesSize = !selectedSize || listing.sizes.includes(parseFloat(selectedSize));
+      const matchesSize = !selectedSize || listing.sizeLabels.includes(selectedSize);
       const matchesCondition = !selectedCondition || listing.condition === selectedCondition;
       const matchesSeller = !selectedSeller || listing.seller.name.toLowerCase().includes(selectedSeller.toLowerCase());
 
@@ -173,7 +180,7 @@ export default function MarketplacePage() {
       if (selectedSort === "price_desc") return b.price - a.price;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [allListings, searchTerm, selectedBrand, selectedSize, selectedCondition, selectedSeller, selectedSort, testModeEnabled]);
+  }, [searchTerm, selectedBrand, selectedSize, selectedCondition, selectedSeller, selectedSort, sourceListings]);
 
   const hasActiveFilters = selectedBrand || selectedSize || selectedCondition || selectedSeller || selectedSort !== "newest";
 
@@ -284,9 +291,9 @@ export default function MarketplacePage() {
               className="relay-select pr-10 appearance-none"
             >
               <option value="">All Sizes</option>
-              {SIZES.map((size) => (
-                <option key={size} value={size}>
-                  Size {size}
+              {allSizeLabels.map((sizeLabel) => (
+                <option key={sizeLabel} value={sizeLabel}>
+                  Size {sizeLabel}
                 </option>
               ))}
             </select>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SPECIAL_BRANDS } from "@/lib/constants";
+import { compareShoeSizeLabels } from "@/lib/shoe-size";
 
 export interface VariantInput {
   size: string;
@@ -315,18 +316,9 @@ export async function replaceListingVariants(
 }
 
 function compareVariantSizes(a: VariantInput, b: VariantInput): number {
-  const aSize = Number(a.size);
-  const bSize = Number(b.size);
-
-  if (Number.isFinite(aSize) && Number.isFinite(bSize)) {
-    if (aSize !== bSize) {
-      return aSize - bSize;
-    }
-  } else {
-    const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
-    if (sizeCompare !== 0) {
-      return sizeCompare;
-    }
+  const sizeCompare = compareShoeSizeLabels(a.size, b.size);
+  if (sizeCompare !== 0) {
+    return sizeCompare;
   }
 
   return normalizeVariantCondition(a.condition).localeCompare(normalizeVariantCondition(b.condition));

@@ -1,3 +1,5 @@
+import { compareShoeSizeLabels, parseShoeSize } from "@/lib/shoe-size";
+
 interface DisplayVariant {
   id?: string;
   size: string;
@@ -64,10 +66,17 @@ export function getListingDisplayMetrics(
   const availableVariants = variants.filter((variant) => variant.isActive && variant.quantity > 0 && variant.price > 0);
   const source = availableVariants.length > 0 ? availableVariants : variants.filter((variant) => variant.isActive && variant.price > 0);
 
-  const sizeLabels = Array.from(new Set(source.map((variant) => variant.size)));
+  const sizeLabels = Array.from(new Set(source.map((variant) => variant.size))).sort(compareShoeSizeLabels);
+  const parsedSizeLabels = sizeLabels.map((label) => parseShoeSize(label));
   const sizes = Array.from(
     new Set(
-      source.map((variant) => Number(variant.size)).filter((size) => Number.isFinite(size))
+      parsedSizeLabels
+        .filter(
+          (parsed) =>
+            parsed.numeric_value !== null &&
+            (parsed.system === "us" || parsed.system === "us_men")
+        )
+        .map((parsed) => Number(parsed.numeric_value))
     )
   )
     .map((size) => Number(size))
@@ -84,6 +93,18 @@ export function getListingDisplayMetrics(
 }
 
 export function formatSizeDisplay(sizes: number[], sizeLabels: string[] = []): string {
+  const parsedSizeLabels = sizeLabels.map((label) => parseShoeSize(label));
+  const hasNonStandardLabels = parsedSizeLabels.some(
+    (parsed) => parsed.system === "eu" || parsed.system === "us_women" || parsed.system === "unknown"
+  );
+
+  if (hasNonStandardLabels) {
+    if (sizeLabels.length === 1) return `Size ${sizeLabels[0]}`;
+    if (sizeLabels.length > 1 && sizeLabels.length <= 3) return `Sizes ${sizeLabels.join(", ")}`;
+    if (sizeLabels.length > 3) return `${sizeLabels.length} sizes available`;
+    return "";
+  }
+
   if (sizes.length === 0) {
     if (sizeLabels.length === 1) return `Size ${sizeLabels[0]}`;
     if (sizeLabels.length > 1 && sizeLabels.length <= 3) return `Sizes ${sizeLabels.join(", ")}`;
@@ -251,18 +272,9 @@ export function formatListingTitle(
 
 
 function compareVariantSize(a: DisplayVariant, b: DisplayVariant): number {
-  const aSize = Number(a.size);
-  const bSize = Number(b.size);
-
-  if (Number.isFinite(aSize) && Number.isFinite(bSize)) {
-    if (aSize !== bSize) {
-      return aSize - bSize;
-    }
-  } else {
-    const sizeCompare = a.size.localeCompare(b.size, undefined, { numeric: true });
-    if (sizeCompare !== 0) {
-      return sizeCompare;
-    }
+  const sizeCompare = compareShoeSizeLabels(a.size, b.size);
+  if (sizeCompare !== 0) {
+    return sizeCompare;
   }
 
   return a.condition.localeCompare(b.condition);
