@@ -314,10 +314,9 @@ export default function AdminInventoryIngestPage() {
       formData.set("reconcile_missing", reconcileMissing ? "true" : "false");
       formData.set("manual_price_by_key", JSON.stringify(manualPrices));
       formData.set("review_decision_by_key", JSON.stringify(reviewDecisions));
+      formData.set("preview_report", JSON.stringify(preview));
       if (preview.job_id) {
         formData.set("preview_job_id", preview.job_id);
-      } else {
-        formData.set("preview_report", JSON.stringify(preview));
       }
       if (!preview.job_id && selectedFile) {
         formData.set("file", selectedFile);
