@@ -9,6 +9,7 @@ import {
   type AdminInventoryPricingMode,
   type AdminInventorySellerOption,
 } from "@/lib/admin-inventory-ingest";
+import { getAdminInventoryPreviewJob } from "@/lib/admin-inventory-preview-jobs";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createServerClientInstance } from "@/lib/supabase-server";
 
@@ -93,8 +94,16 @@ export async function commitAdminInventoryIngestAction(
 
   const sellerId = String(formData.get("seller_id") || "").trim();
   const pricingMode = extractPricingMode(formData);
-  const csvText = await extractCsvText(formData);
-  const previewReport = extractPreviewReport(formData);
+  const previewJobId = extractPreviewJobId(formData);
+  const previewReportFromJob = previewJobId
+    ? getAdminInventoryPreviewJob(previewJobId)
+    : null;
+  const previewReport =
+    (previewReportFromJob && previewReportFromJob.seller_id === sellerId
+      ? previewReportFromJob
+      : null) ||
+    extractPreviewReport(formData);
+  const csvText = previewReport ? "" : await extractCsvText(formData);
 
   if (!sellerId || (!csvText && !previewReport)) {
     return {
@@ -204,6 +213,11 @@ function extractManualPriceMap(formData: FormData): Record<string, string> {
 
 function extractReviewDecisionMap(formData: FormData): Record<string, string> {
   return extractStringRecord(formData.get("review_decision_by_key"));
+}
+
+function extractPreviewJobId(formData: FormData): string | null {
+  const raw = String(formData.get("preview_job_id") || "").trim();
+  return raw || null;
 }
 
 function extractStringRecord(value: FormDataEntryValue | null): Record<string, string> {

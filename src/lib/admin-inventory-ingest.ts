@@ -515,7 +515,7 @@ export async function commitAdminInventoryIngest(
   const rowsBySku = new Map<string, AdminInventoryPreviewRow[]>();
 
   for (const row of preview.preview_rows) {
-    const skuKey = row.normalized_sku || `__blocked__${row.key}`;
+    const skuKey = resolvePreviewRowTargetSku(row) || `__blocked__${row.key}`;
     const bucket = rowsBySku.get(skuKey) || [];
     bucket.push(row);
     rowsBySku.set(skuKey, bucket);
@@ -531,6 +531,10 @@ export async function commitAdminInventoryIngest(
 
   const existingListings = await loadExistingSellerListings(supabase, preview.seller_id);
   const existingListingBySku = new Map(existingListings.map((listing) => [listing.normalized_sku, listing]));
+  const commitProductResolution = await loadCommitProductResolution(
+    supabase,
+    preview.preview_rows
+  );
 
   for (const [skuKey, rows] of Array.from(rowsBySku.entries())) {
     if (!skuKey || skuKey.startsWith("__blocked__")) {
@@ -579,11 +583,12 @@ export async function commitAdminInventoryIngest(
     const primaryRow = committableRows[0];
     const resolvedSku =
       primaryRow.matched_sku || primaryRow.source_sku || primaryRow.normalized_sku!;
-    const sneakerLookup = await resolveSneakerBySku(supabase, resolvedSku, {
-      upsertClient: supabase,
-    });
-    const catalogProduct = await resolveCatalogProductBySku(supabase, resolvedSku);
-    const existingListing = existingListingBySku.get(primaryRow.normalized_sku!);
+    const resolvedNormalizedSku = normalizeSku(resolvedSku) || primaryRow.normalized_sku!;
+    const sneakerLookup =
+      commitProductResolution.sneaker_by_sku.get(resolvedNormalizedSku) || null;
+    const catalogProduct =
+      commitProductResolution.catalog_by_sku.get(resolvedNormalizedSku) || null;
+    const existingListing = existingListingBySku.get(resolvedNormalizedSku);
     const shouldPreserveExistingVariants =
       Boolean(existingListing) && committableRows.length < normalizedRows.length;
     const variants = shouldPreserveExistingVariants
@@ -612,23 +617,31 @@ export async function commitAdminInventoryIngest(
         await replaceSellerSkuListingInventory(supabase, {
           seller_id: preview.seller_id,
           listing_id: existingListing.listing_id,
-          sku: sneakerLookup?.sneaker.sku || catalogProduct?.sku || primaryRow.source_sku || primaryRow.normalized_sku!,
+          sku:
+            sneakerLookup?.sneaker.sku ||
+            catalogProduct?.sku ||
+            primaryRow.matched_sku ||
+            primaryRow.source_sku ||
+            primaryRow.normalized_sku!,
           product: {
             sneaker_id: sneakerLookup?.sneaker.id || null,
             catalog_product_id: catalogProduct?.id || null,
             brand:
               sneakerLookup?.sneaker.brand ||
               catalogProduct?.brand ||
+              primaryRow.matched_brand ||
               parsedName.brand ||
               existingListing.brand,
             model:
               sneakerLookup?.sneaker.model ||
               catalogProduct?.model ||
+              primaryRow.matched_model ||
               parsedName.model ||
               existingListing.model,
             nickname:
               sneakerLookup?.sneaker.nickname ||
               catalogProduct?.nickname ||
+              primaryRow.matched_nickname ||
               existingListing.nickname ||
               null,
             description:
@@ -641,6 +654,7 @@ export async function commitAdminInventoryIngest(
               sneakerImageUrl: sneakerLookup?.sneaker.image_url || null,
               catalogImages: catalogProduct?.images || [],
               existingImages: existingListing.images,
+              fallbackImageUrl: primaryRow.matched_image_url,
             }),
             condition: listingCondition,
             box_condition: boxCondition,
@@ -654,21 +668,32 @@ export async function commitAdminInventoryIngest(
       } else {
         await upsertSellerSkuInventory(supabase, {
           seller_id: preview.seller_id,
-          sku: sneakerLookup?.sneaker.sku || catalogProduct?.sku || primaryRow.source_sku || primaryRow.normalized_sku!,
+          sku:
+            sneakerLookup?.sneaker.sku ||
+            catalogProduct?.sku ||
+            primaryRow.matched_sku ||
+            primaryRow.source_sku ||
+            primaryRow.normalized_sku!,
           product: {
             sneaker_id: sneakerLookup?.sneaker.id || null,
             catalog_product_id: catalogProduct?.id || null,
             brand:
               sneakerLookup?.sneaker.brand ||
               catalogProduct?.brand ||
+              primaryRow.matched_brand ||
               parsedName.brand ||
               "Catalog Sneaker",
             model:
               sneakerLookup?.sneaker.model ||
               catalogProduct?.model ||
+              primaryRow.matched_model ||
               parsedName.model ||
               resolvedTitle,
-            nickname: sneakerLookup?.sneaker.nickname || catalogProduct?.nickname || null,
+            nickname:
+              sneakerLookup?.sneaker.nickname ||
+              catalogProduct?.nickname ||
+              primaryRow.matched_nickname ||
+              null,
             description:
               sneakerLookup?.sneaker.description ||
               catalogProduct?.description ||
@@ -678,6 +703,7 @@ export async function commitAdminInventoryIngest(
               sneakerImageUrl: sneakerLookup?.sneaker.image_url || null,
               catalogImages: catalogProduct?.images || [],
               existingImages: [],
+              fallbackImageUrl: primaryRow.matched_image_url,
             }),
             condition: listingCondition,
             box_condition: boxCondition,
@@ -691,8 +717,8 @@ export async function commitAdminInventoryIngest(
       }
 
       committedSkus += 1;
-      if (!shouldPreserveExistingVariants && primaryRow.normalized_sku) {
-        fullyCommittedSkuSet.add(primaryRow.normalized_sku);
+      if (!shouldPreserveExistingVariants) {
+        fullyCommittedSkuSet.add(resolvedNormalizedSku);
       }
       for (const row of skippedRows) {
         rowErrors.push({
@@ -719,17 +745,7 @@ export async function commitAdminInventoryIngest(
   if (options.reconcile_missing) {
     const uploadedSkuSet = new Set(
       preview.preview_rows
-        .map((row) => row.normalized_sku)
-        .filter((value): value is string => Boolean(value))
-    );
-    const committedSkuSet = new Set(
-      preview.preview_rows
-        .filter(
-          (row: AdminInventoryPreviewRow) =>
-            uploadedSkuSet.has(row.normalized_sku || "") &&
-            !rowErrors.some((error) => error.key === row.key)
-        )
-        .map((row: AdminInventoryPreviewRow) => row.normalized_sku)
+        .map((row) => resolvePreviewRowTargetSku(row))
         .filter((value): value is string => Boolean(value))
     );
 
@@ -915,6 +931,25 @@ function buildInventoryPreviewKey(
   condition: "new" | "used"
 ) {
   return `${normalizedSku}::${getShoeSizeIdentityKey(size)}::${condition}`;
+}
+
+function resolveNormalizedTargetSku(
+  ...candidates: Array<string | null | undefined>
+): string | null {
+  for (const candidate of candidates) {
+    const normalized = normalizeSku(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function resolvePreviewRowTargetSku(
+  row: Pick<AdminInventoryPreviewRow, "matched_sku" | "normalized_sku" | "source_sku">
+): string | null {
+  return resolveNormalizedTargetSku(row.matched_sku, row.normalized_sku, row.source_sku);
 }
 
 function buildEmptyPreviewReport(
@@ -1292,6 +1327,31 @@ function buildExistingVariantMap(
   return map;
 }
 
+function findExistingVariantForGroupedRow(
+  existingVariantMap: Map<string, ExistingSellerVariant>,
+  row: GroupedSpreadsheetRow,
+  liveLookup: KicksDbLiveLookup | null
+): ExistingSellerVariant | null {
+  const directMatch = existingVariantMap.get(row.key) || null;
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const resolvedSku = resolveNormalizedTargetSku(
+    liveLookup?.sku,
+    row.normalized_sku,
+    row.source_sku
+  );
+  if (!resolvedSku || resolvedSku === row.normalized_sku) {
+    return null;
+  }
+
+  return (
+    existingVariantMap.get(buildInventoryPreviewKey(resolvedSku, row.size, row.condition)) ||
+    null
+  );
+}
+
 function buildPreviewRow(input: {
   row: GroupedSpreadsheetRow;
   existingVariant: ExistingSellerVariant | null;
@@ -1457,12 +1517,18 @@ function buildMissingVariantPreview(
 ): AdminInventoryMissingVariant[] {
   const previewKeySet = new Set(
     previewRows
-      .filter((row) => row.normalized_sku)
-      .map((row) => buildInventoryPreviewKey(row.normalized_sku!, row.size, row.condition))
+      .map((row) => ({ row, targetSku: resolvePreviewRowTargetSku(row) }))
+      .filter(
+        (entry): entry is { row: AdminInventoryPreviewRow; targetSku: string } =>
+          Boolean(entry.targetSku)
+      )
+      .map((entry) =>
+        buildInventoryPreviewKey(entry.targetSku, entry.row.size, entry.row.condition)
+      )
   );
   const uploadedSkuSet = new Set(
     previewRows
-      .map((row) => row.normalized_sku)
+      .map((row) => resolvePreviewRowTargetSku(row))
       .filter((value): value is string => Boolean(value))
   );
 
@@ -1522,7 +1588,11 @@ function rebuildPreviewReportFromContext(
 
     const builtRow = buildPreviewRow({
       row,
-      existingVariant: context.existing_variant_map.get(row.key) || null,
+      existingVariant: findExistingVariantForGroupedRow(
+        context.existing_variant_map,
+        row,
+        liveLookup
+      ),
       catalogProduct: context.catalog_by_sku.get(normalizedSku) || null,
       sneakerLookup: context.sneaker_by_sku.get(normalizedSku) || null,
       pricingResult:
@@ -1982,6 +2052,8 @@ function sanitizeProductNameForLookup(value: string): string {
   return String(value || "")
     .replace(/\([^)]*\)/g, " ")
     .replace(/[A-Z]{1,5}\d{2,}[A-Z0-9]*(?:[- ]\d{2,}[A-Z0-9]*)?/g, " ")
+    .replace(/\b(?:SIZE|SZ)\s*\d+(?:\.\d+)?\b/gi, " ")
+    .replace(/\b\d{1,2}\/10\b/g, " ")
     .replace(/\b(?:DS|GS|PS|TD|WMNS|WOMENS|MENS|NEW|USED|NO BOX|DAMAGED BOX)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -2899,9 +2971,19 @@ function determineMatchConfidence(input: {
 }
 
 function compareNameSimilarity(left: string, right: string): number {
-  const leftTokens = tokenizeName(left);
-  const rightTokens = tokenizeName(right);
+  return Math.max(
+    computeTokenOverlapSimilarity(tokenizeName(left), tokenizeName(right)),
+    computeTokenOverlapSimilarity(
+      tokenizeName(sanitizeProductNameForLookup(left)),
+      tokenizeName(sanitizeProductNameForLookup(right))
+    )
+  );
+}
 
+function computeTokenOverlapSimilarity(
+  leftTokens: Set<string>,
+  rightTokens: Set<string>
+): number {
   if (leftTokens.size === 0 || rightTokens.size === 0) {
     return 0;
   }
@@ -3029,6 +3111,7 @@ function buildListingImages(input: {
   sneakerImageUrl: string | null;
   catalogImages: string[];
   existingImages: string[];
+  fallbackImageUrl?: string | null;
 }): string[] {
   const result: string[] = [];
 
@@ -3037,6 +3120,7 @@ function buildListingImages(input: {
     input.sneakerImageUrl,
     ...input.catalogImages,
     ...input.existingImages,
+    input.fallbackImageUrl,
   ]) {
     const normalized = String(candidate || "").trim();
     if (normalized && !result.includes(normalized)) {
@@ -3045,6 +3129,93 @@ function buildListingImages(input: {
   }
 
   return result.slice(0, 6);
+}
+
+async function loadCommitProductResolution(
+  supabase: SupabaseClient,
+  previewRows: AdminInventoryPreviewRow[]
+): Promise<{
+  sneaker_by_sku: Map<string, ResolvedSneakerLike>;
+  catalog_by_sku: Map<string, ResolvedCatalogLike>;
+}> {
+  const normalizedSkus = uniqueStrings(
+    previewRows
+      .map((row) => normalizeSku(row.matched_sku || row.source_sku || row.normalized_sku || ""))
+      .filter((value): value is string => Boolean(value))
+  );
+
+  const sneakerBySku = new Map<string, ResolvedSneakerLike>();
+  const catalogBySku = new Map<string, ResolvedCatalogLike>();
+
+  if (normalizedSkus.length === 0) {
+    return {
+      sneaker_by_sku: sneakerBySku,
+      catalog_by_sku: catalogBySku,
+    };
+  }
+
+  const [catalogResult, sneakerResult] = await Promise.all([
+    supabase
+      .from("catalog_products")
+      .select("id, sku, sku_normalized, brand, model, nickname, description, images")
+      .in("sku_normalized", normalizedSkus),
+    supabase
+      .from("sneakers")
+      .select(
+        "id, sku, normalized_sku, brand, name, model, nickname, colorway, gender, release_date, retail_price, description, gallery_images, image_url, source"
+      )
+      .in("normalized_sku", normalizedSkus),
+  ]);
+
+  if (catalogResult.error) {
+    throw catalogResult.error;
+  }
+
+  if (sneakerResult.error) {
+    throw sneakerResult.error;
+  }
+
+  for (const row of catalogResult.data || []) {
+    catalogBySku.set(row.sku_normalized, {
+      id: row.id,
+      sku: row.sku,
+      normalizedSku: row.sku_normalized,
+      brand: row.brand,
+      model: row.model,
+      nickname: row.nickname || null,
+      description: row.description || null,
+      images: Array.isArray(row.images) ? row.images.filter(Boolean) : [],
+      source: "catalog",
+    });
+  }
+
+  for (const row of sneakerResult.data || []) {
+    sneakerBySku.set(row.normalized_sku, {
+      source: "local",
+      sneaker: {
+        id: row.id,
+        sku: row.sku,
+        normalized_sku: row.normalized_sku,
+        brand: row.brand || null,
+        name: row.name || null,
+        model: row.model || null,
+        nickname: row.nickname || null,
+        colorway: row.colorway || null,
+        gender: row.gender || null,
+        release_date: row.release_date || null,
+        retail_price: row.retail_price === null ? null : Number(row.retail_price),
+        description: typeof row.description === "string" ? row.description : null,
+        gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images.filter(Boolean) : [],
+        image_url: row.image_url || null,
+        source: typeof row.source === "string" ? row.source : "local",
+      },
+    });
+  }
+
+  return {
+    sneaker_by_sku: sneakerBySku,
+    catalog_by_sku: catalogBySku,
+  };
 }
 
 function buildListingTitle(brand: string, model: string, nickname: string | null): string {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -31,6 +31,7 @@ const EMPTY_PREVIEW: AdminInventoryPreviewReport | null = null;
 
 type IngestTab = "rows" | "review" | "pricing" | "missing" | "result";
 type RowFilter = "all" | "ready" | "review" | "blocked" | "manual";
+type RequestState = "preview" | "commit" | null;
 
 export default function AdminInventoryIngestPage() {
   const { currentUser, isLoading } = useAuth();
@@ -45,7 +46,7 @@ export default function AdminInventoryIngestPage() {
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, "approve" | "reject">>({});
   const [pageError, setPageError] = useState<string | null>(null);
   const [loadingSellers, setLoadingSellers] = useState(true);
-  const [isPending, startTransition] = useTransition();
+  const [requestState, setRequestState] = useState<RequestState>(null);
 
   // UI-only state for the tabbed workbench (no functional behavior change).
   const [activeTab, setActiveTab] = useState<IngestTab>("rows");
@@ -176,6 +177,10 @@ export default function AdminInventoryIngestPage() {
     [preview]
   );
 
+  const isPreviewing = requestState === "preview";
+  const isCommitting = requestState === "commit";
+  const isBusy = requestState !== null;
+
   const reviewApprovalRows = useMemo(
     () => (preview?.preview_rows || []).filter((row) => row.requires_review_approval),
     [preview]
@@ -190,7 +195,7 @@ export default function AdminInventoryIngestPage() {
   );
 
   const canCommit = useMemo(() => {
-    if (!preview || isPending) {
+    if (!preview || isBusy) {
       return false;
     }
 
@@ -203,7 +208,7 @@ export default function AdminInventoryIngestPage() {
     }
 
     return committableRowCount > 0;
-  }, [committableRowCount, isPending, preview]);
+  }, [committableRowCount, isBusy, preview]);
 
   const filteredPreviewRows = useMemo(() => {
     if (!preview) {
@@ -252,7 +257,7 @@ export default function AdminInventoryIngestPage() {
     setReviewDecisions({});
   };
 
-  const runPreview = () => {
+  const runPreview = async () => {
     if (!selectedSellerId) {
       setPageError("Choose a seller before previewing the upload.");
       return;
@@ -266,8 +271,9 @@ export default function AdminInventoryIngestPage() {
     setPageError(null);
     setCommitReport(null);
     setReviewDecisions({});
+    setRequestState("preview");
 
-    startTransition(async () => {
+    try {
       const formData = new FormData();
       formData.set("seller_id", selectedSellerId);
       formData.set("pricing_mode", pricingMode);
@@ -284,31 +290,45 @@ export default function AdminInventoryIngestPage() {
       }
       setPreview(payload);
       setActiveTab("rows");
-    });
+    } catch {
+      setPageError("Failed to start preview.");
+    } finally {
+      setRequestState(null);
+    }
   };
 
-  const runCommit = () => {
+  const runCommit = async () => {
     if (!preview || !canCommit) {
       setPageError("Finish the preview and make sure at least one row is ready to commit.");
       return;
     }
 
     setPageError(null);
+    setCommitReport(null);
+    setRequestState("commit");
 
-    startTransition(async () => {
+    try {
       const formData = new FormData();
       formData.set("seller_id", selectedSellerId);
       formData.set("pricing_mode", pricingMode);
       formData.set("reconcile_missing", reconcileMissing ? "true" : "false");
       formData.set("manual_price_by_key", JSON.stringify(manualPrices));
       formData.set("review_decision_by_key", JSON.stringify(reviewDecisions));
-      formData.set("preview_report", JSON.stringify(preview));
-      if (selectedFile) {
+      if (preview.job_id) {
+        formData.set("preview_job_id", preview.job_id);
+      } else {
+        formData.set("preview_report", JSON.stringify(preview));
+      }
+      if (!preview.job_id && selectedFile) {
         formData.set("file", selectedFile);
       }
       const report = await commitAdminInventoryIngestAction(formData);
       setCommitReport(report);
-    });
+    } catch {
+      setPageError("Commit failed. Please try again.");
+    } finally {
+      setRequestState(null);
+    }
   };
 
   if (isLoading || loadingSellers) {
@@ -434,20 +454,26 @@ export default function AdminInventoryIngestPage() {
           <div className="flex items-end gap-2">
             <button
               onClick={runPreview}
-              disabled={!selectedFile || !selectedSellerId || isPending}
+              disabled={!selectedFile || !selectedSellerId || isBusy}
               className="relay-button-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-              Preview
+              {isPreviewing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+              {isPreviewing ? "Previewing..." : "Preview"}
             </button>
             <button
               onClick={runCommit}
               disabled={!canCommit}
               className="relay-button-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
-              title={canCommit ? "Commit ready inventory" : "Nothing ready to commit yet"}
+              title={
+                isCommitting
+                  ? "Committing inventory..."
+                  : canCommit
+                  ? "Commit ready inventory"
+                  : "Nothing ready to commit yet"
+              }
             >
-              <CheckCircle2 className="h-4 w-4" />
-              Commit
+              {isCommitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {isCommitting ? "Committing..." : "Commit"}
             </button>
           </div>
         </div>
